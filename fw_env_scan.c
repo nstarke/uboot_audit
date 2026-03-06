@@ -619,22 +619,22 @@ static int scan_dev(const char *dev, uint64_t step, uint64_t env_size,
 static void usage(const char *prog)
 {
 	err_printf(
-		"Usage: %s [-v|--verbose] [-s <env_size>] [-H <hint>] [-d <dev>|--dev <dev>] [<dev:step> ...]\n"
+		"Usage: %s [--verbose] [--size <env_size>] [--hint <hint>] [--dev <dev>] [<dev:step> ...]\n"
 		"             [-o <ip:port>|--output <ip:port>]\n"
 		"  no args: auto-devices + common env sizes\n"
-		"  -v, --verbose: print scan progress and non-hit details\n"
-		"  -s: fixed env size\n"
-		"  -H: override default env hint string (example: bootcmd=)\n"
-		"  -d, --dev: scan only the specified MTD device path (step from sysfs/proc)\n"
-		"  -o, --output: duplicate all output to TCP destination ip:port\n"
+		"  --verbose: print scan progress and non-hit details\n"
+		"  --size: fixed env size\n"
+		"  --hint: override default env hint string (example: bootcmd=)\n"
+		"  --dev: scan only the specified MTD device path (step from sysfs/proc)\n"
+		"  --output: duplicate all output to TCP destination ip:port\n"
 		"Examples:\n"
 		"  %s\n"
-		"  %s -v\n"
+		"  %s --verbose\n"
 		"  %s --output 192.168.1.50:5000\n"
-		"  %s -s 0x10000\n"
-		"  %s -H bootcmd=\n"
-		"  %s --dev /dev/mtd3 -s 0x10000\n"
-		"  %s -s 0x10000 /dev/mtd0:0x10000\n",
+		"  %s --size 0x10000\n"
+		"  %s --hint bootcmd=\n"
+		"  %s --dev /dev/mtd3 --size 0x10000\n"
+		"  %s --size 0x10000 /dev/mtd0:0x10000\n",
 		prog, prog, prog, prog, prog, prog, prog, prog);
 }
 
