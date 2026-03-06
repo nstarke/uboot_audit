@@ -13,6 +13,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <getopt.h>
 #include <glob.h>
 #include <inttypes.h>
 #include <stdbool.h>
@@ -236,14 +237,26 @@ static uint64_t guess_erasesize_from_proc_mtd(const char *dev)
 	return 0;
 }
 
-static bool has_hint_var(const uint8_t *data, size_t len)
+static bool has_hint_var(const uint8_t *data, size_t len, const char *hint_override)
 {
 	static const char *hints[] = {
 		"bootcmd=", "bootargs=", "baudrate=", "ethaddr=", "stdin=",
 	};
+	size_t hlen;
+
+	if (hint_override && *hint_override) {
+		hlen = strlen(hint_override);
+		if (!hlen)
+			return false;
+		for (size_t off = 0; off + hlen <= len; off++) {
+			if (!memcmp(data + off, hint_override, hlen))
+				return true;
+		}
+		return false;
+	}
 
 	for (size_t i = 0; i < ARRAY_SIZE(hints); i++) {
-		size_t hlen = strlen(hints[i]);
+		hlen = strlen(hints[i]);
 		for (size_t off = 0; off + hlen <= len; off++) {
 			if (!memcmp(data + off, hints[i], hlen))
 				return true;
@@ -254,7 +267,8 @@ static bool has_hint_var(const uint8_t *data, size_t len)
 }
 
 /* returns number of candidates, or -1 on error */
-static int scan_dev(const char *dev, uint64_t step, uint64_t env_size)
+static int scan_dev(const char *dev, uint64_t step, uint64_t env_size,
+		    const char *hint_override)
 {
 	int fd;
 	struct stat st;
@@ -329,7 +343,7 @@ static int scan_dev(const char *dev, uint64_t step, uint64_t env_size)
 			printf("  candidate offset=0x%jx  crc=%s-endian  %s\n",
 			       (uintmax_t)off,
 			       (calc == stored_le) ? "LE" : "BE",
-			       has_hint_var(buf + 4, (size_t)env_size - 4) ?
+			       has_hint_var(buf + 4, (size_t)env_size - 4, hint_override) ?
 			       "(has known vars)" : "(crc ok)");
 			if (cfg_off != (uint64_t)off)
 				printf("    aligned offset (erase block floor): 0x%jx\n",
@@ -352,14 +366,16 @@ static int scan_dev(const char *dev, uint64_t step, uint64_t env_size)
 static void usage(const char *prog)
 {
 	fprintf(stderr,
-		"Usage: %s [-s <env_size>] [<dev:step> ...]\n"
+		"Usage: %s [-s <env_size>] [-H <hint>] [<dev:step> ...]\n"
 		"  no args: auto-devices + common env sizes\n"
 		"  -s: fixed env size\n"
+		"  -H: override default env hint string (example: bootcmd=)\n"
 		"Examples:\n"
 		"  %s\n"
 		"  %s -s 0x10000\n"
+		"  %s -H bootcmd=\n"
 		"  %s -s 0x10000 /dev/mtd0:0x10000\n",
-		prog, prog, prog, prog);
+		prog, prog, prog, prog, prog);
 }
 
 int main(int argc, char **argv)
@@ -370,22 +386,34 @@ int main(int argc, char **argv)
 	};
 	bool fixed_size = false;
 	uint64_t env_size = 0;
-	int argi = 1;
+	const char *hint_override = NULL;
+	int argi;
+	int opt;
 	int i;
 
-	if (argc > 1 && !strcmp(argv[1], "-h")) {
-		usage(argv[0]);
-		return 0;
-	}
-
-	if (argc > 1 && !strcmp(argv[1], "-s")) {
-		if (argc < 3) {
+	opterr = 0;
+	while ((opt = getopt(argc, argv, "hs:H:")) != -1) {
+		switch (opt) {
+		case 'h':
+			usage(argv[0]);
+			return 0;
+		case 's':
+			env_size = parse_u64(optarg);
+			fixed_size = true;
+			break;
+		case 'H':
+			hint_override = optarg;
+			break;
+		default:
 			usage(argv[0]);
 			return 2;
 		}
-		env_size = parse_u64(argv[2]);
-		fixed_size = true;
-		argi = 3;
+	}
+
+	argi = optind;
+	if (argi < argc && argv[argi][0] == '-') {
+		usage(argv[0]);
+		return 2;
 	}
 
 	crc32_init();
@@ -412,7 +440,7 @@ int main(int argc, char **argv)
 
 			scanned++;
 			if (fixed_size) {
-				if (scan_dev(dev, step, env_size) < 0) {
+				if (scan_dev(dev, step, env_size, hint_override) < 0) {
 					globfree(&g);
 					return 1;
 				}
@@ -420,7 +448,7 @@ int main(int argc, char **argv)
 				for (i = 0; i < (int)ARRAY_SIZE(common_sizes); i++) {
 					printf("\n== trying env_size=0x%jx on %s ==\n",
 					       (uintmax_t)common_sizes[i], dev);
-					if (scan_dev(dev, step, common_sizes[i]) < 0) {
+					if (scan_dev(dev, step, common_sizes[i], hint_override) < 0) {
 						globfree(&g);
 						return 1;
 					}
@@ -450,7 +478,7 @@ int main(int argc, char **argv)
 		step = parse_u64(colon + 1);
 
 		if (fixed_size) {
-			if (scan_dev(arg, step, env_size) < 0) {
+			if (scan_dev(arg, step, env_size, hint_override) < 0) {
 				*colon = ':';
 				return 1;
 			}
@@ -458,7 +486,7 @@ int main(int argc, char **argv)
 			for (int si = 0; si < (int)ARRAY_SIZE(common_sizes); si++) {
 				printf("\n== trying env_size=0x%jx on %s ==\n",
 				       (uintmax_t)common_sizes[si], arg);
-				if (scan_dev(arg, step, common_sizes[si]) < 0) {
+				if (scan_dev(arg, step, common_sizes[si], hint_override) < 0) {
 					*colon = ':';
 					return 1;
 				}
