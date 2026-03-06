@@ -239,6 +239,75 @@ static uint64_t guess_erasesize_from_proc_mtd(const char *dev)
 	return 0;
 }
 
+static int get_ubi_indices(const char *dev, unsigned int *ubi, unsigned int *vol)
+{
+	const char *base = strrchr(dev, '/');
+	char extra;
+
+	if (!ubi || !vol)
+		return -1;
+
+	base = base ? base + 1 : dev;
+	if (!strncmp(base, "ubiblock", 8))
+		base += 8;
+	else if (!strncmp(base, "ubi", 3))
+		base += 3;
+	else
+		return -1;
+
+	if (sscanf(base, "%u_%u%c", ubi, vol, &extra) != 2)
+		return -1;
+
+	return 0;
+}
+
+static uint64_t guess_size_from_ubi_sysfs(const char *dev)
+{
+	unsigned int ubi, vol;
+	char path[256];
+	uint64_t data_bytes;
+	uint64_t reserved_ebs;
+	uint64_t usable_eb_size;
+
+	if (get_ubi_indices(dev, &ubi, &vol))
+		return 0;
+
+	snprintf(path, sizeof(path), "/sys/class/ubi/ubi%u_%u/data_bytes", ubi, vol);
+	data_bytes = read_u64_from_file(path);
+	if (data_bytes)
+		return data_bytes;
+
+	snprintf(path, sizeof(path), "/sys/class/ubi/ubi%u_%u/reserved_ebs", ubi, vol);
+	reserved_ebs = read_u64_from_file(path);
+	if (!reserved_ebs)
+		return 0;
+
+	snprintf(path, sizeof(path), "/sys/class/ubi/ubi%u/usable_eb_size", ubi);
+	usable_eb_size = read_u64_from_file(path);
+	if (!usable_eb_size)
+		return 0;
+
+	return reserved_ebs * usable_eb_size;
+}
+
+static uint64_t guess_step_from_ubi_sysfs(const char *dev)
+{
+	unsigned int ubi, vol;
+	char path[256];
+	uint64_t step;
+
+	if (get_ubi_indices(dev, &ubi, &vol))
+		return 0;
+
+	snprintf(path, sizeof(path), "/sys/class/ubi/ubi%u/min_io_size", ubi);
+	step = read_u64_from_file(path);
+	if (step)
+		return step;
+
+	snprintf(path, sizeof(path), "/sys/class/ubi/ubi%u/usable_eb_size", ubi);
+	return read_u64_from_file(path);
+}
+
 static void create_node_if_missing(const char *path, mode_t mode, dev_t devno)
 {
 	struct stat st;
@@ -350,6 +419,8 @@ static int scan_dev(const char *dev, uint64_t step, uint64_t env_size,
 		uint64_t sz = guess_size_from_sysfs(dev);
 		if (!sz)
 			sz = guess_size_from_proc_mtd(dev);
+		if (!sz)
+			sz = guess_size_from_ubi_sysfs(dev);
 		st.st_size = (off_t)sz;
 	}
 
@@ -490,8 +561,10 @@ int main(int argc, char **argv)
 
 		if (!step)
 			step = guess_erasesize_from_proc_mtd(dev_override);
+		if (!step)
+			step = guess_step_from_ubi_sysfs(dev_override);
 		if (!step) {
-			fprintf(stderr, "Cannot determine erasesize for %s\n", dev_override);
+			fprintf(stderr, "Cannot determine scan step for %s\n", dev_override);
 			return 1;
 		}
 
@@ -521,12 +594,16 @@ int main(int argc, char **argv)
 		memset(&g, 0, sizeof(g));
 		glob("/dev/mtd[0-9]*", 0, NULL, &g);
 		glob("/dev/mtdblock[0-9]*", GLOB_APPEND, NULL, &g);
+		glob("/dev/ubi[0-9]*_[0-9]*", GLOB_APPEND, NULL, &g);
+		glob("/dev/ubiblock[0-9]*_[0-9]*", GLOB_APPEND, NULL, &g);
 
 		for (gi = 0; gi < g.gl_pathc; gi++) {
 			const char *dev = g.gl_pathv[gi];
 			uint64_t step = guess_erasesize_from_sysfs(dev);
 			if (!step)
 				step = guess_erasesize_from_proc_mtd(dev);
+			if (!step)
+				step = guess_step_from_ubi_sysfs(dev);
 			if (!step)
 				continue;
 
@@ -553,7 +630,8 @@ int main(int argc, char **argv)
 
 		globfree(&g);
 		if (!scanned) {
-			fprintf(stderr, "No usable /dev/mtd* or /dev/mtdblock* devices found\n");
+			fprintf(stderr,
+				"No usable /dev/mtd*, /dev/mtdblock*, /dev/ubi*_* or /dev/ubiblock*_* devices found\n");
 			return 1;
 		}
 		return 0;
