@@ -30,6 +30,15 @@
 
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 
+/*
+ * Auto-mode scan granularity cap.
+ *
+ * Many devices report large erasesize (e.g. 0x20000), but environment
+ * offsets can be aligned more finely (e.g. 0x10000). To avoid missing valid
+ * offsets in auto mode, cap step to this value.
+ */
+#define AUTO_SCAN_MAX_STEP 0x10000ULL
+
 static uint32_t crc32_table[256];
 
 static void crc32_init(void)
@@ -383,6 +392,9 @@ int main(int argc, char **argv)
 				step = guess_erasesize_from_proc_mtd(dev);
 			if (!step)
 				continue;
+
+			if (step > AUTO_SCAN_MAX_STEP)
+				step = AUTO_SCAN_MAX_STEP;
 
 			scanned++;
 			if (fixed_size) {
