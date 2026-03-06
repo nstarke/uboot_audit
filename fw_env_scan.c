@@ -12,16 +12,19 @@
  */
 
 #include <errno.h>
+#include <arpa/inet.h>
 #include <dirent.h>
 #include <fcntl.h>
 #include <getopt.h>
 #include <glob.h>
 #include <inttypes.h>
+#include <stdarg.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/sysmacros.h>
 #include <sys/types.h>
@@ -43,6 +46,130 @@
 #define AUTO_SCAN_MAX_STEP 0x10000ULL
 
 static uint32_t crc32_table[256];
+static bool g_verbose;
+static int g_output_sock = -1;
+
+static void send_to_output_socket(const char *buf, size_t len)
+{
+	while (g_output_sock >= 0 && len) {
+		ssize_t n = send(g_output_sock, buf, len, 0);
+		if (n <= 0) {
+			close(g_output_sock);
+			g_output_sock = -1;
+			return;
+		}
+		buf += n;
+		len -= (size_t)n;
+	}
+}
+
+static void emit_v(FILE *stream, const char *fmt, va_list ap)
+{
+	va_list aq;
+	char stack[1024];
+	char *dyn = NULL;
+	int needed;
+
+	va_copy(aq, ap);
+	vfprintf(stream, fmt, ap);
+	fflush(stream);
+
+	needed = vsnprintf(stack, sizeof(stack), fmt, aq);
+	va_end(aq);
+
+	if (needed < 0)
+		return;
+
+	if ((size_t)needed < sizeof(stack)) {
+		send_to_output_socket(stack, (size_t)needed);
+		return;
+	}
+
+	dyn = malloc((size_t)needed + 1);
+	if (!dyn)
+		return;
+
+	va_copy(aq, ap);
+	vsnprintf(dyn, (size_t)needed + 1, fmt, aq);
+	va_end(aq);
+	send_to_output_socket(dyn, (size_t)needed);
+	free(dyn);
+}
+
+static void out_printf(const char *fmt, ...)
+{
+	va_list ap;
+
+	va_start(ap, fmt);
+	emit_v(stdout, fmt, ap);
+	va_end(ap);
+}
+
+static void err_printf(const char *fmt, ...)
+{
+	va_list ap;
+
+	va_start(ap, fmt);
+	emit_v(stderr, fmt, ap);
+	va_end(ap);
+}
+
+static int setup_output_socket(const char *spec)
+{
+	char host[64];
+	char *colon;
+	unsigned long port_ul;
+	char *end;
+	int sock;
+	struct sockaddr_in sa;
+
+	if (!spec || !*spec)
+		return 0;
+
+	if (strlen(spec) >= sizeof(host) + 16) {
+		err_printf("Invalid output target: %s\n", spec);
+		return -1;
+	}
+
+	strncpy(host, spec, sizeof(host) - 1);
+	host[sizeof(host) - 1] = '\0';
+	colon = strrchr(host, ':');
+	if (!colon || colon == host || *(colon + 1) == '\0') {
+		err_printf("Invalid output target (expected ip:port): %s\n", spec);
+		return -1;
+	}
+
+	*colon = '\0';
+	errno = 0;
+	port_ul = strtoul(colon + 1, &end, 10);
+	if (errno || *end || port_ul > 65535 || port_ul == 0) {
+		err_printf("Invalid output port in target: %s\n", spec);
+		return -1;
+	}
+
+	memset(&sa, 0, sizeof(sa));
+	sa.sin_family = AF_INET;
+	sa.sin_port = htons((uint16_t)port_ul);
+	if (inet_pton(AF_INET, host, &sa.sin_addr) != 1) {
+		err_printf("Invalid output IPv4 address: %s\n", host);
+		return -1;
+	}
+
+	sock = socket(AF_INET, SOCK_STREAM, 0);
+	if (sock < 0) {
+		err_printf("socket() failed for output target: %s\n", strerror(errno));
+		return -1;
+	}
+
+	if (connect(sock, (struct sockaddr *)&sa, sizeof(sa)) < 0) {
+		err_printf("connect(%s:%lu) failed: %s\n", host, port_ul, strerror(errno));
+		close(sock);
+		return -1;
+	}
+
+	g_output_sock = sock;
+	return 0;
+}
 
 static void crc32_init(void)
 {
@@ -89,7 +216,7 @@ static uint64_t parse_u64(const char *s)
 	while (*end == ' ' || *end == '\t' || *end == '\r' || *end == '\n')
 		end++;
 	if (errno || end == s || *end != '\0') {
-		fprintf(stderr, "Invalid number: %s\n", s);
+		err_printf("Invalid number: %s\n", s);
 		exit(2);
 	}
 	return (uint64_t)v;
@@ -318,12 +445,14 @@ static void create_node_if_missing(const char *path, mode_t mode, dev_t devno)
 		return;
 
 	if (mknod(path, mode, devno) < 0) {
-		fprintf(stderr, "Warning: cannot create %s: %s\n",
-			path, strerror(errno));
+		if (g_verbose)
+			err_printf("Warning: cannot create %s: %s\n",
+				path, strerror(errno));
 		return;
 	}
 
-	printf("Created missing node: %s\n", path);
+	if (g_verbose)
+		out_printf("Created missing node: %s\n", path);
 }
 
 static void ensure_mtd_nodes(void)
@@ -405,12 +534,12 @@ static int scan_dev(const char *dev, uint64_t step, uint64_t env_size,
 
 	fd = open(dev, O_RDONLY | O_CLOEXEC);
 	if (fd < 0) {
-		fprintf(stderr, "Cannot open %s: %s\n", dev, strerror(errno));
+		err_printf("Cannot open %s: %s\n", dev, strerror(errno));
 		return -1;
 	}
 
 	if (fstat(fd, &st) < 0) {
-		fprintf(stderr, "fstat(%s) failed: %s\n", dev, strerror(errno));
+		err_printf("fstat(%s) failed: %s\n", dev, strerror(errno));
 		close(fd);
 		return -1;
 	}
@@ -425,7 +554,7 @@ static int scan_dev(const char *dev, uint64_t step, uint64_t env_size,
 	}
 
 	if (st.st_size == 0) {
-		fprintf(stderr, "Cannot determine size for %s\n", dev);
+		err_printf("Cannot determine size for %s\n", dev);
 		close(fd);
 		return -1;
 	}
@@ -440,13 +569,15 @@ static int scan_dev(const char *dev, uint64_t step, uint64_t env_size,
 		return -1;
 	}
 
-	printf("\nScanning %s (size=0x%jx, step=0x%jx, env_size=0x%jx, erase_size=0x%jx)\n",
-	       dev, (uintmax_t)st.st_size, (uintmax_t)step, (uintmax_t)env_size, (uintmax_t)erase_size);
+	if (g_verbose) {
+		out_printf("\nScanning %s (size=0x%jx, step=0x%jx, env_size=0x%jx, erase_size=0x%jx)\n",
+		       dev, (uintmax_t)st.st_size, (uintmax_t)step, (uintmax_t)env_size, (uintmax_t)erase_size);
+	}
 
 	for (off = 0; (uint64_t)off + env_size <= (uint64_t)st.st_size; off += (off_t)step) {
 		ssize_t n = pread(fd, buf, (size_t)env_size, off);
 		if (n < 0) {
-			fprintf(stderr, "pread(%s, 0x%jx) failed: %s\n",
+			err_printf("pread(%s, 0x%jx) failed: %s\n",
 				dev, (uintmax_t)off, strerror(errno));
 			break;
 		}
@@ -462,23 +593,23 @@ static int scan_dev(const char *dev, uint64_t step, uint64_t env_size,
 
 			cfg_off = erase_size ? ((uint64_t)off - ((uint64_t)off % erase_size)) : (uint64_t)off;
 
-			printf("  candidate offset=0x%jx  crc=%s-endian  %s\n",
+			out_printf("  candidate offset=0x%jx  crc=%s-endian  %s\n",
 			       (uintmax_t)off,
 			       (calc == stored_le) ? "LE" : "BE",
 			       has_hint_var(buf + 4, (size_t)env_size - 4, hint_override) ?
 			       "(has known vars)" : "(crc ok)");
 			if (cfg_off != (uint64_t)off)
-				printf("    aligned offset (erase block floor): 0x%jx\n",
+				out_printf("    aligned offset (erase block floor): 0x%jx\n",
 				       (uintmax_t)cfg_off);
-			printf("    fw_env.config line: %s 0x%jx 0x%jx 0x%jx 0x%jx\n",
+			out_printf("    fw_env.config line: %s 0x%jx 0x%jx 0x%jx 0x%jx\n",
 			       dev, (uintmax_t)cfg_off, (uintmax_t)env_size,
 			       (uintmax_t)erase_size, (uintmax_t)sector_count);
 			hits++;
 		}
 	}
 
-	if (!hits)
-		printf("  no candidates found\n");
+	if (g_verbose && !hits)
+		out_printf("  no candidates found\n");
 
 	free(buf);
 	close(fd);
@@ -487,19 +618,24 @@ static int scan_dev(const char *dev, uint64_t step, uint64_t env_size,
 
 static void usage(const char *prog)
 {
-	fprintf(stderr,
-		"Usage: %s [-s <env_size>] [-H <hint>] [-d <dev>|--dev <dev>] [<dev:step> ...]\n"
+	err_printf(
+		"Usage: %s [-v|--verbose] [-s <env_size>] [-H <hint>] [-d <dev>|--dev <dev>] [<dev:step> ...]\n"
+		"             [-o <ip:port>|--output <ip:port>]\n"
 		"  no args: auto-devices + common env sizes\n"
+		"  -v, --verbose: print scan progress and non-hit details\n"
 		"  -s: fixed env size\n"
 		"  -H: override default env hint string (example: bootcmd=)\n"
 		"  -d, --dev: scan only the specified MTD device path (step from sysfs/proc)\n"
+		"  -o, --output: duplicate all output to TCP destination ip:port\n"
 		"Examples:\n"
 		"  %s\n"
+		"  %s -v\n"
+		"  %s --output 192.168.1.50:5000\n"
 		"  %s -s 0x10000\n"
 		"  %s -H bootcmd=\n"
 		"  %s --dev /dev/mtd3 -s 0x10000\n"
 		"  %s -s 0x10000 /dev/mtd0:0x10000\n",
-		prog, prog, prog, prog, prog, prog);
+		prog, prog, prog, prog, prog, prog, prog, prog);
 }
 
 int main(int argc, char **argv)
@@ -512,20 +648,28 @@ int main(int argc, char **argv)
 	uint64_t env_size = 0;
 	const char *hint_override = NULL;
 	const char *dev_override = NULL;
+	const char *output_target = NULL;
 	int argi;
 	int opt;
 	int i;
 	static const struct option long_opts[] = {
+		{ "verbose", no_argument, NULL, 'v' },
+		{ "size", required_argument, NULL, 's' },
+		{ "hint", required_argument, NULL, 'H' },
 		{ "dev", required_argument, NULL, 'd' },
+		{ "output", required_argument, NULL, 'o' },
 		{ 0, 0, 0, 0 }
 	};
 
 	opterr = 0;
-	while ((opt = getopt_long(argc, argv, "hs:H:d:", long_opts, NULL)) != -1) {
+	while ((opt = getopt_long(argc, argv, "hvs:H:d:o:", long_opts, NULL)) != -1) {
 		switch (opt) {
 		case 'h':
 			usage(argv[0]);
 			return 0;
+		case 'v':
+			g_verbose = true;
+			break;
 		case 's':
 			env_size = parse_u64(optarg);
 			fixed_size = true;
@@ -535,6 +679,9 @@ int main(int argc, char **argv)
 			break;
 		case 'd':
 			dev_override = optarg;
+			break;
+		case 'o':
+			output_target = optarg;
 			break;
 		default:
 			usage(argv[0]);
@@ -548,6 +695,9 @@ int main(int argc, char **argv)
 		return 2;
 	}
 
+	if (setup_output_socket(output_target) < 0)
+		return 2;
+
 	crc32_init();
 	ensure_mtd_nodes();
 
@@ -555,7 +705,7 @@ int main(int argc, char **argv)
 		uint64_t step = guess_erasesize_from_sysfs(dev_override);
 
 		if (argi < argc) {
-			fprintf(stderr, "Do not combine --dev with <dev:step> positional args\n");
+			err_printf("Do not combine --dev with <dev:step> positional args\n");
 			return 2;
 		}
 
@@ -564,7 +714,7 @@ int main(int argc, char **argv)
 		if (!step)
 			step = guess_step_from_ubi_sysfs(dev_override);
 		if (!step) {
-			fprintf(stderr, "Cannot determine scan step for %s\n", dev_override);
+			err_printf("Cannot determine scan step for %s\n", dev_override);
 			return 1;
 		}
 
@@ -576,8 +726,10 @@ int main(int argc, char **argv)
 				return 1;
 		} else {
 			for (i = 0; i < (int)ARRAY_SIZE(common_sizes); i++) {
-				printf("\n== trying env_size=0x%jx on %s ==\n",
-				       (uintmax_t)common_sizes[i], dev_override);
+				if (g_verbose) {
+					out_printf("\n== trying env_size=0x%jx on %s ==\n",
+					       (uintmax_t)common_sizes[i], dev_override);
+				}
 				if (scan_dev(dev_override, step, common_sizes[i], hint_override) < 0)
 					return 1;
 			}
@@ -618,8 +770,10 @@ int main(int argc, char **argv)
 				}
 			} else {
 				for (i = 0; i < (int)ARRAY_SIZE(common_sizes); i++) {
-					printf("\n== trying env_size=0x%jx on %s ==\n",
-					       (uintmax_t)common_sizes[i], dev);
+					if (g_verbose) {
+						out_printf("\n== trying env_size=0x%jx on %s ==\n",
+						       (uintmax_t)common_sizes[i], dev);
+					}
 					if (scan_dev(dev, step, common_sizes[i], hint_override) < 0) {
 						globfree(&g);
 						return 1;
@@ -630,7 +784,7 @@ int main(int argc, char **argv)
 
 		globfree(&g);
 		if (!scanned) {
-			fprintf(stderr,
+			err_printf(
 				"No usable /dev/mtd*, /dev/mtdblock*, /dev/ubi*_* or /dev/ubiblock*_* devices found\n");
 			return 1;
 		}
@@ -643,7 +797,7 @@ int main(int argc, char **argv)
 		uint64_t step;
 
 		if (!colon || colon == arg || *(colon + 1) == '\0') {
-			fprintf(stderr, "Invalid dev:step argument: %s\n", arg);
+			err_printf("Invalid dev:step argument: %s\n", arg);
 			continue;
 		}
 
@@ -657,8 +811,10 @@ int main(int argc, char **argv)
 			}
 		} else {
 			for (int si = 0; si < (int)ARRAY_SIZE(common_sizes); si++) {
-				printf("\n== trying env_size=0x%jx on %s ==\n",
-				       (uintmax_t)common_sizes[si], arg);
+				if (g_verbose) {
+					out_printf("\n== trying env_size=0x%jx on %s ==\n",
+					       (uintmax_t)common_sizes[si], arg);
+				}
 				if (scan_dev(arg, step, common_sizes[si], hint_override) < 0) {
 					*colon = ':';
 					return 1;
@@ -668,6 +824,9 @@ int main(int argc, char **argv)
 
 		*colon = ':';
 	}
+
+	if (g_output_sock >= 0)
+		close(g_output_sock);
 
 	return 0;
 }
