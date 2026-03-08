@@ -27,6 +27,9 @@ run_accept_case "image --insecure" "$BIN" image --insecure
 run_accept_case "image --find-address + --offset" \
     "$BIN" image --find-address --dev /dev/null --offset 0x0
 
+run_accept_case "image --list-commands + --offset" \
+    "$BIN" image --list-commands --dev /dev/null --offset 0x0
+
 run_accept_case "image --send-logs + --output-tcp" \
     "$BIN" image --verbose --send-logs --output-tcp 127.0.0.1:9
 

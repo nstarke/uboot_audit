@@ -4,6 +4,7 @@
 
 #include <errno.h>
 #include <arpa/inet.h>
+#include <ctype.h>
 #include <fcntl.h>
 #include <getopt.h>
 #include <glob.h>
@@ -525,6 +526,433 @@ static bool fit_find_load_address(const uint8_t *blob,
 	return load_found;
 }
 
+struct extracted_command {
+	char *name;
+	unsigned int hits;
+	int best_occ_score;
+	bool known;
+	bool context_seen;
+};
+
+static bool is_printable_ascii(uint8_t c)
+{
+	return c >= 0x20 && c <= 0x7e;
+}
+
+static bool token_in_list_ci(const char *token, const char *const *list, size_t list_count)
+{
+	for (size_t i = 0; i < list_count; i++) {
+		if (!strcasecmp(token, list[i]))
+			return true;
+	}
+	return false;
+}
+
+static bool bytes_contains_token_ci(const uint8_t *buf, size_t len, const char *needle)
+{
+	size_t nlen;
+
+	if (!buf || !needle)
+		return false;
+
+	nlen = strlen(needle);
+	if (!nlen || len < nlen)
+		return false;
+
+	for (size_t i = 0; i + nlen <= len; i++) {
+		size_t j = 0;
+		for (; j < nlen; j++) {
+			if (tolower((unsigned char)buf[i + j]) != tolower((unsigned char)needle[j]))
+				break;
+		}
+		if (j == nlen)
+			return true;
+	}
+
+	return false;
+}
+
+static bool token_has_command_context(const uint8_t *buf, size_t len, size_t start, size_t end)
+{
+	static const char *const ctx_needles[] = {
+		"unknown command",
+		"list of commands",
+		"commands",
+		"usage:",
+		"help",
+		"cmd"
+	};
+	size_t lo = (start > 96U) ? (start - 96U) : 0U;
+	size_t hi = end + 96U;
+
+	if (hi > len)
+		hi = len;
+	if (hi <= lo)
+		return false;
+
+	for (size_t i = 0; i < ARRAY_SIZE(ctx_needles); i++) {
+		if (bytes_contains_token_ci(buf + lo, hi - lo, ctx_needles[i]))
+			return true;
+	}
+
+	return false;
+}
+
+static bool token_looks_like_command_name(const char *s)
+{
+	size_t len;
+	bool has_alpha = false;
+
+	if (!s)
+		return false;
+
+	len = strlen(s);
+	if (len < 2 || len > 32)
+		return false;
+
+	for (size_t i = 0; i < len; i++) {
+		unsigned char c = (unsigned char)s[i];
+		if (!(isalnum(c) || c == '_' || c == '-' || c == '.'))
+			return false;
+		if (isalpha(c))
+			has_alpha = true;
+	}
+
+	if (!has_alpha)
+		return false;
+	if (!isalpha((unsigned char)s[0]))
+		return false;
+
+	return true;
+}
+
+static int find_extracted_command(struct extracted_command *cmds, size_t count, const char *name)
+{
+	for (size_t i = 0; i < count; i++) {
+		if (!strcmp(cmds[i].name, name))
+			return (int)i;
+	}
+	return -1;
+}
+
+static int add_extracted_command(struct extracted_command **cmds,
+					 size_t *count,
+					 const char *name,
+					 int occ_score,
+					 bool known,
+					 bool context_seen)
+{
+	int idx = find_extracted_command(*cmds, *count, name);
+
+	if (idx >= 0) {
+		struct extracted_command *c = &(*cmds)[(size_t)idx];
+		c->hits++;
+		if (occ_score > c->best_occ_score)
+			c->best_occ_score = occ_score;
+		if (known)
+			c->known = true;
+		if (context_seen)
+			c->context_seen = true;
+		return 0;
+	}
+
+	struct extracted_command *tmp = realloc(*cmds, (*count + 1U) * sizeof(**cmds));
+	if (!tmp)
+		return -1;
+	*cmds = tmp;
+
+	tmp[*count].name = strdup(name);
+	if (!tmp[*count].name)
+		return -1;
+	tmp[*count].hits = 1;
+	tmp[*count].best_occ_score = occ_score;
+	tmp[*count].known = known;
+	tmp[*count].context_seen = context_seen;
+	(*count)++;
+
+	return 0;
+}
+
+static int extracted_command_final_score(const struct extracted_command *c)
+{
+	int score;
+
+	if (!c)
+		return 0;
+
+	score = c->best_occ_score;
+	if (c->known)
+		score += 2;
+	if (c->context_seen)
+		score += 1;
+	if (c->hits > 1) {
+		unsigned int extra = c->hits - 1;
+		if (extra > 3)
+			extra = 3;
+		score += (int)extra;
+	}
+
+	return score;
+}
+
+static const char *confidence_from_score(int score)
+{
+	if (score >= 10)
+		return "high";
+	if (score >= 7)
+		return "medium";
+	return "low";
+}
+
+static int extracted_command_cmp(const void *a, const void *b)
+{
+	const struct extracted_command *ca = (const struct extracted_command *)a;
+	const struct extracted_command *cb = (const struct extracted_command *)b;
+	int sa = extracted_command_final_score(ca);
+	int sb = extracted_command_final_score(cb);
+
+	if (sa != sb)
+		return sb - sa;
+
+	return strcmp(ca->name, cb->name);
+}
+
+static int extract_commands_from_blob(const uint8_t *blob,
+				      size_t blob_len,
+				      struct extracted_command **out_cmds,
+				      size_t *out_count)
+{
+	static const char *const known_cmds[] = {
+		"help", "printenv", "setenv", "env", "saveenv", "run", "echo", "version",
+		"bdinfo", "boot", "bootm", "booti", "bootz", "bootd", "source", "reset",
+		"mm", "mw", "md", "cmp", "cp", "go", "load", "loadb", "loadx", "loady",
+		"fatload", "fatls", "ext4load", "ext4ls", "nand", "ubi", "ubifsmount",
+		"ubifsls", "ubifsload", "sf", "mmc", "usb", "dhcp", "tftpboot", "ping",
+		"crc32", "iminfo", "imls", "fdt", "itest", "true", "false", "sleep"
+	};
+	static const char *const stop_tokens[] = {
+		"u-boot", "usage", "unknown", "command", "commands", "description",
+		"firmware", "images", "image", "load", "data", "hash", "signature", "algo"
+	};
+	struct extracted_command *cmds = NULL;
+	size_t count = 0;
+	char token[64];
+
+	if (!blob || !blob_len || !out_cmds || !out_count)
+		return -1;
+
+	for (size_t i = 0; i < blob_len;) {
+		size_t start = i;
+		size_t end;
+		size_t len;
+		bool known;
+		bool context_seen;
+		bool has_upper = false;
+		bool has_sep = false;
+		int occ_score = 0;
+
+		if (!is_printable_ascii(blob[i])) {
+			i++;
+			continue;
+		}
+
+		while (i < blob_len && is_printable_ascii(blob[i]))
+			i++;
+		end = i;
+		len = end - start;
+
+		if (len >= sizeof(token))
+			continue;
+
+		memcpy(token, blob + start, len);
+		token[len] = '\0';
+
+		if (!token_looks_like_command_name(token))
+			continue;
+
+		for (size_t j = 0; j < len; j++) {
+			if (isupper((unsigned char)token[j]))
+				has_upper = true;
+			if (token[j] == '-' || token[j] == '_')
+				has_sep = true;
+		}
+
+		if (token_in_list_ci(token, stop_tokens, ARRAY_SIZE(stop_tokens)))
+			continue;
+
+		known = token_in_list_ci(token, known_cmds, ARRAY_SIZE(known_cmds));
+		context_seen = token_has_command_context(blob, blob_len, start, end);
+
+		if (known)
+			occ_score += 3;
+		if (context_seen)
+			occ_score += 3;
+		if (!has_upper)
+			occ_score += 1;
+		if (len >= 3 && len <= 12)
+			occ_score += 1;
+		if (has_sep)
+			occ_score += 1;
+
+		if (occ_score < 2)
+			continue;
+
+		if (add_extracted_command(&cmds, &count, token, occ_score, known, context_seen) < 0) {
+			for (size_t k = 0; k < count; k++)
+				free(cmds[k].name);
+			free(cmds);
+			return -1;
+		}
+	}
+
+	if (count)
+		qsort(cmds, count, sizeof(*cmds), extracted_command_cmp);
+
+	*out_cmds = cmds;
+	*out_count = count;
+	return 0;
+}
+
+static int list_image_commands(const char *dev, uint64_t offset)
+{
+	uint8_t hdr[UIMAGE_HDR_SIZE];
+	uint64_t dev_size = uboot_guess_size_any(dev);
+	uint8_t *image_blob = NULL;
+	size_t image_len = 0;
+	const uint8_t *payload = NULL;
+	size_t payload_len = 0;
+	struct extracted_command *cmds = NULL;
+	size_t cmd_count = 0;
+	int fd;
+	int rc = 1;
+
+	fd = open(dev, O_RDONLY | O_CLOEXEC);
+	if (fd < 0) {
+		err_printf("Cannot open %s: %s\n", dev, strerror(errno));
+		return 1;
+	}
+
+	if (pread(fd, hdr, sizeof(hdr), (off_t)offset) != (ssize_t)sizeof(hdr)) {
+		err_printf("Unable to read image header from %s @ 0x%jx\n", dev, (uintmax_t)offset);
+		goto out;
+	}
+
+	if (!memcmp(hdr, "\x27\x05\x19\x56", 4)) {
+		uint32_t total_size;
+		uint32_t data_size;
+
+		if (!validate_uimage_header(hdr, offset, dev_size ? dev_size : UINT64_MAX)) {
+			err_printf("uImage header validation failed at offset 0x%jx\n", (uintmax_t)offset);
+			goto out;
+		}
+
+		data_size = uboot_read_be32(hdr + 12);
+		total_size = UIMAGE_HDR_SIZE + data_size;
+		image_len = (size_t)total_size;
+		image_blob = malloc(image_len);
+		if (!image_blob) {
+			err_printf("Unable to allocate memory to inspect uImage\n");
+			goto out;
+		}
+
+		if (pread(fd, image_blob, image_len, (off_t)offset) != (ssize_t)image_len) {
+			err_printf("Unable to read full uImage for command extraction\n");
+			goto out;
+		}
+
+		payload = image_blob + UIMAGE_HDR_SIZE;
+		payload_len = data_size;
+	} else if (!memcmp(hdr, "\xD0\x0D\xFE\xED", 4)) {
+		uint32_t total_size;
+		uint64_t uboot_off = 0;
+		bool uboot_off_found = false;
+		uint32_t unused_addr = 0;
+
+		if (!validate_fit_header(hdr, offset, dev_size ? dev_size : UINT64_MAX)) {
+			err_printf("FIT header validation failed at offset 0x%jx\n", (uintmax_t)offset);
+			goto out;
+		}
+
+		total_size = uboot_read_be32(hdr + 4);
+		image_len = (size_t)total_size;
+		image_blob = malloc(image_len);
+		if (!image_blob) {
+			err_printf("Unable to allocate memory to inspect FIT image\n");
+			goto out;
+		}
+
+		if (pread(fd, image_blob, image_len, (off_t)offset) != (ssize_t)image_len) {
+			err_printf("Unable to read full FIT image for command extraction\n");
+			goto out;
+		}
+
+		(void)fit_find_load_address(image_blob,
+					    image_len,
+					    &unused_addr,
+					    &uboot_off,
+					    &uboot_off_found);
+
+		if (uboot_off_found && uboot_off < image_len) {
+			payload = image_blob + (size_t)uboot_off;
+			payload_len = image_len - (size_t)uboot_off;
+		} else {
+			payload = image_blob;
+			payload_len = image_len;
+		}
+	} else {
+		err_printf("Unknown image format at offset 0x%jx\n", (uintmax_t)offset);
+		goto out;
+	}
+
+	if (extract_commands_from_blob(payload, payload_len, &cmds, &cmd_count) < 0) {
+		err_printf("Failed command extraction from image payload\n");
+		goto out;
+	}
+
+	if (!cmd_count) {
+		if (g_output_format == FW_OUTPUT_TXT)
+			out_printf("No likely U-Boot commands extracted from image bytes.\n");
+		else
+			emit_image_record("image_command", dev, offset, "low", "none");
+		rc = 0;
+		goto out;
+	}
+
+	bool emitted_any = false;
+	for (size_t i = 0; i < cmd_count; i++) {
+		int score = extracted_command_final_score(&cmds[i]);
+		const char *confidence = confidence_from_score(score);
+
+		if (score < 5)
+			continue;
+		emitted_any = true;
+
+		if (g_output_format == FW_OUTPUT_TXT) {
+			out_printf("image command: %s offset=0x%jx command=%s confidence=%s score=%d hits=%u\n",
+				dev, (uintmax_t)offset, cmds[i].name, confidence, score, cmds[i].hits);
+		} else {
+			emit_image_record("image_command", dev, offset, confidence, cmds[i].name);
+		}
+	}
+
+	if (!emitted_any) {
+		if (g_output_format == FW_OUTPUT_TXT)
+			out_printf("No likely U-Boot commands extracted from image bytes.\n");
+		else
+			emit_image_record("image_command", dev, offset, "low", "none");
+	}
+
+	rc = 0;
+
+out:
+	for (size_t i = 0; i < cmd_count; i++)
+		free(cmds[i].name);
+	free(cmds);
+	free(image_blob);
+	close(fd);
+	return rc;
+}
+
 static uint64_t parse_u64(const char *s)
 {
 	uint64_t v;
@@ -544,6 +972,7 @@ static void usage(const char *prog)
 		"       %s --pull --dev <device> --offset <bytes> --output-http <http://host:port/>\n"
 		"       %s --pull --dev <device> --offset <bytes> --output-https <https://host:port/>\n"
 		"       %s --find-address --dev <device> --offset <bytes>\n"
+		"       %s --list-commands --dev <device> --offset <bytes>\n"
 		"       %s [--skip-remove] [--skip-mtd] [--skip-ubi] [--skip-sd] [--skip-emmc]\n"
 		"  no args: scan /dev/mtdblock*, /dev/mtd*, /dev/ubi*_*, /dev/ubiblock*_*, /dev/mmcblk* and /dev/sd* for U-Boot image signatures\n"
 		"  --verbose: print scan progress\n"
@@ -558,12 +987,13 @@ static void usage(const char *prog)
 		"  --send-logs: send tool log output to --output-tcp IPv4:port\n"
 		"  --pull: read image from --dev at --offset and stream bytes to --output-tcp\n"
 		"  --find-address: print image load address from header/FIT data\n"
+		"  --list-commands: best-effort extraction of command names from image bytes\n"
 		"  --offset: byte offset of image header for --pull\n"
 		"  --output-tcp: IPv4:TCPPort destination for --pull\n"
 		"  --output-http: HTTP URI destination for POST output\n"
 		"  --output-https: HTTPS URI destination for POST output\n"
 		"  --insecure: disable TLS certificate/hostname verification for HTTPS output\n",
-		prog, prog, prog, prog, prog, prog);
+		prog, prog, prog, prog, prog, prog, prog);
 }
 
 static int find_image_load_address(const char *dev, uint64_t offset)
@@ -922,6 +1352,7 @@ int uboot_image_scan_main(int argc, char **argv)
 	uint64_t pull_offset = 0;
 	bool pull_mode = false;
 	bool find_address = false;
+	bool list_commands = false;
 	bool offset_set = false;
 	bool skip_mtd = false;
 	bool skip_ubi = false;
@@ -961,6 +1392,7 @@ int uboot_image_scan_main(int argc, char **argv)
 		{ "insecure", no_argument, NULL, 'k' },
 		{ "pull", no_argument, NULL, 'P' },
 		{ "find-address", no_argument, NULL, 'a' },
+		{ "list-commands", no_argument, NULL, 'C' },
 		{ "send-logs", no_argument, NULL, 'L' },
 		{ "allow-text", no_argument, NULL, 't' },
 		{ "skip-remove", no_argument, NULL, 'R' },
@@ -972,7 +1404,7 @@ int uboot_image_scan_main(int argc, char **argv)
 		{ 0, 0, 0, 0 }
 	};
 
-	while ((opt = getopt_long(argc, argv, "hvd:s:o:p:O:T:kPtaLRMUSE", long_opts, NULL)) != -1) {
+	while ((opt = getopt_long(argc, argv, "hvd:s:o:p:O:T:kPtaCLRMUSE", long_opts, NULL)) != -1) {
 		switch (opt) {
 		case 'h':
 			usage(argv[0]);
@@ -1009,6 +1441,9 @@ int uboot_image_scan_main(int argc, char **argv)
 			break;
 		case 'a':
 			find_address = true;
+			break;
+		case 'C':
+			list_commands = true;
 			break;
 		case 'L':
 			g_send_logs = true;
@@ -1093,8 +1528,8 @@ int uboot_image_scan_main(int argc, char **argv)
 			err_printf("--pull accepts only one of --output-tcp, --output-http, or --output-https\n");
 			return 2;
 		}
-		if (find_address) {
-			err_printf("--find-address cannot be combined with --pull\n");
+		if (find_address || list_commands) {
+			err_printf("--pull cannot be combined with --find-address or --list-commands\n");
 			return 2;
 		}
 		if (g_output_http_uri)
@@ -1111,7 +1546,24 @@ int uboot_image_scan_main(int argc, char **argv)
 			err_printf("--find-address cannot be combined with --output-tcp (unless --send-logs is set)\n");
 			return 2;
 		}
+		if (list_commands) {
+			err_printf("--find-address cannot be combined with --list-commands\n");
+			return 2;
+		}
 		return find_image_load_address(dev_override, pull_offset);
+	}
+
+	if (list_commands) {
+		if (!dev_override || !offset_set) {
+			err_printf("--list-commands requires --dev and --offset\n");
+			return 2;
+		}
+		if (output_tcp_target && !g_send_logs) {
+			err_printf("--list-commands cannot be combined with --output-tcp (unless --send-logs is set)\n");
+			return 2;
+		}
+		total_hits = (list_image_commands(dev_override, pull_offset) == 0) ? 1 : -1;
+		goto out;
 	}
 
 	if (!skip_mtd)

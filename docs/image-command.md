@@ -21,6 +21,7 @@ Scans MTD/UBI and block devices (SD/eMMC such as `/dev/sd*` and `/dev/mmcblk*`) 
 - `--output-https <https://host:port/path>` — HTTPS destination used by `--pull` (POST body contains image bytes), or for posting normal command output
 - `--insecure` — disable TLS certificate and hostname verification for HTTPS output
 - `--find-address` — parse image at `--offset` and print load address (uImage/FIT)
+- `--list-commands` — best-effort static extraction of likely U-Boot command names from image bytes at `--offset`; emits confidence labels (`high`/`medium`/`low`)
 
 ## `image` argument constraints
 
@@ -31,9 +32,16 @@ Scans MTD/UBI and block devices (SD/eMMC such as `/dev/sd*` and `/dev/mmcblk*`) 
 - `--find-address` **requires**:
   - `--dev`
   - `--offset`
+- `--list-commands` **requires**:
+  - `--dev`
+  - `--offset`
 - `--find-address` **cannot** be combined with:
   - `--pull`
   - `--output-tcp` (unless `--send-logs` is also set)
+- `--list-commands` **cannot** be combined with:
+  - `--pull`
+  - `--output-tcp` (unless `--send-logs` is also set)
+- `--find-address` and `--list-commands` cannot be combined with each other
 - `--send-logs` **requires**:
   - `--output-tcp`
 - `--send-logs` **cannot** be combined with:
@@ -65,6 +73,13 @@ Find load address at known offset:
 
 ```bash
 ./uboot_audit image --find-address --dev /dev/mtdblock4 --offset 0x200
+```
+
+List likely commands at known offset:
+
+```bash
+./uboot_audit image --list-commands --dev /dev/mtdblock4 --offset 0x200
+./uboot_audit --output-format json image --list-commands --dev /dev/mtdblock4 --offset 0x200
 ```
 
 Send scan logs over TCP:
