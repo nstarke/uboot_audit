@@ -2,8 +2,8 @@
 
 set -u
 
-SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
-SCRIPT_NAME="$(basename -- "$0")"
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
+SCRIPT_NAME="$(basename "$0")"
 
 WEB_SERVER=""
 
@@ -57,7 +57,7 @@ else
 fi
 
 for script_path in "$SCRIPT_DIR"/*.sh; do
-    script_file="$(basename -- "$script_path")"
+    script_file="$(basename "$script_path")"
 
     if [ "$script_file" = "$SCRIPT_NAME" ]; then
         continue
