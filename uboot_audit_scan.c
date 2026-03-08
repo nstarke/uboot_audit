@@ -7,6 +7,7 @@
 #include <glob.h>
 #include <getopt.h>
 #include <inttypes.h>
+#include <stdarg.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -37,6 +38,16 @@ enum uboot_output_format {
 	FW_OUTPUT_JSON,
 };
 
+static enum uboot_output_format g_output_format = FW_OUTPUT_TXT;
+static const char *g_output_http_uri;
+static char *g_output_http_buf;
+static size_t g_output_http_len;
+static size_t g_output_http_cap;
+static bool g_http_insecure;
+static bool g_http_verbose;
+
+static const char *audit_http_content_type(enum uboot_output_format fmt);
+
 static enum uboot_output_format detect_output_format(void)
 {
 	const char *fmt = getenv("FW_AUDIT_OUTPUT_FORMAT");
@@ -51,12 +62,125 @@ static enum uboot_output_format detect_output_format(void)
 	return FW_OUTPUT_TXT;
 }
 
+static void append_output_http_buffer(const char *buf, size_t len)
+{
+	char *tmp;
+	size_t need;
+	size_t new_cap;
+
+	if (!g_output_http_uri || !buf || !len)
+		return;
+
+	need = g_output_http_len + len + 1;
+	if (need > g_output_http_cap) {
+		new_cap = g_output_http_cap ? g_output_http_cap : 1024;
+		while (new_cap < need)
+			new_cap *= 2;
+
+		tmp = realloc(g_output_http_buf, new_cap);
+		if (!tmp)
+			return;
+		g_output_http_buf = tmp;
+		g_output_http_cap = new_cap;
+	}
+
+	memcpy(g_output_http_buf + g_output_http_len, buf, len);
+	g_output_http_len += len;
+	g_output_http_buf[g_output_http_len] = '\0';
+}
+
+static void emit_v(FILE *stream, const char *fmt, va_list ap)
+{
+	va_list aq;
+	char stack[1024];
+	char *dyn = NULL;
+	int needed;
+
+	va_copy(aq, ap);
+	vfprintf(stream, fmt, ap);
+	fflush(stream);
+
+	needed = vsnprintf(stack, sizeof(stack), fmt, aq);
+	va_end(aq);
+
+	if (needed < 0)
+		return;
+
+	if ((size_t)needed < sizeof(stack)) {
+		append_output_http_buffer(stack, (size_t)needed);
+		return;
+	}
+
+	dyn = malloc((size_t)needed + 1);
+	if (!dyn)
+		return;
+
+	va_copy(aq, ap);
+	vsnprintf(dyn, (size_t)needed + 1, fmt, aq);
+	va_end(aq);
+	append_output_http_buffer(dyn, (size_t)needed);
+	free(dyn);
+}
+
+static void out_printf(const char *fmt, ...)
+{
+	va_list ap;
+
+	va_start(ap, fmt);
+	emit_v(stdout, fmt, ap);
+	va_end(ap);
+}
+
+static void err_printf(const char *fmt, ...)
+{
+	va_list ap;
+
+	va_start(ap, fmt);
+	emit_v(stderr, fmt, ap);
+	va_end(ap);
+}
+
+static void out_json_escaped(const char *s)
+{
+	if (!s)
+		return;
+
+	for (const char *p = s; *p; p++) {
+		if (*p == '\\' || *p == '"')
+			out_printf("\\");
+		out_printf("%c", *p);
+	}
+}
+
+static int flush_output_http_buffer(void)
+{
+	char errbuf[256];
+
+	if (!g_output_http_uri)
+		return 0;
+
+	if (uboot_http_post(g_output_http_uri,
+			 (const uint8_t *)(g_output_http_buf ? g_output_http_buf : ""),
+			 g_output_http_len,
+			 audit_http_content_type(g_output_format),
+			 g_http_insecure,
+			 g_http_verbose,
+			 errbuf,
+			 sizeof(errbuf)) < 0) {
+		fprintf(stderr, "Failed to POST output to %s: %s\n", g_output_http_uri,
+			errbuf[0] ? errbuf : "unknown error");
+		return -1;
+	}
+
+	return 0;
+}
+
 static uint64_t parse_u64(const char *s)
 {
 	uint64_t v;
 
 	if (uboot_parse_u64(s, &v)) {
-		fprintf(stderr, "Invalid number: %s\n", s);
+		err_printf("Invalid number: %s\n", s);
 		exit(2);
 	}
 
@@ -381,7 +505,7 @@ static int auto_scan_signature_artifacts(char **blob_path_out, char **pubkey_pat
 
 static void usage(const char *prog)
 {
-	fprintf(stderr,
+	err_printf(
 		"Usage: %s [--list-rules] [--rule <name>] --dev <device> [--offset <bytes>] --size <bytes> [--verbose]\n"
 		"  --list-rules    List compiled audit rules\n"
 		"  --rule <name>   Run only one rule by name\n"
@@ -419,6 +543,7 @@ static int send_artifact_network_record(enum uboot_output_format fmt,
 					const char *output_tcp_target,
 					const char *output_http_uri,
 					bool insecure,
+					bool verbose,
 					const char *artifact_name,
 					const char *artifact_value)
 {
@@ -462,6 +587,7 @@ static int send_artifact_network_record(enum uboot_output_format fmt,
 				   (size_t)plen,
 				   audit_http_content_type(fmt),
 				   insecure,
+				   verbose,
 				   errbuf,
 				   sizeof(errbuf)) < 0)
 			return -1;
@@ -489,7 +615,7 @@ static void print_rule_record(enum uboot_output_format fmt,
 	const char *status = (rc == 0) ? "pass" : ((rc > 0) ? "fail" : "error");
 
 	if (fmt == FW_OUTPUT_CSV) {
-		printf("audit_rule,%s,%s,%s\n",
+		out_printf("audit_rule,%s,%s,%s\n",
 		       rule->name ? rule->name : "",
 		       status,
 		       message ? message : "");
@@ -497,20 +623,14 @@ static void print_rule_record(enum uboot_output_format fmt,
 	}
 
 	if (fmt == FW_OUTPUT_JSON) {
-		printf("{\"record\":\"audit_rule\",\"rule\":\"%s\",\"status\":\"%s\",\"message\":\"",
+		out_printf("{\"record\":\"audit_rule\",\"rule\":\"%s\",\"status\":\"%s\",\"message\":\"",
 		       rule->name ? rule->name : "", status);
-		if (message) {
-			for (const char *p = message; *p; p++) {
-				if (*p == '\\' || *p == '"')
-					putchar('\\');
-				putchar(*p);
-			}
-		}
-		printf("\"}\n");
+		out_json_escaped(message);
+		out_printf("\"}\n");
 		return;
 	}
 
-	printf("[%s] %s: %s\n",
+	out_printf("[%s] %s: %s\n",
 	       status,
 	       rule->name ? rule->name : "(unnamed-rule)",
 	       message ? message : "");
@@ -519,30 +639,24 @@ static void print_rule_record(enum uboot_output_format fmt,
 static void print_rule_listing(enum uboot_output_format fmt, const struct uboot_audit_rule *rule)
 {
 	if (fmt == FW_OUTPUT_CSV) {
-		printf("audit_rule_list,%s,%s\n",
+		out_printf("audit_rule_list,%s,%s\n",
 		       rule->name ? rule->name : "",
 		       (rule->description && *rule->description) ? rule->description : "");
 		return;
 	}
 
 	if (fmt == FW_OUTPUT_JSON) {
-		printf("{\"record\":\"audit_rule_list\",\"rule\":\"%s\",\"description\":\"",
+		out_printf("{\"record\":\"audit_rule_list\",\"rule\":\"%s\",\"description\":\"",
 		       rule->name ? rule->name : "");
-		if (rule->description) {
-			for (const char *p = rule->description; *p; p++) {
-				if (*p == '\\' || *p == '"')
-					putchar('\\');
-				putchar(*p);
-			}
-		}
-		printf("\"}\n");
+		out_json_escaped(rule->description);
+		out_printf("\"}\n");
 		return;
 	}
 
-	printf("%s", rule->name ? rule->name : "");
+	out_printf("%s", rule->name ? rule->name : "");
 	if (rule->description && *rule->description)
-		printf(" - %s", rule->description);
-	printf("\n");
+		out_printf(" - %s", rule->description);
+	out_printf("\n");
 }
 
 int uboot_audit_scan_main(int argc, char **argv)
@@ -602,6 +716,13 @@ int uboot_audit_scan_main(int argc, char **argv)
 
 	optind = 1;
 	fmt = detect_output_format();
+	g_output_format = fmt;
+	g_output_http_uri = NULL;
+	g_output_http_buf = NULL;
+	g_output_http_len = 0;
+	g_output_http_cap = 0;
+	g_http_insecure = false;
+	g_http_verbose = false;
 
 	while ((opt = getopt_long(argc, argv, "hd:o:s:B:K:X:Y:Zp:O:T:kA:vr:l", long_opts, NULL)) != -1) {
 		switch (opt) {
@@ -662,9 +783,32 @@ int uboot_audit_scan_main(int argc, char **argv)
 		}
 	}
 
+	if (output_http_target && strncmp(output_http_target, "http://", 7)) {
+		err_printf("Invalid --output-http URI (expected http://host:port/...): %s\n", output_http_target);
+		return 2;
+	}
+
+	if (output_https_target && strncmp(output_https_target, "https://", 8)) {
+		err_printf("Invalid --output-https URI (expected https://host:port/...): %s\n", output_https_target);
+		return 2;
+	}
+
+	if (output_http_target && output_https_target) {
+		err_printf("Use only one of --output-http or --output-https\n");
+		return 2;
+	}
+
+	if (output_http_target)
+		output_http_uri = output_http_target;
+	if (output_https_target)
+		output_http_uri = output_https_target;
+	g_output_http_uri = output_http_uri;
+	g_http_insecure = insecure;
+	g_http_verbose = verbose;
+
 	if (list_rules) {
 		if (fmt == FW_OUTPUT_CSV)
-			printf("record,rule,description\n");
+			out_printf("record,rule,description\n");
 
 		for (rulep = start; rulep < stop; rulep++) {
 			const struct uboot_audit_rule *rule = *rulep;
@@ -673,7 +817,8 @@ int uboot_audit_scan_main(int argc, char **argv)
 				continue;
 			print_rule_listing(fmt, rule);
 		}
-		return 0;
+		ret = 0;
+		goto out;
 	}
 
 	if (!dev || !size) {
@@ -681,30 +826,10 @@ int uboot_audit_scan_main(int argc, char **argv)
 		return 2;
 	}
 
-	if (output_http_target && strncmp(output_http_target, "http://", 7)) {
-		fprintf(stderr, "Invalid --output-http URI (expected http://host:port/...): %s\n", output_http_target);
-		return 2;
-	}
-
-	if (output_https_target && strncmp(output_https_target, "https://", 8)) {
-		fprintf(stderr, "Invalid --output-https URI (expected https://host:port/...): %s\n", output_https_target);
-		return 2;
-	}
-
-	if (output_http_target && output_https_target) {
-		fprintf(stderr, "Use only one of --output-http or --output-https\n");
-		return 2;
-	}
-
-	if (output_http_target)
-		output_http_uri = output_http_target;
-	if (output_https_target)
-		output_http_uri = output_https_target;
-
 	if (!signature_blob_path && signature_blob_scan) {
 		signature_blob_path = resolve_first_readable_glob(signature_blob_scan, &scanned_blob_path);
 		if (!signature_blob_path) {
-			fprintf(stderr, "No readable files matched --scan-signature-blob pattern: %s\n", signature_blob_scan);
+			err_printf("No readable files matched --scan-signature-blob pattern: %s\n", signature_blob_scan);
 			ret = 2;
 			goto out;
 		}
@@ -713,7 +838,7 @@ int uboot_audit_scan_main(int argc, char **argv)
 	if (!signature_pubkey_path && signature_pubkey_scan) {
 		signature_pubkey_path = resolve_first_readable_glob(signature_pubkey_scan, &scanned_pubkey_path);
 		if (!signature_pubkey_path) {
-			fprintf(stderr, "No readable files matched --scan-signature-pubkey pattern: %s\n", signature_pubkey_scan);
+			err_printf("No readable files matched --scan-signature-pubkey pattern: %s\n", signature_pubkey_scan);
 			ret = 2;
 			goto out;
 		}
@@ -722,9 +847,9 @@ int uboot_audit_scan_main(int argc, char **argv)
 	if (!signature_blob_path || !signature_pubkey_path || scan_signature_devices) {
 		int found_count = auto_scan_signature_artifacts(&scanned_blob_path, &scanned_pubkey_path);
 		if (found_count < 0) {
-			fprintf(stderr, "Warning: signature artifact device scan failed\n");
+			err_printf("Warning: signature artifact device scan failed\n");
 		} else if (verbose && found_count > 0) {
-			fprintf(stderr, "Auto-discovered %d signature artifact(s) from device scan\n", found_count);
+			err_printf("Auto-discovered %d signature artifact(s) from device scan\n", found_count);
 		}
 		if (!signature_blob_path)
 			signature_blob_path = scanned_blob_path;
@@ -736,6 +861,7 @@ int uboot_audit_scan_main(int argc, char **argv)
 						 output_tcp_target,
 						 output_http_uri,
 						 insecure,
+						 verbose,
 						 "signature_blob",
 						 scanned_blob_path);
 		}
@@ -745,43 +871,44 @@ int uboot_audit_scan_main(int argc, char **argv)
 						 output_tcp_target,
 						 output_http_uri,
 						 insecure,
+						 verbose,
 						 "signature_pubkey",
 						 scanned_pubkey_path);
 		}
 	}
 
 	if (signature_blob_path && access(signature_blob_path, R_OK) != 0) {
-		fprintf(stderr, "Cannot read --signature-blob %s: %s\n", signature_blob_path, strerror(errno));
+		err_printf("Cannot read --signature-blob %s: %s\n", signature_blob_path, strerror(errno));
 		return 2;
 	}
 
 	if (signature_pubkey_path && access(signature_pubkey_path, R_OK) != 0) {
-		fprintf(stderr, "Cannot read --signature-pubkey %s: %s\n", signature_pubkey_path, strerror(errno));
+		err_printf("Cannot read --signature-pubkey %s: %s\n", signature_pubkey_path, strerror(errno));
 		return 2;
 	}
 
 	if (size > (uint64_t)SIZE_MAX) {
-		fprintf(stderr, "Requested --size is too large for this host\n");
+		err_printf("Requested --size is too large for this host\n");
 		return 2;
 	}
 
 	read_len = (size_t)size;
 	buf = malloc(read_len);
 	if (!buf) {
-		fprintf(stderr, "Unable to allocate %zu bytes for audit input\n", read_len);
+		err_printf("Unable to allocate %zu bytes for audit input\n", read_len);
 		return 1;
 	}
 
 	fd = open(dev, O_RDONLY | O_CLOEXEC);
 	if (fd < 0) {
-		fprintf(stderr, "Cannot open %s: %s\n", dev, strerror(errno));
+		err_printf("Cannot open %s: %s\n", dev, strerror(errno));
 		ret = 1;
 		goto out;
 	}
 
 	got = pread(fd, buf, read_len, (off_t)offset);
 	if (got < 0 || (size_t)got != read_len) {
-		fprintf(stderr, "Failed to read %zu bytes from %s at 0x%jx\n",
+		err_printf("Failed to read %zu bytes from %s at 0x%jx\n",
 			read_len, dev, (uintmax_t)offset);
 		ret = 1;
 		goto out;
@@ -790,7 +917,7 @@ int uboot_audit_scan_main(int argc, char **argv)
 	uboot_crc32_init(crc32_table);
 
 	if (fmt == FW_OUTPUT_CSV)
-		printf("record,rule,status,message\n");
+		out_printf("record,rule,status,message\n");
 
 	for (rulep = start; rulep < stop; rulep++) {
 		const struct uboot_audit_rule *rule = *rulep;
@@ -821,17 +948,24 @@ int uboot_audit_scan_main(int argc, char **argv)
 	}
 
 	if (!ran_any) {
-		fprintf(stderr, "No audit rules matched%s%s\n",
+		err_printf("No audit rules matched%s%s\n",
 			rule_filter ? " filter: " : "",
 			rule_filter ? rule_filter : "");
 		ret = 2;
 	}
 
 out:
+	if (flush_output_http_buffer() < 0 && ret == 0)
+		ret = 1;
 	if (fd >= 0)
 		close(fd);
 	free(scanned_blob_path);
 	free(scanned_pubkey_path);
 	free(buf);
+	free(g_output_http_buf);
+	g_output_http_buf = NULL;
+	g_output_http_len = 0;
+	g_output_http_cap = 0;
+	g_output_http_uri = NULL;
 	return ret;
 }

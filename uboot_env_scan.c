@@ -371,6 +371,7 @@ static int flush_output_http_buffer(void)
 			 g_output_http_len,
 			 env_http_content_type(),
 			 g_insecure,
+			 g_verbose,
 			 errbuf,
 			 sizeof(errbuf)) < 0) {
 		err_printf("Failed to POST output to %s: %s\n", g_output_http_uri,

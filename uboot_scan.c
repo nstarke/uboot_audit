@@ -207,7 +207,7 @@ char *uboot_http_uri_normalize_default_port(const char *uri, uint16_t default_po
 }
 
 int uboot_http_post(const char *uri, const uint8_t *data, size_t len,
-		 const char *content_type, bool insecure,
+		 const char *content_type, bool insecure, bool verbose,
 		 char *errbuf, size_t errbuf_len)
 {
 	CURL *curl;
@@ -264,6 +264,14 @@ int uboot_http_post(const char *uri, const uint8_t *data, size_t len,
 
 	if (!content_type || !*content_type)
 		content_type = "text/plain; charset=utf-8";
+	if (verbose) {
+		fprintf(stderr,
+			"HTTP POST request uri=%s bytes=%zu content-type=%s insecure=%s\n",
+			effective_uri,
+			len,
+			content_type,
+			insecure ? "true" : "false");
+	}
 	snprintf(header_line, sizeof(header_line), "Content-Type: %s", content_type);
 	headers = curl_slist_append(headers, header_line);
 	if (!headers) {
@@ -303,6 +311,9 @@ int uboot_http_post(const char *uri, const uint8_t *data, size_t len,
 
 	rc = curl_easy_perform(curl);
 	if (rc != CURLE_OK) {
+		if (verbose)
+			fprintf(stderr, "HTTP POST transport failure uri=%s error=%s\n",
+				effective_uri, curl_easy_strerror(rc));
 		if (errbuf && errbuf_len)
 			snprintf(errbuf, errbuf_len, "curl perform failed: %s", curl_easy_strerror(rc));
 		curl_slist_free_all(headers);
@@ -316,11 +327,17 @@ int uboot_http_post(const char *uri, const uint8_t *data, size_t len,
 	curl_easy_cleanup(curl);
 
 	if (http_code < 200 || http_code >= 300) {
+		if (verbose)
+			fprintf(stderr, "HTTP POST response failure uri=%s status=%ld\n",
+				effective_uri, http_code);
 		if (errbuf && errbuf_len)
 			snprintf(errbuf, errbuf_len, "HTTP status %ld", http_code);
 		free(normalized_uri);
 		return -1;
 	}
+
+	if (verbose)
+		fprintf(stderr, "HTTP POST success uri=%s status=%ld\n", effective_uri, http_code);
 
 	free(normalized_uri);
 

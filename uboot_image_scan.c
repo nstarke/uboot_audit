@@ -797,6 +797,7 @@ static int pull_image_to_output_http(const char *dev, uint64_t offset, const cha
 
 	if (uboot_http_post(output_http_uri, img, (size_t)total_size,
 			 "application/octet-stream", g_insecure,
+			 g_verbose,
 			 errbuf, sizeof(errbuf)) < 0) {
 		err_printf("Failed HTTP POST to %s: %s\n", output_http_uri, errbuf[0] ? errbuf : "unknown error");
 		free(img);
@@ -1193,6 +1194,7 @@ out:
 				 g_output_http_len,
 				 image_http_content_type(),
 				 g_insecure,
+				 g_verbose,
 				 errbuf,
 				 sizeof(errbuf)) < 0) {
 			err_printf("Failed to POST output to %s: %s\n", g_output_http_uri,

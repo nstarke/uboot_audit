@@ -18,6 +18,40 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 
+def augment_json_payload(payload: bytes, timestamp: str, src_ip: str) -> bytes:
+    """Add timestamp/src_ip fields to JSON object payloads (supports NDJSON)."""
+    text = payload.decode("utf-8", errors="strict")
+    stripped = text.strip()
+    if not stripped:
+        return payload
+
+    # NDJSON support: one JSON object per non-empty line.
+    lines = text.splitlines()
+    if len(lines) > 1:
+        out_lines: list[str] = []
+        changed = False
+        for line in lines:
+            if not line.strip():
+                continue
+            obj = json.loads(line)
+            if not isinstance(obj, dict):
+                return payload
+            obj["timestamp"] = timestamp
+            obj["src_ip"] = src_ip
+            out_lines.append(json.dumps(obj, separators=(",", ":")))
+            changed = True
+        if changed:
+            return ("\n".join(out_lines) + "\n").encode("utf-8")
+        return payload
+
+    obj = json.loads(stripped)
+    if not isinstance(obj, dict):
+        return payload
+    obj["timestamp"] = timestamp
+    obj["src_ip"] = src_ip
+    return (json.dumps(obj, separators=(",", ":")) + "\n").encode("utf-8")
+
+
 def github_json_get(url: str, token: str | None = None) -> dict:
     req = urllib.request.Request(
         url,
@@ -183,13 +217,28 @@ def build_handler(log_path: Path, assets_dir: Path, tests_dir: Path, verbose: bo
             content_len = int(self.headers.get("Content-Length", "0"))
             payload = self.rfile.read(content_len)
             timestamp = dt.datetime.now(dt.timezone.utc).isoformat()
+            src_ip = self.client_address[0]
+
+            payload_to_log = payload
+            content_type = self.headers.get("Content-Type", "")
+            should_try_json = "json" in content_type.lower()
+            if not should_try_json:
+                # Also attempt JSON parse heuristically for clients that omit content-type.
+                try:
+                    payload.decode("utf-8", errors="strict")
+                    should_try_json = True
+                except UnicodeDecodeError:
+                    should_try_json = False
+
+            if should_try_json:
+                try:
+                    payload_to_log = augment_json_payload(payload, timestamp, src_ip)
+                except (UnicodeDecodeError, json.JSONDecodeError):
+                    payload_to_log = payload
 
             with log_path.open("ab") as fp:
-                fp.write(f"[{timestamp}] {self.client_address[0]} {self.path}\n".encode("utf-8"))
-                for key, value in self.headers.items():
-                    fp.write(f"{key}: {value}\n".encode("utf-8"))
-                fp.write(b"\n")
-                fp.write(payload)
+                fp.write(f"[{timestamp}] {src_ip} {self.path}\n".encode("utf-8"))
+                fp.write(payload_to_log)
                 fp.write(b"\n\n---\n\n")
 
             self.send_response(200)

@@ -38,6 +38,18 @@ run_with_output_override() {
     fi
 
     if [ -z "$override_flag" ]; then
+        has_verbose=0
+        for arg in "$@"; do
+            case "$arg" in
+                --verbose|--verbose=*)
+                    has_verbose=1
+                    break
+                    ;;
+            esac
+        done
+        if [ "$has_verbose" -eq 0 ]; then
+            set -- "$@" --verbose
+        fi
         "$@"
         return $?
     fi
@@ -70,6 +82,19 @@ run_with_output_override() {
 
     if [ "$replaced" -eq 0 ]; then
         set -- "$@" "$override_flag" "$override_value"
+    fi
+
+    has_verbose=0
+    for arg in "$@"; do
+        case "$arg" in
+            --verbose|--verbose=*)
+                has_verbose=1
+                break
+                ;;
+        esac
+    done
+    if [ "$has_verbose" -eq 0 ]; then
+        set -- "$@" --verbose
     fi
 
     "$@"

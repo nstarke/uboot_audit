@@ -42,7 +42,7 @@ int uboot_connect_tcp_ipv4(const char *spec);
 int uboot_send_all(int sock, const uint8_t *buf, size_t len);
 char *uboot_http_uri_normalize_default_port(const char *uri, uint16_t default_port);
 int uboot_http_post(const char *uri, const uint8_t *data, size_t len,
-		 const char *content_type, bool insecure,
+		 const char *content_type, bool insecure, bool verbose,
 		 char *errbuf, size_t errbuf_len);
 extern const unsigned char uboot_default_ca_bundle_pem[];
 extern const size_t uboot_default_ca_bundle_pem_len;
