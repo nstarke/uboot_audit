@@ -5,6 +5,9 @@ set -u
 PASS_COUNT=0
 FAIL_COUNT=0
 
+# Shared test size used by --size argument coverage tests.
+TEST_SIZE=0x10000
+
 has_printf() {
     command -v printf >/dev/null 2>&1
 }

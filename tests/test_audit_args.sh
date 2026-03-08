@@ -27,52 +27,52 @@ run_exact_case "audit --help" 0 "$BIN" audit --help
 run_accept_case "audit --list-rules" "$BIN" audit --list-rules
 
 run_accept_case "audit required args: --dev --size" \
-    "$BIN" audit --dev /dev/null --size 0x100
+    "$BIN" audit --dev /dev/null --size "$TEST_SIZE"
 
 run_accept_case "audit --rule uboot_validate_crc32" \
-    "$BIN" audit --rule uboot_validate_crc32 --dev /dev/null --size 0x100
+    "$BIN" audit --rule uboot_validate_crc32 --dev /dev/null --size "$TEST_SIZE"
 
 run_accept_case "audit --rule uboot_validate_env_writeability" \
-    "$BIN" audit --rule uboot_validate_env_writeability --dev /dev/null --size 0x100
+    "$BIN" audit --rule uboot_validate_env_writeability --dev /dev/null --size "$TEST_SIZE"
 
 run_accept_case "audit --rule uboot_validate_secureboot" \
-    "$BIN" audit --rule uboot_validate_secureboot --dev /dev/null --size 0x100
+    "$BIN" audit --rule uboot_validate_secureboot --dev /dev/null --size "$TEST_SIZE"
 
 run_accept_case "audit --offset" \
-    "$BIN" audit --dev /dev/null --offset 0x0 --size 0x100
+    "$BIN" audit --dev /dev/null --offset 0x0 --size "$TEST_SIZE"
 
 run_accept_case "audit --signature-blob" \
-    "$BIN" audit --dev /dev/null --size 0x100 --signature-blob "$TMP_BLOB"
+    "$BIN" audit --dev /dev/null --size "$TEST_SIZE" --signature-blob "$TMP_BLOB"
 
 run_accept_case "audit --signature-pubkey" \
-    "$BIN" audit --dev /dev/null --size 0x100 --signature-pubkey "$TMP_PEM"
+    "$BIN" audit --dev /dev/null --size "$TEST_SIZE" --signature-pubkey "$TMP_PEM"
 
 run_accept_case "audit --scan-signature-devices" \
-    "$BIN" audit --dev /dev/null --size 0x100 --scan-signature-devices
+    "$BIN" audit --dev /dev/null --size "$TEST_SIZE" --scan-signature-devices
 
 run_accept_case "audit --scan-signature-blob" \
-    "$BIN" audit --dev /dev/null --size 0x100 --scan-signature-blob "$TMP_DIR/*.fit"
+    "$BIN" audit --dev /dev/null --size "$TEST_SIZE" --scan-signature-blob "$TMP_DIR/*.fit"
 
 run_accept_case "audit --scan-signature-pubkey" \
-    "$BIN" audit --dev /dev/null --size 0x100 --scan-signature-pubkey "$TMP_DIR/*.pem"
+    "$BIN" audit --dev /dev/null --size "$TEST_SIZE" --scan-signature-pubkey "$TMP_DIR/*.pem"
 
 run_accept_case "audit --signature-alg" \
-    "$BIN" audit --dev /dev/null --size 0x100 --signature-alg sha256
+    "$BIN" audit --dev /dev/null --size "$TEST_SIZE" --signature-alg sha256
 
 run_accept_case "audit --verbose" \
-    "$BIN" audit --dev /dev/null --size 0x100 --verbose
+    "$BIN" audit --dev /dev/null --size "$TEST_SIZE" --verbose
 
 run_accept_case "audit --output-tcp" \
-    "$BIN" audit --dev /dev/null --size 0x100 --output-tcp 127.0.0.1:9
+    "$BIN" audit --dev /dev/null --size "$TEST_SIZE" --output-tcp 127.0.0.1:9
 
 run_accept_case "audit --output-http" \
-    "$BIN" audit --dev /dev/null --size 0x100 --output-http http://127.0.0.1:1/audit
+    "$BIN" audit --dev /dev/null --size "$TEST_SIZE" --output-http http://127.0.0.1:1/audit
 
 run_accept_case "audit --output-https" \
-    "$BIN" audit --dev /dev/null --size 0x100 --output-https https://127.0.0.1:1/audit
+    "$BIN" audit --dev /dev/null --size "$TEST_SIZE" --output-https https://127.0.0.1:1/audit
 
 run_accept_case "audit --insecure" \
-    "$BIN" audit --dev /dev/null --size 0x100 --insecure
+    "$BIN" audit --dev /dev/null --size "$TEST_SIZE" --insecure
 
 rm -rf "$TMP_DIR"
 finish_tests
