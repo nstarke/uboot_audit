@@ -10,7 +10,6 @@ OUTPUT_DIRECTORY=""
 TEMP_OUTPUT_DIRECTORY=""
 ISA=""
 LIST_ISA=0
-RELEASE_BINARIES_DIR="$SCRIPT_DIR/../tools/release_binaries"
 
 # Remove stale temporary download directories from previous runs.
 for stale_dir in /tmp/download_tests_output.*; do
@@ -21,16 +20,18 @@ done
 usage() {
     echo "usage: $0 --webserver <url> --isa <arch> [--output-directory <path>]"
     echo "   or: $0 --webserver=<url> --isa=<arch> [--output-directory=<path>]"
-    echo "   or: $0 --list-isa"
+    echo "   or: $0 --webserver <url> --list-isa"
 }
 
-list_valid_isas() {
-    for bin_path in "$RELEASE_BINARIES_DIR"/uboot_audit-*; do
-        [ -e "$bin_path" ] || continue
-        [ -f "$bin_path" ] || continue
-        bin_name="$(basename "$bin_path")"
-        printf '%s\n' "${bin_name#uboot_audit-}"
-    done | sort -u
+list_valid_isas_from_index_file() {
+    index_file="$1"
+
+    sed 's/[^A-Za-z0-9_./-]/\
+/g' "$index_file" | \
+        grep '^/*uboot_audit-[A-Za-z0-9._-]\+$' | \
+        sed 's#^/*##' | \
+        sed 's#^uboot_audit-##' | \
+        sort -u
 }
 
 print_valid_isas() {
@@ -94,37 +95,9 @@ while [ "$#" -gt 0 ]; do
     esac
 done
 
-if [ "$LIST_ISA" -eq 1 ]; then
-    if [ ! -d "$RELEASE_BINARIES_DIR" ]; then
-        echo "error: release binaries directory not found: $RELEASE_BINARIES_DIR" >&2
-        exit 1
-    fi
-
-    if ! list_valid_isas | grep . >/dev/null 2>&1; then
-        echo "error: no release binaries found in $RELEASE_BINARIES_DIR" >&2
-        exit 1
-    fi
-
-    print_valid_isas
-    exit 0
-fi
-
 if [ -z "$WEB_SERVER" ]; then
     echo "error: --webserver is required"
     usage
-    exit 2
-fi
-
-if [ -z "$ISA" ]; then
-    echo "error: --isa is required"
-    usage
-    exit 2
-fi
-
-if ! list_valid_isas | grep -Fx "$ISA" >/dev/null 2>&1; then
-    echo "error: invalid --isa '$ISA'"
-    echo "valid values:"
-    print_valid_isas
     exit 2
 fi
 
@@ -153,6 +126,41 @@ fetch_to_file() {
 INDEX_FILE="$(mktemp /tmp/download_tests_index.XXXXXX)"
 SCRIPT_LIST_FILE="$(mktemp /tmp/download_tests_list.XXXXXX)"
 
+cleanup() {
+    rm -f "$INDEX_FILE" "$SCRIPT_LIST_FILE"
+}
+trap cleanup EXIT HUP INT TERM
+
+echo "fetching index: $BASE_URL/"
+fetch_to_file "$BASE_URL/" "$INDEX_FILE"
+
+list_valid_isas() {
+    list_valid_isas_from_index_file "$INDEX_FILE"
+}
+
+if [ "$LIST_ISA" -eq 1 ]; then
+    if ! list_valid_isas | grep . >/dev/null 2>&1; then
+        echo "error: no release binaries found in index at $BASE_URL/" >&2
+        exit 1
+    fi
+
+    print_valid_isas
+    exit 0
+fi
+
+if [ -z "$ISA" ]; then
+    echo "error: --isa is required"
+    usage
+    exit 2
+fi
+
+if ! list_valid_isas | grep -Fx "$ISA" >/dev/null 2>&1; then
+    echo "error: invalid --isa '$ISA'"
+    echo "valid values:"
+    print_valid_isas
+    exit 2
+fi
+
 if [ -n "$OUTPUT_DIRECTORY" ]; then
     mkdir -p "$OUTPUT_DIRECTORY"
     DEST_DIR="$OUTPUT_DIRECTORY"
@@ -161,15 +169,7 @@ else
     DEST_DIR="$TEMP_OUTPUT_DIRECTORY"
 fi
 
-cleanup() {
-    rm -f "$INDEX_FILE" "$SCRIPT_LIST_FILE"
-}
-trap cleanup EXIT HUP INT TERM
-
 echo "output directory: $DEST_DIR"
-
-echo "fetching index: $BASE_URL/"
-fetch_to_file "$BASE_URL/" "$INDEX_FILE"
 
 sed 's/[^A-Za-z0-9_./-]/\
 /g' "$INDEX_FILE" | \
