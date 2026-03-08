@@ -23,6 +23,7 @@ make
 
 Notes:
 
+- Project C sources and headers now live under `agent/` (including rule sources under `agent/audit-rules/`).
 - `libcsv` is built from source directly from `third_party/libcsv/libcsv.c`.
 - `zlib` is built from source from the `third_party/zlib` submodule and linked statically.
 - `libubootenv` is built from source from the `third_party/libubootenv` submodule and linked statically.

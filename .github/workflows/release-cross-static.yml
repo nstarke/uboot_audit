@@ -68,6 +68,8 @@ jobs:
       - name: Build static binaries
         run: |
           set -euo pipefail
+          test -f agent/uboot_audit.c
+          test -f agent/uboot_scan.h
           mkdir -p dist/${{ matrix.name }}
 
           IFS=',' read -ra TARGETS <<< "${{ matrix.zig_targets }}"

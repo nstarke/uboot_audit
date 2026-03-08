@@ -1,6 +1,6 @@
 # `uboot_audit audit` Command
 
-Runs compiled audit rules that are defined under `audit-rules/` (one `.c` file per rule).
+Runs compiled audit rules that are defined under `agent/audit-rules/` (one `.c` file per rule).
 
 Before running rules, `audit` ensures `./fw_env.config` exists for follow-on environment operations:
 

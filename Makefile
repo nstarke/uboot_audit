@@ -83,14 +83,15 @@ CFLAGS += $(JSONC_CFLAGS)
 CFLAGS += $(CURL_CFLAGS)
 CFLAGS += $(OPENSSL_CFLAGS)
 CFLAGS += -I.
+CFLAGS += -Iagent
 
 TARGET := uboot_audit
-SRC    := uboot_audit.c uboot_env_scan.c uboot_image_scan.c uboot_audit_scan.c uboot_scan.c \
-	  audit-rules/uboot_validate_crc32_rule.c \
-	  audit-rules/uboot_validate_cmdline_init_writeability_rule.c \
-	  audit-rules/uboot_validate_env_security_rule.c \
-	  audit-rules/uboot_validate_env_writeability_rule.c \
-	  audit-rules/uboot_validate_secureboot_rule.c \
+SRC    := agent/uboot_audit.c agent/uboot_env_scan.c agent/uboot_image_scan.c agent/uboot_audit_scan.c agent/uboot_scan.c \
+	  agent/audit-rules/uboot_validate_crc32_rule.c \
+	  agent/audit-rules/uboot_validate_cmdline_init_writeability_rule.c \
+	  agent/audit-rules/uboot_validate_env_security_rule.c \
+	  agent/audit-rules/uboot_validate_env_writeability_rule.c \
+	  agent/audit-rules/uboot_validate_secureboot_rule.c \
 	  $(LIBCSV_SRC) $(GENERATED_CA_SRC)
 
 .PHONY: all env image static test clean

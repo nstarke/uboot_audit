@@ -1,6 +1,6 @@
 # Audit Rules Reference
 
-This project currently builds and registers the following audit rules from `audit-rules/*.c`.
+This project currently builds and registers the following audit rules from `agent/audit-rules/*.c`.
 
 ## How to list available rules
 
