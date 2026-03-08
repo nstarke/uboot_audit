@@ -1,19 +1,8 @@
 // SPDX-License-Identifier: MIT License - Copyright (c) 2026 Nicholas Starke
-/*
- * Minimal U-Boot environment scanner for Linux hosts without Python.
- *
- * Build example (static ARM32 LE):
- *   arm-linux-gnueabi-gcc -O2 -static -o fw_env_scan tools/env/fw_env_scan.c
- *
- * Usage:
- *   ./fw_env_scan -s 0x10000
- *   ./fw_env_scan -s 0x10000 /dev/mtd0:0x10000 /dev/mtd1:0x20000
- *   ./fw_env_scan                  (tries common env sizes automatically)
- */
+
+#include "fw_scan.h"
 
 #include <errno.h>
-#include <arpa/inet.h>
-#include <dirent.h>
 #include <fcntl.h>
 #include <getopt.h>
 #include <glob.h>
@@ -26,7 +15,6 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
-#include <sys/sysmacros.h>
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -35,14 +23,6 @@
 #endif
 
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
-
-/*
- * Auto-mode scan granularity cap.
- *
- * Many devices report large erasesize (e.g. 0x20000), but environment
- * offsets can be aligned more finely (e.g. 0x10000). To avoid missing valid
- * offsets in auto mode, cap step to this value.
- */
 #define AUTO_SCAN_MAX_STEP 0x10000ULL
 
 static uint32_t crc32_table[256];
@@ -115,80 +95,15 @@ static void err_printf(const char *fmt, ...)
 	va_end(ap);
 }
 
-static int setup_output_socket(const char *spec)
+static uint64_t parse_u64(const char *s)
 {
-	char host[64];
-	char *colon;
-	unsigned long port_ul;
-	char *end;
-	int sock;
-	struct sockaddr_in sa;
+	uint64_t v;
 
-	if (!spec || !*spec)
-		return 0;
-
-	if (strlen(spec) >= sizeof(host) + 16) {
-		err_printf("Invalid output target: %s\n", spec);
-		return -1;
+	if (fw_parse_u64(s, &v)) {
+		err_printf("Invalid number: %s\n", s);
+		exit(2);
 	}
-
-	strncpy(host, spec, sizeof(host) - 1);
-	host[sizeof(host) - 1] = '\0';
-	colon = strrchr(host, ':');
-	if (!colon || colon == host || *(colon + 1) == '\0') {
-		err_printf("Invalid output target (expected ip:port): %s\n", spec);
-		return -1;
-	}
-
-	*colon = '\0';
-	errno = 0;
-	port_ul = strtoul(colon + 1, &end, 10);
-	if (errno || *end || port_ul > 65535 || port_ul == 0) {
-		err_printf("Invalid output port in target: %s\n", spec);
-		return -1;
-	}
-
-	memset(&sa, 0, sizeof(sa));
-	sa.sin_family = AF_INET;
-	sa.sin_port = htons((uint16_t)port_ul);
-	if (inet_pton(AF_INET, host, &sa.sin_addr) != 1) {
-		err_printf("Invalid output IPv4 address: %s\n", host);
-		return -1;
-	}
-
-	sock = socket(AF_INET, SOCK_STREAM, 0);
-	if (sock < 0) {
-		err_printf("socket() failed for output target: %s\n", strerror(errno));
-		return -1;
-	}
-
-	if (connect(sock, (struct sockaddr *)&sa, sizeof(sa)) < 0) {
-		err_printf("connect(%s:%lu) failed: %s\n", host, port_ul, strerror(errno));
-		close(sock);
-		return -1;
-	}
-
-	g_output_sock = sock;
-	return 0;
-}
-
-static void crc32_init(void)
-{
-	uint32_t poly = 0xEDB88320U;
-	for (uint32_t i = 0; i < 256; i++) {
-		uint32_t c = i;
-		for (int j = 0; j < 8; j++)
-			c = (c & 1) ? (poly ^ (c >> 1)) : (c >> 1);
-		crc32_table[i] = c;
-	}
-}
-
-static uint32_t crc32_calc(const uint8_t *buf, size_t len)
-{
-	uint32_t c = 0xFFFFFFFFU;
-	for (size_t i = 0; i < len; i++)
-		c = crc32_table[(c ^ buf[i]) & 0xff] ^ (c >> 8);
-	return c ^ 0xFFFFFFFFU;
+	return v;
 }
 
 static uint32_t read_le32(const uint8_t *p)
@@ -199,441 +114,31 @@ static uint32_t read_le32(const uint8_t *p)
 		((uint32_t)p[3] << 24);
 }
 
-static uint32_t read_be32(const uint8_t *p)
-{
-	return ((uint32_t)p[0] << 24) |
-		((uint32_t)p[1] << 16) |
-		((uint32_t)p[2] << 8) |
-		(uint32_t)p[3];
-}
-
-static uint64_t parse_u64(const char *s)
-{
-	char *end;
-	unsigned long long v;
-
-	errno = 0;
-	v = strtoull(s, &end, 0);
-	while (*end == ' ' || *end == '\t' || *end == '\r' || *end == '\n')
-		end++;
-	if (errno || end == s || *end != '\0') {
-		err_printf("Invalid number: %s\n", s);
-		exit(2);
-	}
-	return (uint64_t)v;
-}
-
-static int get_mtd_index(const char *dev, char *idx, size_t idx_sz)
-{
-	const char *base = strrchr(dev, '/');
-	const char *p;
-	size_t j = 0;
-
-	if (!idx || idx_sz < 2)
-		return -1;
-
-	base = base ? base + 1 : dev;
-	if (!strncmp(base, "mtdblock", 8))
-		p = base + 8;
-	else if (!strncmp(base, "mtd", 3))
-		p = base + 3;
-	else
-		return -1;
-
-	while (*p >= '0' && *p <= '9' && j < idx_sz - 1)
-		idx[j++] = *p++;
-
-	if (!j)
-		return -1;
-	if (*p && strcmp(p, "ro"))
-		return -1;
-
-	idx[j] = '\0';
-	return 0;
-}
-
-static uint64_t read_u64_from_file(const char *path)
-{
-	char buf[64];
-	int fd;
-	ssize_t n;
-
-	fd = open(path, O_RDONLY | O_CLOEXEC);
-	if (fd < 0)
-		return 0;
-	n = read(fd, buf, sizeof(buf) - 1);
-	close(fd);
-	if (n <= 0)
-		return 0;
-
-	buf[n] = '\0';
-	return parse_u64(buf);
-}
-
-static uint64_t guess_size_from_sysfs(const char *dev)
-{
-	char idx[32], path[256];
-
-	if (get_mtd_index(dev, idx, sizeof(idx)))
-		return 0;
-	snprintf(path, sizeof(path), "/sys/class/mtd/mtd%s/size", idx);
-	return read_u64_from_file(path);
-}
-
-static uint64_t guess_erasesize_from_sysfs(const char *dev)
-{
-	char idx[32], path[256];
-
-	if (get_mtd_index(dev, idx, sizeof(idx)))
-		return 0;
-	snprintf(path, sizeof(path), "/sys/class/mtd/mtd%s/erasesize", idx);
-	return read_u64_from_file(path);
-}
-
-static void make_proc_mtd_name(const char *dev, char *out, size_t out_sz)
-{
-	char idx[32];
-	size_t idx_len;
-
-	if (!out || out_sz < 5) {
-		if (out && out_sz)
-			*out = '\0';
-		return;
-	}
-
-	if (get_mtd_index(dev, idx, sizeof(idx))) {
-		*out = '\0';
-		return;
-	}
-
-	out[0] = 'm';
-	out[1] = 't';
-	out[2] = 'd';
-
-	idx_len = strnlen(idx, out_sz - 4);
-	memcpy(out + 3, idx, idx_len);
-	out[3 + idx_len] = '\0';
-}
-
-static uint64_t guess_size_from_proc_mtd(const char *dev)
-{
-	char want[32], line[256];
-	FILE *fp;
-
-	make_proc_mtd_name(dev, want, sizeof(want));
-	if (!want[0])
-		return 0;
-
-	fp = fopen("/proc/mtd", "r");
-	if (!fp)
-		return 0;
-
-	while (fgets(line, sizeof(line), fp)) {
-		char name[32];
-		unsigned long long size;
-		if (sscanf(line, "%31[^:]: %llx", name, &size) == 2 && !strcmp(name, want)) {
-			fclose(fp);
-			return (uint64_t)size;
-		}
-	}
-
-	fclose(fp);
-	return 0;
-}
-
-static uint64_t guess_erasesize_from_proc_mtd(const char *dev)
-{
-	char want[32], line[256];
-	FILE *fp;
-
-	make_proc_mtd_name(dev, want, sizeof(want));
-	if (!want[0])
-		return 0;
-
-	fp = fopen("/proc/mtd", "r");
-	if (!fp)
-		return 0;
-
-	while (fgets(line, sizeof(line), fp)) {
-		char name[32];
-		unsigned long long size, erase;
-		if (sscanf(line, "%31[^:]: %llx %llx", name, &size, &erase) == 3 && !strcmp(name, want)) {
-			fclose(fp);
-			return (uint64_t)erase;
-		}
-	}
-
-	fclose(fp);
-	return 0;
-}
-
-static int get_ubi_indices(const char *dev, unsigned int *ubi, unsigned int *vol)
-{
-	const char *base = strrchr(dev, '/');
-	char extra;
-
-	if (!ubi || !vol)
-		return -1;
-
-	base = base ? base + 1 : dev;
-	if (!strncmp(base, "ubiblock", 8))
-		base += 8;
-	else if (!strncmp(base, "ubi", 3))
-		base += 3;
-	else
-		return -1;
-
-	if (sscanf(base, "%u_%u%c", ubi, vol, &extra) != 2)
-		return -1;
-
-	return 0;
-}
-
-static uint64_t guess_size_from_ubi_sysfs(const char *dev)
-{
-	unsigned int ubi, vol;
-	char path[256];
-	uint64_t data_bytes;
-	uint64_t reserved_ebs;
-	uint64_t usable_eb_size;
-
-	if (get_ubi_indices(dev, &ubi, &vol))
-		return 0;
-
-	snprintf(path, sizeof(path), "/sys/class/ubi/ubi%u_%u/data_bytes", ubi, vol);
-	data_bytes = read_u64_from_file(path);
-	if (data_bytes)
-		return data_bytes;
-
-	snprintf(path, sizeof(path), "/sys/class/ubi/ubi%u_%u/reserved_ebs", ubi, vol);
-	reserved_ebs = read_u64_from_file(path);
-	if (!reserved_ebs)
-		return 0;
-
-	snprintf(path, sizeof(path), "/sys/class/ubi/ubi%u/usable_eb_size", ubi);
-	usable_eb_size = read_u64_from_file(path);
-	if (!usable_eb_size)
-		return 0;
-
-	return reserved_ebs * usable_eb_size;
-}
-
-static uint64_t guess_step_from_ubi_sysfs(const char *dev)
-{
-	unsigned int ubi, vol;
-	char path[256];
-	uint64_t step;
-
-	if (get_ubi_indices(dev, &ubi, &vol))
-		return 0;
-
-	snprintf(path, sizeof(path), "/sys/class/ubi/ubi%u/min_io_size", ubi);
-	step = read_u64_from_file(path);
-	if (step)
-		return step;
-
-	snprintf(path, sizeof(path), "/sys/class/ubi/ubi%u/usable_eb_size", ubi);
-	return read_u64_from_file(path);
-}
-
-static void create_node_if_missing(const char *path, mode_t mode, dev_t devno)
-{
-	struct stat st;
-
-	if (!stat(path, &st))
-		return;
-	if (errno != ENOENT)
-		return;
-
-	if (mknod(path, mode, devno) < 0) {
-		if (g_verbose)
-			err_printf("Warning: cannot create %s: %s\n",
-				path, strerror(errno));
-		return;
-	}
-
-	if (g_verbose)
-		out_printf("Created missing node: %s\n", path);
-}
-
-static int read_major_minor_from_sysfs(const char *dev_attr_path,
-				       unsigned int *major_out,
-				       unsigned int *minor_out)
-{
-	char buf[64];
-	int fd;
-	ssize_t n;
-	unsigned int major, minor;
-
-	if (!major_out || !minor_out)
-		return -1;
-
-	fd = open(dev_attr_path, O_RDONLY | O_CLOEXEC);
-	if (fd < 0)
-		return -1;
-	n = read(fd, buf, sizeof(buf) - 1);
-	close(fd);
-	if (n <= 0)
-		return -1;
-
-	buf[n] = '\0';
-	if (sscanf(buf, "%u:%u", &major, &minor) != 2)
-		return -1;
-
-	*major_out = major;
-	*minor_out = minor;
-	return 0;
-}
-
-static void ensure_mtd_nodes(void)
-{
-	DIR *dir;
-	struct dirent *de;
-
-	dir = opendir("/sys/class/mtd");
-	if (!dir)
-		return;
-
-	while ((de = readdir(dir))) {
-		unsigned int idx;
-		char extra;
-		char devpath[64];
-		char blockpath[64];
-
-		if (sscanf(de->d_name, "mtd%u%c", &idx, &extra) != 1)
-			continue;
-
-		snprintf(devpath, sizeof(devpath), "/dev/mtd%u", idx);
-		snprintf(blockpath, sizeof(blockpath), "/dev/mtdblock%u", idx);
-
-		create_node_if_missing(devpath, S_IFCHR | 0600, makedev(90, idx * 2));
-		create_node_if_missing(blockpath, S_IFBLK | 0600, makedev(31, idx));
-	}
-
-	closedir(dir);
-}
-
-static void ensure_ubi_nodes(void)
-{
-	DIR *dir;
-	struct dirent *de;
-	const char *ubi_prefix = "/sys/class/ubi/";
-	const char *blk_prefix = "/sys/class/block/";
-	const char *dev_suffix = "/dev";
-
-	dir = opendir("/sys/class/ubi");
-	if (dir) {
-		while ((de = readdir(dir))) {
-			unsigned int ubi, vol;
-			char extra;
-			char dev_attr[256];
-			char devnode[64];
-			unsigned int major, minor;
-			size_t name_len;
-			size_t prefix_len;
-			size_t suffix_len;
-
-			if (sscanf(de->d_name, "ubi%u_%u%c", &ubi, &vol, &extra) == 2) {
-				snprintf(devnode, sizeof(devnode), "/dev/ubi%u_%u", ubi, vol);
-			} else if (sscanf(de->d_name, "ubi%u%c", &ubi, &extra) == 1) {
-				snprintf(devnode, sizeof(devnode), "/dev/ubi%u", ubi);
-			} else {
-				continue;
-			}
-
-			name_len = strnlen(de->d_name, sizeof(dev_attr));
-			prefix_len = strlen(ubi_prefix);
-			suffix_len = strlen(dev_suffix);
-			if (name_len >= sizeof(dev_attr))
-				continue;
-			if (prefix_len + name_len + suffix_len + 1 > sizeof(dev_attr))
-				continue;
-
-			memcpy(dev_attr, ubi_prefix, prefix_len);
-			memcpy(dev_attr + prefix_len, de->d_name, name_len);
-			memcpy(dev_attr + prefix_len + name_len, dev_suffix, suffix_len + 1);
-
-			if (read_major_minor_from_sysfs(dev_attr, &major, &minor))
-				continue;
-
-			create_node_if_missing(devnode, S_IFCHR | 0600, makedev(major, minor));
-		}
-
-		closedir(dir);
-	}
-
-	dir = opendir("/sys/class/block");
-	if (!dir)
-		return;
-
-	while ((de = readdir(dir))) {
-		unsigned int ubi, vol;
-		char extra;
-		char dev_attr[256];
-		char devnode[64];
-		unsigned int major, minor;
-		size_t name_len;
-		size_t prefix_len;
-		size_t suffix_len;
-
-		if (sscanf(de->d_name, "ubiblock%u_%u%c", &ubi, &vol, &extra) != 2)
-			continue;
-
-		snprintf(devnode, sizeof(devnode), "/dev/ubiblock%u_%u", ubi, vol);
-
-		name_len = strnlen(de->d_name, sizeof(dev_attr));
-		prefix_len = strlen(blk_prefix);
-		suffix_len = strlen(dev_suffix);
-		if (name_len >= sizeof(dev_attr))
-			continue;
-		if (prefix_len + name_len + suffix_len + 1 > sizeof(dev_attr))
-			continue;
-
-		memcpy(dev_attr, blk_prefix, prefix_len);
-		memcpy(dev_attr + prefix_len, de->d_name, name_len);
-		memcpy(dev_attr + prefix_len + name_len, dev_suffix, suffix_len + 1);
-
-		if (read_major_minor_from_sysfs(dev_attr, &major, &minor))
-			continue;
-
-		create_node_if_missing(devnode, S_IFBLK | 0600, makedev(major, minor));
-	}
-
-	closedir(dir);
-}
-
 static bool has_hint_var(const uint8_t *data, size_t len, const char *hint_override)
 {
 	static const char *hints[] = {
 		"bootcmd=", "bootargs=", "baudrate=", "ethaddr=", "stdin=",
 	};
-	size_t hlen;
 
 	if (hint_override && *hint_override) {
-		hlen = strlen(hint_override);
-		if (!hlen)
-			return false;
-		for (size_t off = 0; off + hlen <= len; off++) {
+		size_t hlen = strlen(hint_override);
+		for (size_t off = 0; off + hlen <= len; off++)
 			if (!memcmp(data + off, hint_override, hlen))
 				return true;
-		}
 		return false;
 	}
 
 	for (size_t i = 0; i < ARRAY_SIZE(hints); i++) {
-		hlen = strlen(hints[i]);
-		for (size_t off = 0; off + hlen <= len; off++) {
+		size_t hlen = strlen(hints[i]);
+		for (size_t off = 0; off + hlen <= len; off++)
 			if (!memcmp(data + off, hints[i], hlen))
 				return true;
-		}
 	}
 
 	return false;
 }
 
-/* returns number of candidates, or -1 on error */
-static int scan_dev(const char *dev, uint64_t step, uint64_t env_size,
-		    const char *hint_override)
+static int scan_dev(const char *dev, uint64_t step, uint64_t env_size, const char *hint_override)
 {
 	int fd;
 	struct stat st;
@@ -644,9 +149,6 @@ static int scan_dev(const char *dev, uint64_t step, uint64_t env_size,
 	uint64_t erase_size;
 	uint64_t sector_count;
 	uint64_t cfg_off;
-
-	if (!step || !env_size)
-		return -1;
 
 	fd = open(dev, O_RDONLY | O_CLOEXEC);
 	if (fd < 0) {
@@ -660,27 +162,25 @@ static int scan_dev(const char *dev, uint64_t step, uint64_t env_size,
 	}
 
 	if (fstat(fd, &st) < 0) {
-		err_printf("fstat(%s) failed: %s\n", dev, strerror(errno));
 		close(fd);
 		return -1;
 	}
 
 	if (st.st_size == 0) {
-		uint64_t sz = guess_size_from_sysfs(dev);
+		uint64_t sz = fw_guess_size_from_sysfs(dev);
 		if (!sz)
-			sz = guess_size_from_proc_mtd(dev);
+			sz = fw_guess_size_from_proc_mtd(dev);
 		if (!sz)
-			sz = guess_size_from_ubi_sysfs(dev);
+			sz = fw_guess_size_from_ubi_sysfs(dev);
 		st.st_size = (off_t)sz;
 	}
 
 	if (st.st_size == 0) {
-		err_printf("Cannot determine size for %s\n", dev);
 		close(fd);
 		return -1;
 	}
 
-	sysfs_erasesize = guess_erasesize_from_sysfs(dev);
+	sysfs_erasesize = fw_guess_erasesize_from_sysfs(dev);
 	erase_size = sysfs_erasesize ? sysfs_erasesize : step;
 	sector_count = erase_size ? ((env_size + erase_size - 1) / erase_size) : 0;
 
@@ -690,55 +190,32 @@ static int scan_dev(const char *dev, uint64_t step, uint64_t env_size,
 		return -1;
 	}
 
-	if (g_verbose) {
-		out_printf("\nScanning %s (size=0x%jx, step=0x%jx, env_size=0x%jx, erase_size=0x%jx)\n",
-		       dev, (uintmax_t)st.st_size, (uintmax_t)step, (uintmax_t)env_size, (uintmax_t)erase_size);
-	}
-
 	for (off = 0; (uint64_t)off + env_size <= (uint64_t)st.st_size; off += (off_t)step) {
-		ssize_t n = pread(fd, buf, (size_t)env_size, off);
-		if (n < 0) {
-			err_printf("pread(%s, 0x%jx) failed: %s\n",
-				dev, (uintmax_t)off, strerror(errno));
-			break;
-		}
-		if ((uint64_t)n != env_size)
+		if ((uint64_t)pread(fd, buf, (size_t)env_size, off) != env_size)
 			break;
 
-		{
-			uint32_t stored_le = read_le32(buf);
-			uint32_t stored_be = read_be32(buf);
-			uint32_t calc = crc32_calc(buf + 4, (size_t)env_size - 4);
-			bool hint_ok = has_hint_var(buf + 4, (size_t)env_size - 4, hint_override);
+		uint32_t stored_le = read_le32(buf);
+		uint32_t stored_be = fw_read_be32(buf);
+		uint32_t calc = fw_crc32_calc(crc32_table, buf + 4, (size_t)env_size - 4);
+		bool hint_ok = has_hint_var(buf + 4, (size_t)env_size - 4, hint_override);
 
-			if (!g_bruteforce && calc != stored_le && calc != stored_be)
-				continue;
-			if (g_bruteforce && !hint_ok)
-				continue;
+		if (!g_bruteforce && calc != stored_le && calc != stored_be)
+			continue;
+		if (g_bruteforce && !hint_ok)
+			continue;
 
-			cfg_off = erase_size ? ((uint64_t)off - ((uint64_t)off % erase_size)) : (uint64_t)off;
+		cfg_off = erase_size ? ((uint64_t)off - ((uint64_t)off % erase_size)) : (uint64_t)off;
+		if (g_bruteforce)
+			out_printf("  candidate offset=0x%jx  mode=hint-only  (has known vars)\n", (uintmax_t)off);
+		else
+			out_printf("  candidate offset=0x%jx  crc=%s-endian  %s\n", (uintmax_t)off,
+				(calc == stored_le) ? "LE" : "BE", hint_ok ? "(has known vars)" : "(crc ok)");
 
-			if (g_bruteforce) {
-				out_printf("  candidate offset=0x%jx  mode=hint-only  (has known vars)\n",
-				       (uintmax_t)off);
-			} else {
-				out_printf("  candidate offset=0x%jx  crc=%s-endian  %s\n",
-				       (uintmax_t)off,
-				       (calc == stored_le) ? "LE" : "BE",
-				       hint_ok ? "(has known vars)" : "(crc ok)");
-			}
-			if (cfg_off != (uint64_t)off)
-				out_printf("    aligned offset (erase block floor): 0x%jx\n",
-				       (uintmax_t)cfg_off);
-			out_printf("    fw_env.config line: %s 0x%jx 0x%jx 0x%jx 0x%jx\n",
-			       dev, (uintmax_t)cfg_off, (uintmax_t)env_size,
-			       (uintmax_t)erase_size, (uintmax_t)sector_count);
-			hits++;
-		}
+		out_printf("    fw_env.config line: %s 0x%jx 0x%jx 0x%jx 0x%jx\n",
+			dev, (uintmax_t)cfg_off, (uintmax_t)env_size,
+			(uintmax_t)erase_size, (uintmax_t)sector_count);
+		hits++;
 	}
-
-	if (g_verbose && !hits)
-		out_printf("  no candidates found\n");
 
 	free(buf);
 	close(fd);
@@ -747,34 +224,13 @@ static int scan_dev(const char *dev, uint64_t step, uint64_t env_size,
 
 static void usage(const char *prog)
 {
-	err_printf(
-		"Usage: %s [--verbose] [--size <env_size>] [--hint <hint>] [--dev <dev>] [--brutefoce] [<dev:step> ...]\n"
-		"             [-o <ip:port>|--output <ip:port>]\n"
-		"  no args: auto-devices + common env sizes\n"
-		"  --verbose: print scan progress and non-hit details\n"
-		"  --size: fixed env size\n"
-		"  --hint: override default env hint string (example: bootcmd=)\n"
-		"  --dev: scan only the specified MTD device path (step from sysfs/proc)\n"
-		"  --brutefoce/--bruteforce: skip CRC check and match by hint strings only\n"
-		"  --output: duplicate all output to TCP destination ip:port\n"
-		"Examples:\n"
-		"  %s\n"
-		"  %s --verbose\n"
-		"  %s --bruteforce --hint bootcmd=\n"
-		"  %s --output 192.168.1.50:5000\n"
-		"  %s --size 0x10000\n"
-		"  %s --hint bootcmd=\n"
-		"  %s --dev /dev/mtd3 --size 0x10000\n"
-		"  %s --size 0x10000 /dev/mtd0:0x10000\n",
-		prog, prog, prog, prog, prog, prog, prog, prog, prog);
+	err_printf("Usage: %s [--verbose] [--size <env_size>] [--hint <hint>] [--dev <dev>] [--brutefoce] [<dev:step> ...]\n"
+		"             [--output <ip:port>]\n", prog);
 }
 
 int main(int argc, char **argv)
 {
-	static const uint64_t common_sizes[] = {
-		0x1000, 0x2000, 0x4000, 0x8000,
-		0x10000, 0x20000, 0x40000, 0x80000,
-	};
+	static const uint64_t common_sizes[] = { 0x1000, 0x2000, 0x4000, 0x8000, 0x10000, 0x20000, 0x40000, 0x80000 };
 	bool fixed_size = false;
 	uint64_t env_size = 0;
 	const char *hint_override = NULL;
@@ -782,7 +238,7 @@ int main(int argc, char **argv)
 	const char *output_target = NULL;
 	int argi;
 	int opt;
-	int i;
+
 	static const struct option long_opts[] = {
 		{ "verbose", no_argument, NULL, 'v' },
 		{ "size", required_argument, NULL, 's' },
@@ -794,181 +250,107 @@ int main(int argc, char **argv)
 		{ 0, 0, 0, 0 }
 	};
 
-	opterr = 0;
 	while ((opt = getopt_long(argc, argv, "hvs:H:d:bo:", long_opts, NULL)) != -1) {
 		switch (opt) {
-		case 'h':
-			usage(argv[0]);
-			return 0;
-		case 'v':
-			g_verbose = true;
-			break;
-		case 's':
-			env_size = parse_u64(optarg);
-			fixed_size = true;
-			break;
-		case 'H':
-			hint_override = optarg;
-			break;
-		case 'd':
-			dev_override = optarg;
-			break;
-		case 'b':
-			g_bruteforce = true;
-			break;
-		case 'o':
-			output_target = optarg;
-			break;
-		default:
-			usage(argv[0]);
-			return 2;
+		case 'h': usage(argv[0]); return 0;
+		case 'v': g_verbose = true; break;
+		case 's': env_size = parse_u64(optarg); fixed_size = true; break;
+		case 'H': hint_override = optarg; break;
+		case 'd': dev_override = optarg; break;
+		case 'b': g_bruteforce = true; break;
+		case 'o': output_target = optarg; break;
+		default: usage(argv[0]); return 2;
 		}
 	}
 
 	argi = optind;
-	if (argi < argc && argv[argi][0] == '-') {
-		usage(argv[0]);
-		return 2;
-	}
-
 	if (geteuid() != 0) {
 		err_printf("This program must be run as root.\n");
 		return 1;
 	}
 
-	if (setup_output_socket(output_target) < 0)
-		return 2;
-
-	crc32_init();
-	ensure_mtd_nodes();
-	ensure_ubi_nodes();
-
-	if (dev_override) {
-		uint64_t step = guess_erasesize_from_sysfs(dev_override);
-
-		if (argi < argc) {
-			err_printf("Do not combine --dev with <dev:step> positional args\n");
+	if (output_target && *output_target) {
+		g_output_sock = fw_connect_tcp_ipv4(output_target);
+		if (g_output_sock < 0) {
+			err_printf("Invalid/failed output target (expected IPv4:port): %s\n", output_target);
 			return 2;
 		}
+	}
 
+	fw_crc32_init(crc32_table);
+	fw_ensure_mtd_nodes(g_verbose);
+	fw_ensure_ubi_nodes(g_verbose);
+
+	if (dev_override) {
+		uint64_t step = fw_guess_erasesize_from_sysfs(dev_override);
 		if (!step)
-			step = guess_erasesize_from_proc_mtd(dev_override);
+			step = fw_guess_erasesize_from_proc_mtd(dev_override);
 		if (!step)
-			step = guess_step_from_ubi_sysfs(dev_override);
-		if (!step) {
-			err_printf("Cannot determine scan step for %s\n", dev_override);
+			step = fw_guess_step_from_ubi_sysfs(dev_override);
+		if (!step)
 			return 1;
-		}
-
 		if (step > AUTO_SCAN_MAX_STEP)
 			step = AUTO_SCAN_MAX_STEP;
 
-		if (fixed_size) {
-			if (scan_dev(dev_override, step, env_size, hint_override) < 0)
-				return 1;
-		} else {
-			for (i = 0; i < (int)ARRAY_SIZE(common_sizes); i++) {
-				if (g_verbose) {
-					out_printf("\n== trying env_size=0x%jx on %s ==\n",
-					       (uintmax_t)common_sizes[i], dev_override);
-				}
-				if (scan_dev(dev_override, step, common_sizes[i], hint_override) < 0)
-					return 1;
-			}
-		}
+		if (fixed_size)
+			return (scan_dev(dev_override, step, env_size, hint_override) < 0) ? 1 : 0;
 
+		for (size_t i = 0; i < ARRAY_SIZE(common_sizes); i++)
+			if (scan_dev(dev_override, step, common_sizes[i], hint_override) < 0)
+				return 1;
 		return 0;
 	}
 
 	if (argi >= argc) {
 		glob_t g;
-		size_t gi;
-		int scanned = 0;
-
-		memset(&g, 0, sizeof(g));
 		glob("/dev/mtd[0-9]*", 0, NULL, &g);
 		glob("/dev/mtdblock[0-9]*", GLOB_APPEND, NULL, &g);
 		glob("/dev/ubi[0-9]*_[0-9]*", GLOB_APPEND, NULL, &g);
 		glob("/dev/ubiblock[0-9]*_[0-9]*", GLOB_APPEND, NULL, &g);
-
-		for (gi = 0; gi < g.gl_pathc; gi++) {
+		for (size_t gi = 0; gi < g.gl_pathc; gi++) {
 			const char *dev = g.gl_pathv[gi];
-			uint64_t step = guess_erasesize_from_sysfs(dev);
+			uint64_t step = fw_guess_erasesize_from_sysfs(dev);
 			if (!step)
-				step = guess_erasesize_from_proc_mtd(dev);
+				step = fw_guess_erasesize_from_proc_mtd(dev);
 			if (!step)
-				step = guess_step_from_ubi_sysfs(dev);
+				step = fw_guess_step_from_ubi_sysfs(dev);
 			if (!step)
 				continue;
-
 			if (step > AUTO_SCAN_MAX_STEP)
 				step = AUTO_SCAN_MAX_STEP;
 
-			scanned++;
 			if (fixed_size) {
-				if (scan_dev(dev, step, env_size, hint_override) < 0) {
-					globfree(&g);
+				if (scan_dev(dev, step, env_size, hint_override) < 0)
 					return 1;
-				}
 			} else {
-				for (i = 0; i < (int)ARRAY_SIZE(common_sizes); i++) {
-					if (g_verbose) {
-						out_printf("\n== trying env_size=0x%jx on %s ==\n",
-						       (uintmax_t)common_sizes[i], dev);
-					}
-					if (scan_dev(dev, step, common_sizes[i], hint_override) < 0) {
-						globfree(&g);
+				for (size_t i = 0; i < ARRAY_SIZE(common_sizes); i++)
+					if (scan_dev(dev, step, common_sizes[i], hint_override) < 0)
 						return 1;
-					}
-				}
 			}
 		}
-
 		globfree(&g);
-		if (!scanned) {
-			err_printf(
-				"No usable /dev/mtd*, /dev/mtdblock*, /dev/ubi*_* or /dev/ubiblock*_* devices found\n");
-			return 1;
-		}
 		return 0;
 	}
 
-	for (i = argi; i < argc; i++) {
+	for (int i = argi; i < argc; i++) {
 		char *arg = argv[i];
 		char *colon = strrchr(arg, ':');
-		uint64_t step;
-
-		if (!colon || colon == arg || *(colon + 1) == '\0') {
-			err_printf("Invalid dev:step argument: %s\n", arg);
+		if (!colon || colon == arg || *(colon + 1) == '\0')
 			continue;
-		}
-
 		*colon = '\0';
-		step = parse_u64(colon + 1);
-
+		uint64_t step = parse_u64(colon + 1);
 		if (fixed_size) {
-			if (scan_dev(arg, step, env_size, hint_override) < 0) {
-				*colon = ':';
+			if (scan_dev(arg, step, env_size, hint_override) < 0)
 				return 1;
-			}
 		} else {
-			for (int si = 0; si < (int)ARRAY_SIZE(common_sizes); si++) {
-				if (g_verbose) {
-					out_printf("\n== trying env_size=0x%jx on %s ==\n",
-					       (uintmax_t)common_sizes[si], arg);
-				}
-				if (scan_dev(arg, step, common_sizes[si], hint_override) < 0) {
-					*colon = ':';
+			for (size_t si = 0; si < ARRAY_SIZE(common_sizes); si++)
+				if (scan_dev(arg, step, common_sizes[si], hint_override) < 0)
 					return 1;
-				}
-			}
 		}
-
 		*colon = ':';
 	}
 
 	if (g_output_sock >= 0)
 		close(g_output_sock);
-
 	return 0;
 }

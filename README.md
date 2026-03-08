@@ -1,36 +1,29 @@
-# fw_env_scan
+# fw_env_scan / fw_image_scan
 
-`fw_env_scan` is a small Linux host utility that scans MTD devices for data that looks like a valid U-Boot environment block.
+This repo provides two Linux host-side C utilities for U-Boot-related flash analysis:
 
-Its main purpose is to help you build a correct `fw_env.config` entry for U-Boot user-space tools:
+- `fw_env_scan`: find U-Boot environment candidates and print `fw_env.config` lines.
+- `fw_image_scan`: find likely U-Boot image headers, optionally pull image bytes, or resolve load address.
 
-- `fw_printenv`
-- `fw_setenv`
-
-When it finds a CRC-valid candidate, it prints a ready-to-copy line in the exact format expected by `fw_env.config`:
-
-```text
-fw_env.config line: <device> <offset> <env_size> <erase_size>
-```
-
-Written in C for use in embedded environments that may have limited scripting interpreters.
-
----
-
-## Why this is useful
-
-The U-Boot tools require an accurate `fw_env.config` definition. If any field is wrong (device, offset, env size, or erase size), `fw_printenv/fw_setenv` may fail or target the wrong flash region.
-
-`fw_env_scan` helps by:
-
-1. Walking `/dev/mtd*` / `/dev/mtdblock*` devices (or explicit devices you pass).
-2. Reading blocks at erase-size boundaries.
-3. Checking whether the block contains a valid U-Boot environment CRC.
-4. Printing candidate `fw_env.config` lines you can test directly.
+Both tools are intended for embedded/Linux recovery and diagnostics workflows.
 
 ---
 
 ## Build
+
+Build environment scanner only:
+
+```bash
+make env
+```
+
+Build image scanner only:
+
+```bash
+make image
+```
+
+Build both:
 
 ```bash
 make
@@ -48,95 +41,116 @@ Clean:
 make clean
 ```
 
-Cross compile:
+Cross compile example:
 
-```
-make CC=arm-linux-gnueabi-gcc
+```bash
+make CC=arm-linux-gnueabi-gcc env
+make CC=arm-linux-gnueabi-gcc image
 ```
 
 ---
 
-## Usage
+## `fw_env_scan`
 
-### Common options
+Scans MTD/UBI devices for blocks that resemble a valid U-Boot environment (CRC-verified by default), then prints candidate `fw_env.config` lines.
+
+### `fw_env_scan` arguments
 
 - `--verbose` — print scan progress and non-hit details
 - `--size <env_size>` — fixed environment size (for example `0x10000`)
 - `--hint <hint>` — override hint string used for positive labeling
 - `--dev <device>` — scan only one device (step inferred from sysfs/proc)
-- `--brutefoce` / `--bruteforce` — skip CRC checks and match candidates by hints only
-- `--output <ip:port>` — duplicate all output to a TCP destination
+- `--brutefoce` / `--bruteforce` — skip CRC checks and match by hint strings only
+- `--output <IPv4:port>` — duplicate output to TCP destination
 
-### Examples
-
-Auto-scan devices and try common environment sizes:
+### `fw_env_scan` examples
 
 ```bash
 ./fw_env_scan
-```
-
-Verbose auto-scan:
-
-```bash
 ./fw_env_scan --verbose
-```
-
-Scan with a fixed environment size:
-
-```bash
 ./fw_env_scan --size 0x10000
-```
-
-Scan one specific device:
-
-```bash
 ./fw_env_scan --dev /dev/mtd3 --size 0x10000
-```
-
-Scan specific device(s) with explicit step:
-
-```bash
 ./fw_env_scan --size 0x10000 /dev/mtd0:0x10000 /dev/mtd1:0x20000
-```
-
-Set a custom hint:
-
-```bash
-./fw_env_scan --hint bootcmd=
-```
-Many times in on an embedded host, there is no `netcat` binary and perhaps no way to persist locally, so this program has a "TCP Output" option (`--output`) that takes a `$IP_ADDRESS:$TCP_PORT` string value to write the log contents over the network.
-
-Mirror output to TCP listener:
-
-```bash
 ./fw_env_scan --output 192.168.1.50:5000 --verbose
 ```
 
----
-
-## Example output
+Example candidate line:
 
 ```text
-candidate offset=0x40000  crc=LE-endian  (has known vars)
-  fw_env.config line: /dev/mtd0 0x40000 0x10000 0x10000
-```
-
-You can then place that line in `/etc/fw_env.config` (or your target config path) and validate with:
-
-```bash
-fw_printenv
+fw_env.config line: /dev/mtd0 0x40000 0x10000 0x10000 0x1
 ```
 
 ---
 
-## Notes and cautions
+## `fw_image_scan`
 
-- This tool finds **candidates** based on CRC and common environment hints; always validate on your platform.
-- Some platforms use redundant environments (two entries); you may see multiple valid candidates.
-- Be careful before using `fw_setenv` on production hardware—verify the selected region first.
+Scans MTD block/char devices for likely U-Boot image signatures. FIT/uImage checks are validated structurally to reduce false positives.
 
-## Default fw_env.config
+### `fw_image_scan` arguments
 
+- `--verbose` — print scan progress
+- `--dev <device>` — restrict scan or action to one device
+- `--step <bytes>` — scan stride (default `0x1000`)
+- `--allow-text` — also match plain `U-Boot` text (higher false-positive risk)
+- `--send-logs` — send tool logs over TCP using `--output <IPv4:port>`
+- `--pull` — pull image bytes from `--dev` at `--offset` and send over TCP to `--output`
+- `--offset <bytes>` — image offset used by `--pull` or `--find-address`
+- `--output <IPv4:port>` — TCP destination used by `--pull`
+- `--find-address` — parse image at `--offset` and print load address (uImage/FIT)
+
+### `fw_image_scan` argument constraints
+
+- `--pull` **requires**:
+  - `--dev`
+  - `--offset`
+  - `--output`
+- `--find-address` **requires**:
+  - `--dev`
+  - `--offset`
+- `--find-address` **cannot** be combined with:
+  - `--pull`
+  - `--output`
+- `--send-logs` **requires**:
+  - `--output`
+- `--send-logs` **cannot** be combined with:
+  - `--pull`
+
+### `fw_image_scan` examples
+
+Scan all MTD devices:
+
+```bash
+./fw_image_scan --verbose
 ```
-/dev/mtd0 0x3b0000 0x10000 0x10000 2
+
+Scan one device:
+
+```bash
+./fw_image_scan --dev /dev/mtdblock4 --step 0x1000
 ```
+
+Find load address at known offset:
+
+```bash
+./fw_image_scan --find-address --dev /dev/mtdblock4 --offset 0x200
+```
+
+Send scan logs over TCP:
+
+```bash
+./fw_image_scan --verbose --send-logs --output 192.168.1.50:5000
+```
+
+Pull image bytes to TCP listener:
+
+```bash
+./fw_image_scan --pull --dev /dev/mtdblock4 --offset 0x200 --output 192.168.1.50:5000
+```
+
+---
+
+## Notes / cautions
+
+- Run as root (raw flash/block reads and device-node operations typically require it).
+- Both tools report candidates and parsed results; always validate before destructive operations.
+- Be careful with `fw_setenv` on production hardware.
