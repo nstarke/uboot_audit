@@ -67,8 +67,8 @@ fetch_to_file() {
     fi
 }
 
-INDEX_FILE="$(mktemp)"
-SCRIPT_LIST_FILE="$(mktemp)"
+INDEX_FILE="$(mktemp /tmp/download_tests_index.XXXXXX)"
+SCRIPT_LIST_FILE="$(mktemp /tmp/download_tests_list.XXXXXX)"
 cleanup() {
     rm -f "$INDEX_FILE" "$SCRIPT_LIST_FILE"
 }
@@ -77,8 +77,10 @@ trap cleanup EXIT HUP INT TERM
 echo "fetching index: $BASE_URL/"
 fetch_to_file "$BASE_URL/" "$INDEX_FILE"
 
-grep -Eo '/?tests/[^"[:space:]<>]+\.sh' "$INDEX_FILE" | \
-    sed 's#^/##' | sort -u >"$SCRIPT_LIST_FILE"
+sed 's/[^A-Za-z0-9_./-]/\
+/g' "$INDEX_FILE" | \
+    grep '^/*tests/.*\.sh$' | \
+    sed 's#^/*##' >"$SCRIPT_LIST_FILE"
 
 if [ ! -s "$SCRIPT_LIST_FILE" ]; then
     echo "error: no test shell scripts found in index at $BASE_URL/"
