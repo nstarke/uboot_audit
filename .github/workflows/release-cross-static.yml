@@ -17,29 +17,29 @@ jobs:
       matrix:
         include:
           - name: arm32-le
-            zig_target: arm-linux-musleabi
+            zig_targets: arm-linux-musleabi
           - name: arm32-be
-            zig_target: armeb-linux-musleabi
+            zig_targets: armeb-linux-musleabi,armeb-linux-gnueabi
           - name: aarch64-le
-            zig_target: aarch64-linux-musl
+            zig_targets: aarch64-linux-musl
           - name: aarch64-be
-            zig_target: aarch64_be-linux-musl
+            zig_targets: aarch64_be-linux-musl
           - name: mips-le
-            zig_target: mipsel-linux-musl
+            zig_targets: mipsel-linux-musl
           - name: mips-be
-            zig_target: mips-linux-musl
+            zig_targets: mips-linux-musl
           - name: mips64-le
-            zig_target: mips64el-linux-muslabi64
+            zig_targets: mips64el-linux-musl,mips64el-linux-gnu
           - name: mips64-be
-            zig_target: mips64-linux-muslabi64
+            zig_targets: mips64-linux-musl,mips64-linux-gnu
           - name: powerpc-le
-            zig_target: powerpcle-linux-musl
+            zig_targets: powerpc64le-linux-musl,powerpc64le-linux-gnu
           - name: powerpc-be
-            zig_target: powerpc-linux-musl
+            zig_targets: powerpc-linux-musl
           - name: x86
-            zig_target: x86-linux-musl
+            zig_targets: x86-linux-musl,i386-linux-musl
           - name: x86_64
-            zig_target: x86_64-linux-musl
+            zig_targets: x86_64-linux-musl
 
     steps:
       - name: Checkout
@@ -48,15 +48,30 @@ jobs:
       - name: Setup Zig
         uses: mlugg/setup-zig@v1
         with:
-          version: 0.13.0
+          version: 0.14.1
 
       - name: Build static binaries
         run: |
           set -euo pipefail
           mkdir -p dist/${{ matrix.name }}
 
-          zig cc -O2 -static -target ${{ matrix.zig_target }} -o dist/${{ matrix.name }}/fw_env_scan-${{ matrix.name }} fw_env_scan.c fw_scan.c
-          zig cc -O2 -static -target ${{ matrix.zig_target }} -o dist/${{ matrix.name }}/fw_image_scan-${{ matrix.name }} fw_image_scan.c fw_scan.c
+          IFS=',' read -ra TARGETS <<< "${{ matrix.zig_targets }}"
+          BUILT=0
+          for T in "${TARGETS[@]}"; do
+            echo "Trying target: ${T}"
+            if zig cc -O2 -static -Wno-deprecated-non-prototype -target "${T}" -o dist/${{ matrix.name }}/fw_env_scan-${{ matrix.name }} fw_env_scan.c fw_scan.c \
+              && zig cc -O2 -static -Wno-deprecated-non-prototype -target "${T}" -o dist/${{ matrix.name }}/fw_image_scan-${{ matrix.name }} fw_image_scan.c fw_scan.c; then
+              echo "Built successfully with target: ${T}"
+              BUILT=1
+              break
+            fi
+            echo "Target failed: ${T}"
+          done
+
+          if [ "$BUILT" -ne 1 ]; then
+            echo "All candidate targets failed for ${{ matrix.name }}"
+            exit 1
+          fi
 
       - name: Upload matrix artifact
         uses: actions/upload-artifact@v4
