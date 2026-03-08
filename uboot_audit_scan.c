@@ -187,6 +187,61 @@ static uint64_t parse_u64(const char *s)
 	return v;
 }
 
+static int copy_file_contents(const char *src_path, const char *dst_path)
+{
+	uint8_t buf[4096];
+	int src_fd = -1;
+	int dst_fd = -1;
+	int rc = -1;
+
+	if (!src_path || !*src_path || !dst_path || !*dst_path)
+		return -1;
+
+	src_fd = open(src_path, O_RDONLY | O_CLOEXEC);
+	if (src_fd < 0)
+		goto out;
+
+	dst_fd = open(dst_path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0600);
+	if (dst_fd < 0)
+		goto out;
+
+	for (;;) {
+		ssize_t n = read(src_fd, buf, sizeof(buf));
+		if (n < 0)
+			goto out;
+		if (n == 0)
+			break;
+		if (write(dst_fd, buf, (size_t)n) != n)
+			goto out;
+	}
+
+	rc = 0;
+
+out:
+	if (src_fd >= 0)
+		close(src_fd);
+	if (dst_fd >= 0)
+		close(dst_fd);
+	return rc;
+}
+
+static int ensure_fw_env_config_exists(void)
+{
+	char *env_argv[] = {
+		"env",
+		"--output-config=fw_env.config",
+		NULL,
+	};
+
+	if (access("fw_env.config", F_OK) == 0)
+		return 0;
+
+	if (access("uboot_env.config", F_OK) == 0)
+		return copy_file_contents("uboot_env.config", "fw_env.config");
+
+	return uboot_env_scan_main(2, env_argv);
+}
+
 static const char *resolve_first_readable_glob(const char *pattern, char **owned_path)
 {
 	glob_t g;
@@ -824,6 +879,13 @@ int uboot_audit_scan_main(int argc, char **argv)
 	if (!dev || !size) {
 		usage(argv[0]);
 		return 2;
+	}
+
+	ret = ensure_fw_env_config_exists();
+	if (ret != 0) {
+		err_printf("fw_env.config not found and env scan failed (rc=%d)\n", ret);
+		ret = 1;
+		goto out;
 	}
 
 	if (!signature_blob_path && signature_blob_scan) {

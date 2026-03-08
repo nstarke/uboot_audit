@@ -87,6 +87,7 @@ CFLAGS += -I.
 TARGET := uboot_audit
 SRC    := uboot_audit.c uboot_env_scan.c uboot_image_scan.c uboot_audit_scan.c uboot_scan.c \
 	  audit-rules/uboot_validate_crc32_rule.c \
+	  audit-rules/uboot_validate_env_security_rule.c \
 	  audit-rules/uboot_validate_env_writeability_rule.c \
 	  audit-rules/uboot_validate_secureboot_rule.c \
 	  $(LIBCSV_SRC) $(GENERATED_CA_SRC)
