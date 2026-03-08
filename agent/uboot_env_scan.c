@@ -1309,7 +1309,7 @@ static int scan_dev(const char *dev, uint64_t step, uint64_t env_size, const cha
 
 static void usage(const char *prog)
 {
-	err_printf("Usage: %s [--verbose] [--size <env_size>] [--hint <hint>] [--dev <dev>] [--brutefoce] [--skip-remove] [--skip-mtd] [--skip-ubi] [--skip-sd] [--skip-emmc] [--output-config[=<path>]] [--write <path>] [<dev:step> ...]\n"
+	err_printf("Usage: %s [--verbose] [--size <env_size>] [--hint <hint>] [--dev <dev>] [--bruteforce] [--skip-remove] [--skip-mtd] [--skip-ubi] [--skip-sd] [--skip-emmc] [--output-config[=<path>]] [--write <path>] [<dev:step> ...]\n"
 		"             [--parse-vars]\n"
 		"             [--output-tcp <ip:port>]\n"
 		"             [--output-http <http://host:port/>]\n"
@@ -1364,7 +1364,6 @@ int uboot_env_scan_main(int argc, char **argv)
 		{ "size", required_argument, NULL, 's' },
 		{ "hint", required_argument, NULL, 'H' },
 		{ "dev", required_argument, NULL, 'd' },
-		{ "brutefoce", no_argument, NULL, 'b' },
 		{ "bruteforce", no_argument, NULL, 'b' },
 		{ "skip-remove", no_argument, NULL, 'R' },
 		{ "skip-mtd", no_argument, NULL, 'M' },

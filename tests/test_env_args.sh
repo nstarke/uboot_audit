@@ -13,27 +13,26 @@ require_binary "$BIN"
 print_section "env subcommand argument coverage"
 
 run_exact_case "env --help" 2 "$BIN" env --help
-run_accept_case "env --output-format txt" "$BIN" --output-format txt env --verbose
-run_accept_case "env --output-format csv" "$BIN" --output-format csv env --verbose
-run_accept_case "env --output-format json" "$BIN" --output-format json env --verbose
-run_accept_case "env --verbose" "$BIN" env --verbose
+run_accept_case "env --output-format txt --size $TEST_SIZE" "$BIN" --output-format txt env --size "$TEST_SIZE" --verbose
+run_accept_case "env --output-format csv --size $TEST_SIZE" "$BIN" --output-format csv env --size "$TEST_SIZE" --verbose
+run_accept_case "env --output-format json --size $TEST_SIZE" "$BIN" --output-format json env --size "$TEST_SIZE" --verbose
+run_accept_case "env --verbose --size $TEST_SIZE" "$BIN" env --verbose --size "$TEST_SIZE"
 run_accept_case "env --size" "$BIN" env --size "$TEST_SIZE"
-run_accept_case "env --hint" "$BIN" env --hint bootcmd=
-run_accept_case "env --dev" "$BIN" env --dev /dev/null
-run_accept_case "env --brutefoce" "$BIN" env --brutefoce
-run_accept_case "env --bruteforce" "$BIN" env --bruteforce
-run_accept_case "env --skip-remove" "$BIN" env --skip-remove
-run_accept_case "env --skip-mtd" "$BIN" env --skip-mtd
-run_accept_case "env --skip-ubi" "$BIN" env --skip-ubi
-run_accept_case "env --skip-sd" "$BIN" env --skip-sd
-run_accept_case "env --skip-emmc" "$BIN" env --skip-emmc
-run_accept_case "env --parse-vars" "$BIN" env --parse-vars
-run_accept_case "env --output-config (implicit path)" "$BIN" env --output-config
-run_accept_case "env --output-config=path" "$BIN" env --output-config="$REPO_ROOT/tests/.tmp_fw_env.config"
-run_accept_case "env --output-tcp" "$BIN" env --output-tcp 127.0.0.1:9
-run_accept_case "env --output-http" "$BIN" env --output-http http://127.0.0.1:1/env
-run_accept_case "env --output-https" "$BIN" env --output-https https://127.0.0.1:1/env
-run_accept_case "env --insecure" "$BIN" env --insecure
+run_accept_case "env --hint --size $TEST_SIZE" "$BIN" env --hint bootcmd= --size "$TEST_SIZE"
+run_accept_case "env --dev --size $TEST_SIZE" "$BIN" env --dev /dev/null --size "$TEST_SIZE"
+run_accept_case "env --bruteforce --size $TEST_SIZE" "$BIN" env --bruteforce --size "$TEST_SIZE"
+run_accept_case "env --skip-remove --size $TEST_SIZE" "$BIN" env --skip-remove --size "$TEST_SIZE"
+run_accept_case "env --skip-mtd --size $TEST_SIZE" "$BIN" env --skip-mtd --size "$TEST_SIZE"
+run_accept_case "env --skip-ubi --size $TEST_SIZE" "$BIN" env --skip-ubi --size "$TEST_SIZE"
+run_accept_case "env --skip-sd --size $TEST_SIZE" "$BIN" env --skip-sd --size "$TEST_SIZE"
+run_accept_case "env --skip-emmc --size $TEST_SIZE" "$BIN" env --skip-emmc --size "$TEST_SIZE"
+run_accept_case "env --parse-vars --size $TEST_SIZE" "$BIN" env --parse-vars --size "$TEST_SIZE"
+run_accept_case "env --output-config (implicit path) --size $TEST_SIZE" "$BIN" env --output-config --size "$TEST_SIZE"
+run_accept_case "env --output-config=path --size $TEST_SIZE" "$BIN" env --output-config="$REPO_ROOT/tests/.tmp_fw_env.config" --size "$TEST_SIZE"
+run_accept_case "env --output-tcp --size $TEST_SIZE" "$BIN" env --output-tcp 127.0.0.1:9 --size "$TEST_SIZE"
+run_accept_case "env --output-http --size $TEST_SIZE" "$BIN" env --output-http http://127.0.0.1:1/env --size "$TEST_SIZE"
+run_accept_case "env --output-https --size $TEST_SIZE" "$BIN" env --output-https https://127.0.0.1:1/env --size "$TEST_SIZE"
+run_accept_case "env --insecure --size $TEST_SIZE" "$BIN" env --insecure --size "$TEST_SIZE"
 
 rm -f "$REPO_ROOT/tests/.tmp_fw_env.config"
 finish_tests
