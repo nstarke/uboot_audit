@@ -19,6 +19,27 @@ from pathlib import Path
 
 
 RELEASE_STATE_FILE = ".release_state.json"
+VALID_CONTENT_TYPES: dict[str, str] = {
+    "text/plain": "text_plain",
+    "text/csv": "text_csv",
+    "application/octet-stream": "application_octet_stream",
+}
+
+
+def normalize_content_type(content_type_header: str) -> str:
+    """Extract and normalize MIME type from a Content-Type header."""
+    return content_type_header.split(";", 1)[0].strip().lower()
+
+
+def log_path_for_content_type(log_prefix: Path, content_type_header: str) -> Path:
+    """Build a content-type-specific log file path from the configured log prefix."""
+    content_type = normalize_content_type(content_type_header)
+    suffix = VALID_CONTENT_TYPES.get(content_type)
+    if not suffix:
+        return log_prefix.with_name(f"{log_prefix.name}.unknown.log")
+
+    filename = f"{log_prefix.name}.{suffix}.log"
+    return log_prefix.with_name(filename)
 
 
 def augment_json_payload(payload: bytes, timestamp: str, src_ip: str) -> bytes:
@@ -59,7 +80,7 @@ def github_json_get(url: str, token: str | None = None) -> dict:
     req = urllib.request.Request(
         url,
         headers={
-            "User-Agent": "fw_env_scan-http_post_logger",
+            "User-Agent": "fw_env_scan-web_server_helper",
             "Accept": "application/vnd.github+json",
             **({"Authorization": f"Bearer {token}"} if token else {}),
         },
@@ -141,7 +162,7 @@ def download_release_assets(
         req = urllib.request.Request(
             download_url,
             headers={
-                "User-Agent": "fw_env_scan-http_post_logger",
+                "User-Agent": "fw_env_scan-web_server_helper",
                 **({"Authorization": f"Bearer {token}"} if token else {}),
             },
         )
@@ -152,10 +173,10 @@ def download_release_assets(
     return downloaded, skipped_existing
 
 
-def build_handler(log_path: Path, assets_dir: Path, tests_dir: Path, verbose: bool = False):
+def build_handler(log_prefix: Path, assets_dir: Path, tests_dir: Path, verbose: bool = False):
     class PostLoggerHandler(BaseHTTPRequestHandler):
         def log_message(self, fmt: str, *args):
-            # Keep server console quiet; requests are written to log_path.
+            # Keep server console quiet; requests are written to content-type log files.
             return
 
         def _verbose_request_log(self) -> None:
@@ -267,10 +288,22 @@ def build_handler(log_path: Path, assets_dir: Path, tests_dir: Path, verbose: bo
             payload = self.rfile.read(content_len)
             timestamp = dt.datetime.now(dt.timezone.utc).isoformat()
             src_ip = self.client_address[0]
+            content_type_header = self.headers.get("Content-Type", "")
+            normalized_content_type = normalize_content_type(content_type_header)
+
+            if normalized_content_type not in VALID_CONTENT_TYPES:
+                allowed = ", ".join(sorted(VALID_CONTENT_TYPES.keys()))
+                body = (
+                    "unsupported content type; expected one of: "
+                    f"{allowed}\n"
+                ).encode("utf-8")
+                self._send_bytes(415, body)
+                return
+
+            target_log_path = log_path_for_content_type(log_prefix, content_type_header)
 
             payload_to_log = payload
-            content_type = self.headers.get("Content-Type", "")
-            should_try_json = "json" in content_type.lower()
+            should_try_json = "json" in normalized_content_type
             if not should_try_json:
                 # Also attempt JSON parse heuristically for clients that omit content-type.
                 try:
@@ -285,8 +318,10 @@ def build_handler(log_path: Path, assets_dir: Path, tests_dir: Path, verbose: bo
                 except (UnicodeDecodeError, json.JSONDecodeError):
                     payload_to_log = payload
 
-            with log_path.open("ab") as fp:
+            target_log_path.parent.mkdir(parents=True, exist_ok=True)
+            with target_log_path.open("ab") as fp:
                 fp.write(f"[{timestamp}] {src_ip} {self.path}\n".encode("utf-8"))
+                fp.write(f"Content-Type: {normalized_content_type}\n".encode("utf-8"))
                 fp.write(payload_to_log)
                 fp.write(b"\n\n---\n\n")
 
@@ -339,7 +374,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Receive HTTP POST requests and log them to a file")
     parser.add_argument("--host", default="0.0.0.0", help="Bind host (default: 0.0.0.0)")
     parser.add_argument("--port", type=int, default=5000, help="Bind port (default: 5000)")
-    parser.add_argument("--log", default="post_requests.log", help="Log file path")
+    parser.add_argument(
+        "--log-prefix",
+        default="post_requests",
+        help="Log filename prefix (content-type logs are written as <prefix>.<type>.log)",
+    )
     parser.add_argument(
         "--repo",
         default="nstarke/U-Boot-fw_env_scan",
@@ -371,7 +410,7 @@ def main() -> int:
     parser.add_argument("--key", default="tools/certs/localhost.key", help="TLS private key path")
     args = parser.parse_args()
 
-    log_path = Path(args.log)
+    log_prefix = Path(args.log_prefix)
     assets_dir = Path(args.assets_dir)
     tests_dir = Path(args.tests_dir)
     token = args.github_token or None
@@ -429,7 +468,7 @@ def main() -> int:
             "(use --force-download to replace them)"
         )
 
-    handler = build_handler(log_path, assets_dir, tests_dir, verbose=args.verbose)
+    handler = build_handler(log_prefix, assets_dir, tests_dir, verbose=args.verbose)
     server = HTTPServer((args.host, args.port), handler)
 
     scheme = "http"
@@ -444,7 +483,8 @@ def main() -> int:
         scheme = "https"
 
     print(f"Listening on {scheme}://{args.host}:{args.port}/")
-    print(f"Logging POST requests to: {log_path}")
+    print(f"Logging POST requests with prefix: {log_prefix}")
+    print("Per-type logs: <prefix>.text_plain.log, <prefix>.text_csv.log, <prefix>.application_octet_stream.log")
     print("GET / shows index of downloaded release binaries and test shell scripts")
     try:
         server.serve_forever()
