@@ -29,6 +29,7 @@ static uint32_t crc32_table[256];
 static bool g_verbose;
 static bool g_bruteforce;
 static int g_output_sock = -1;
+static FILE *g_output_config_fp = NULL;
 
 static void send_to_output_socket(const char *buf, size_t len)
 {
@@ -210,6 +211,11 @@ static int scan_dev(const char *dev, uint64_t step, uint64_t env_size, const cha
 		out_printf("    fw_env.config line: %s 0x%jx 0x%jx 0x%jx 0x%jx\n",
 			dev, (uintmax_t)cfg_off, (uintmax_t)env_size,
 			(uintmax_t)erase_size, (uintmax_t)sector_count);
+		if (g_output_config_fp) {
+			fprintf(g_output_config_fp, "%s 0x%jx 0x%jx 0x%jx 0x%jx\n",
+				dev, (uintmax_t)cfg_off, (uintmax_t)env_size,
+				(uintmax_t)erase_size, (uintmax_t)sector_count);
+		}
 		hits++;
 	}
 
@@ -220,7 +226,7 @@ static int scan_dev(const char *dev, uint64_t step, uint64_t env_size, const cha
 
 static void usage(const char *prog)
 {
-	err_printf("Usage: %s [--verbose] [--size <env_size>] [--hint <hint>] [--dev <dev>] [--brutefoce] [--skip-remove] [--skip-mtd] [--skip-ubi] [<dev:step> ...]\n"
+	err_printf("Usage: %s [--verbose] [--size <env_size>] [--hint <hint>] [--dev <dev>] [--brutefoce] [--skip-remove] [--skip-mtd] [--skip-ubi] [--output-config[=<path>]] [<dev:step> ...]\n"
 		"             [--output <ip:port>]\n", prog);
 }
 
@@ -232,6 +238,7 @@ int fw_env_scan_main(int argc, char **argv)
 	const char *hint_override = NULL;
 	const char *dev_override = NULL;
 	const char *output_target = NULL;
+	const char *output_config_path = NULL;
 	bool skip_remove = false;
 	bool skip_mtd = false;
 	bool skip_ubi = false;
@@ -261,11 +268,12 @@ int fw_env_scan_main(int argc, char **argv)
 		{ "skip-remove", no_argument, NULL, 'R' },
 		{ "skip-mtd", no_argument, NULL, 'M' },
 		{ "skip-ubi", no_argument, NULL, 'U' },
+		{ "output-config", optional_argument, NULL, 'c' },
 		{ "output", required_argument, NULL, 'o' },
 		{ 0, 0, 0, 0 }
 	};
 
-	while ((opt = getopt_long(argc, argv, "hvs:H:d:bo:RMU", long_opts, NULL)) != -1) {
+	while ((opt = getopt_long(argc, argv, "hvs:H:d:bo:RMUc::", long_opts, NULL)) != -1) {
 		switch (opt) {
 		case 'h': usage(argv[0]); return 0;
 		case 'v': g_verbose = true; break;
@@ -276,6 +284,7 @@ int fw_env_scan_main(int argc, char **argv)
 		case 'R': skip_remove = true; break;
 		case 'M': skip_mtd = true; break;
 		case 'U': skip_ubi = true; break;
+		case 'c': output_config_path = optarg ? optarg : "fw_env.config"; break;
 		case 'o': output_target = optarg; break;
 		default: usage(argv[0]); return 2;
 		}
@@ -292,6 +301,15 @@ int fw_env_scan_main(int argc, char **argv)
 		g_output_sock = fw_connect_tcp_ipv4(output_target);
 		if (g_output_sock < 0) {
 			err_printf("Invalid/failed output target (expected IPv4:port): %s\n", output_target);
+			ret = 2;
+			goto out;
+		}
+	}
+
+	if (output_config_path && *output_config_path) {
+		g_output_config_fp = fopen(output_config_path, "w");
+		if (!g_output_config_fp) {
+			err_printf("Cannot open output-config file %s: %s\n", output_config_path, strerror(errno));
 			ret = 2;
 			goto out;
 		}
@@ -406,6 +424,10 @@ out:
 	}
 	fw_free_created_nodes(created_mtdblock_nodes, created_mtdblock_count);
 	fw_free_created_nodes(created_ubi_nodes, created_ubi_count);
+	if (g_output_config_fp) {
+		fclose(g_output_config_fp);
+		g_output_config_fp = NULL;
+	}
 	if (g_output_sock >= 0)
 		close(g_output_sock);
 	return ret;
