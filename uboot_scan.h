@@ -59,6 +59,9 @@ struct uboot_audit_input {
 	const uint8_t *data;
 	size_t data_len;
 	const uint32_t *crc32_table;
+	const char *signature_blob_path;
+	const char *signature_pubkey_path;
+	const char *signature_algorithm;
 	bool verbose;
 };
 

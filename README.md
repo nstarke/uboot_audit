@@ -52,6 +52,7 @@ Notes:
 - `libcsv` is built from source directly from `third_party/libcsv/libcsv.c`.
 - `json-c` is built from source from the `third_party/json-c` submodule via CMake, and linked statically (`third_party/json-c/build/libjson-c.a`).
 - `libcurl` is built from source from the `third_party/curl` submodule via CMake, and linked statically (`third_party/curl/build/lib/libcurl.a`).
+- `OpenSSL` is built from source from the `third_party/openssl` submodule (`libcrypto` static) and used for audit signature verification.
 - The default CA bundle is fetched from `https://curl.se/ca/cacert.pem` at build time and embedded into the binary.
 - Override bundle source with:
   - `CA_BUNDLE_URL=<url>` to change download URL
@@ -287,6 +288,11 @@ Runs compiled audit rules that are defined under `audit-rules/` (one `.c` file p
 - `--dev <device>` — input device/file to audit
 - `--offset <bytes>` — read offset (default `0`)
 - `--size <bytes>` — number of bytes to read and pass to rules
+- `--signature-blob <path>` — blob file used by signature-verifying rules
+- `--signature-pubkey <path>` — PEM public key used by signature-verifying rules
+- `--scan-signature-devices` — force scan of MTD/UBI/eMMC/SD devices to auto-discover a FIT blob and embedded PEM public key
+- if `--signature-blob` or `--signature-pubkey` is missing, device scan is attempted automatically to fill missing artifact(s)
+- `--signature-alg <name>` — digest algorithm for signature verification; if omitted, tries likely digests in order: `sha256`, `sha384`, `sha512`, `sha1`, `sha224`
 - `--verbose` — enable verbose rule behavior where supported
 
 ### `audit` examples
@@ -295,12 +301,14 @@ Runs compiled audit rules that are defined under `audit-rules/` (one `.c` file p
 ./uboot_audit audit --list-rules
 ./uboot_audit audit --dev /dev/mtdblock4 --offset 0x0 --size 0x10000
 ./uboot_audit audit --rule uboot_validate_crc32 --dev /dev/mtdblock4 --offset 0x0 --size 0x10000
+./uboot_audit audit --rule uboot_validate_secureboot --dev /dev/mtdblock4 --offset 0x0 --size 0x10000 --signature-blob ./fit-image.bin --signature-pubkey ./pubkey.pem --signature-alg sha256
+./uboot_audit audit --rule uboot_validate_secureboot --dev /dev/mtdblock4 --offset 0x0 --size 0x10000 --scan-signature-devices --signature-alg sha256
 ```
 
 Initial rules included:
 
 - `uboot_validate_crc32` — validates U-Boot environment CRC32 using standard and redundant layouts.
-- `uboot_validate_secureboot` — validates secure boot related env variables: `secureboot`, `verify`, `bootm_verify_sig`, plus presence of one signature variable (`signature`, `boot_signature`, or `fit_signature`).
+- `uboot_validate_secureboot` — validates secure boot related env variables (`secureboot`, `verify`, `bootm_verify_sig`), parses one signature variable (`signature`, `boot_signature`, or `fit_signature`), and cryptographically verifies that signature against `--signature-blob` using `--signature-pubkey` (OpenSSL libcrypto).
 
 ---
 
