@@ -167,11 +167,7 @@ static int scan_dev(const char *dev, uint64_t step, uint64_t env_size, const cha
 	}
 
 	if (st.st_size == 0) {
-		uint64_t sz = fw_guess_size_from_sysfs(dev);
-		if (!sz)
-			sz = fw_guess_size_from_proc_mtd(dev);
-		if (!sz)
-			sz = fw_guess_size_from_ubi_sysfs(dev);
+		uint64_t sz = fw_guess_size_any(dev);
 		st.st_size = (off_t)sz;
 	}
 
@@ -304,11 +300,7 @@ int fw_env_scan_main(int argc, char **argv)
 			goto out;
 		}
 
-		uint64_t step = fw_guess_erasesize_from_sysfs(dev_override);
-		if (!step)
-			step = fw_guess_erasesize_from_proc_mtd(dev_override);
-		if (!step)
-			step = fw_guess_step_from_ubi_sysfs(dev_override);
+		uint64_t step = fw_guess_step_any(dev_override);
 		if (!step)
 			goto scan_fail;
 		if (step > AUTO_SCAN_MAX_STEP)
@@ -330,16 +322,12 @@ one_scan_done:
 
 	if (argi >= argc) {
 		glob_t g;
-		glob("/dev/mtdblock[0-9]*", 0, NULL, &g);
-		glob("/dev/ubi[0-9]*_[0-9]*", GLOB_APPEND, NULL, &g);
-		glob("/dev/ubiblock[0-9]*_[0-9]*", GLOB_APPEND, NULL, &g);
+		if (fw_glob_scan_devices(&g,
+				FW_SCAN_GLOB_MTDBLOCK | FW_SCAN_GLOB_UBI | FW_SCAN_GLOB_UBIBLOCK) < 0)
+			goto scan_fail;
 		for (size_t gi = 0; gi < g.gl_pathc; gi++) {
 			const char *dev = g.gl_pathv[gi];
-			uint64_t step = fw_guess_erasesize_from_sysfs(dev);
-			if (!step)
-				step = fw_guess_erasesize_from_proc_mtd(dev);
-			if (!step)
-				step = fw_guess_step_from_ubi_sysfs(dev);
+			uint64_t step = fw_guess_step_any(dev);
 			if (!step)
 				continue;
 			if (step > AUTO_SCAN_MAX_STEP)

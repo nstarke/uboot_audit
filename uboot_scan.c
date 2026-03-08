@@ -356,6 +356,65 @@ uint64_t fw_guess_step_from_ubi_sysfs(const char *dev)
 	return read_u64_from_file(path);
 }
 
+uint64_t fw_guess_size_any(const char *dev)
+{
+	uint64_t sz = fw_guess_size_from_sysfs(dev);
+
+	if (!sz)
+		sz = fw_guess_size_from_proc_mtd(dev);
+	if (!sz)
+		sz = fw_guess_size_from_ubi_sysfs(dev);
+
+	return sz;
+}
+
+uint64_t fw_guess_step_any(const char *dev)
+{
+	uint64_t step = fw_guess_erasesize_from_sysfs(dev);
+
+	if (!step)
+		step = fw_guess_erasesize_from_proc_mtd(dev);
+	if (!step)
+		step = fw_guess_step_from_ubi_sysfs(dev);
+
+	return step;
+}
+
+int fw_glob_scan_devices(glob_t *out, unsigned int flags)
+{
+	const char *patterns[4];
+	size_t n = 0;
+	bool did_call = false;
+
+	if (!out)
+		return -1;
+
+	memset(out, 0, sizeof(*out));
+
+	if (flags & FW_SCAN_GLOB_MTDBLOCK)
+		patterns[n++] = "/dev/mtdblock[0-9]*";
+	if (flags & FW_SCAN_GLOB_MTDCHAR)
+		patterns[n++] = "/dev/mtd[0-9]*";
+	if (flags & FW_SCAN_GLOB_UBI)
+		patterns[n++] = "/dev/ubi[0-9]*_[0-9]*";
+	if (flags & FW_SCAN_GLOB_UBIBLOCK)
+		patterns[n++] = "/dev/ubiblock[0-9]*_[0-9]*";
+
+	for (size_t i = 0; i < n; i++) {
+		int rc = glob(patterns[i], did_call ? GLOB_APPEND : 0, NULL, out);
+		did_call = true;
+		if (rc == GLOB_NOMATCH)
+			continue;
+		if (rc != 0) {
+			globfree(out);
+			memset(out, 0, sizeof(*out));
+			return -1;
+		}
+	}
+
+	return 0;
+}
+
 static int add_created_node(char ***nodes, size_t *count, const char *path)
 {
 	char **tmp;

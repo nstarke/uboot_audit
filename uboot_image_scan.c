@@ -388,7 +388,7 @@ static void usage(const char *prog)
 		"Usage: %s [--verbose] [--dev <device>] [--step <bytes>] [--allow-text]\n"
 		"       %s --pull --dev <device> --offset <bytes> --output <IPv4:port>\n"
 		"       %s --find-address --dev <device> --offset <bytes>\n"
-		"  no args: scan /dev/mtdblock* and /dev/mtd* for U-Boot image signatures\n"
+		"  no args: scan /dev/mtdblock*, /dev/mtd*, /dev/ubi*_* and /dev/ubiblock*_* for U-Boot image signatures\n"
 		"  --verbose: print scan progress\n"
 		"  --dev: scan only a specific device\n"
 		"  --step: step size when scanning (default: 0x1000)\n"
@@ -404,11 +404,8 @@ static void usage(const char *prog)
 static int find_image_load_address(const char *dev, uint64_t offset)
 {
 	uint8_t hdr[UIMAGE_HDR_SIZE];
-	uint64_t dev_size = fw_guess_size_from_sysfs(dev);
+	uint64_t dev_size = fw_guess_size_any(dev);
 	int fd;
-
-	if (!dev_size)
-		dev_size = fw_guess_size_from_proc_mtd(dev);
 
 	fd = open(dev, O_RDONLY | O_CLOEXEC);
 	if (fd < 0) {
@@ -488,12 +485,9 @@ static int find_image_load_address(const char *dev, uint64_t offset)
 static int pull_image_to_output(const char *dev, uint64_t offset, const char *output)
 {
 	uint8_t hdr[UIMAGE_HDR_SIZE];
-	uint64_t dev_size = fw_guess_size_from_sysfs(dev);
+	uint64_t dev_size = fw_guess_size_any(dev);
 	uint64_t total_size = 0;
 	int fd, sock;
-
-	if (!dev_size)
-		dev_size = fw_guess_size_from_proc_mtd(dev);
 
 	fd = open(dev, O_RDONLY | O_CLOEXEC);
 	if (fd < 0) {
@@ -589,9 +583,7 @@ static int scan_dev_for_image(const char *dev, uint64_t step)
 	if (fstat(fd, &st) == 0)
 		size = (uint64_t)st.st_size;
 	if (!size)
-		size = fw_guess_size_from_sysfs(dev);
-	if (!size)
-		size = fw_guess_size_from_proc_mtd(dev);
+		size = fw_guess_size_any(dev);
 
 	if (!size) {
 		close(fd);
@@ -769,6 +761,7 @@ int fw_image_scan_main(int argc, char **argv)
 	}
 
 	fw_ensure_mtd_nodes(g_verbose);
+	fw_ensure_ubi_nodes(g_verbose);
 
 	if (dev_override) {
 		int hits = scan_dev_for_image(dev_override, step);
@@ -776,9 +769,12 @@ int fw_image_scan_main(int argc, char **argv)
 	}
 
 	glob_t g;
-	memset(&g, 0, sizeof(g));
-	glob("/dev/mtdblock[0-9]*", 0, NULL, &g);
-	glob("/dev/mtd[0-9]*", GLOB_APPEND, NULL, &g);
+	if (fw_glob_scan_devices(&g,
+			FW_SCAN_GLOB_MTDBLOCK |
+			FW_SCAN_GLOB_MTDCHAR |
+			FW_SCAN_GLOB_UBI |
+			FW_SCAN_GLOB_UBIBLOCK) < 0)
+		return 1;
 
 	for (size_t i = 0; i < g.gl_pathc; i++) {
 		int hits = scan_dev_for_image(g.gl_pathv[i], step);
