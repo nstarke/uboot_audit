@@ -10,6 +10,7 @@ OUTPUT_DIRECTORY=""
 TEMP_OUTPUT_DIRECTORY=""
 ISA=""
 LIST_ISA=0
+AUTO_START=0
 
 # Remove stale temporary download directories from previous runs.
 for stale_dir in /tmp/download_tests_output.*; do
@@ -18,8 +19,8 @@ for stale_dir in /tmp/download_tests_output.*; do
 done
 
 usage() {
-    echo "usage: $0 --webserver <url> --isa <arch> [--output-directory <path>]"
-    echo "   or: $0 --webserver=<url> --isa=<arch> [--output-directory=<path>]"
+    echo "usage: $0 --webserver <url> --isa <arch> [--output-directory <path>] [--auto-start]"
+    echo "   or: $0 --webserver=<url> --isa=<arch> [--output-directory=<path>] [--auto-start]"
     echo "   or: $0 --webserver <url> --list-isa"
 }
 
@@ -118,6 +119,10 @@ while [ "$#" -gt 0 ]; do
             ;;
         --list-isa)
             LIST_ISA=1
+            shift
+            ;;
+        --auto-start)
+            AUTO_START=1
             shift
             ;;
         *)
@@ -253,4 +258,15 @@ mv -f "$AUDIT_BINARY_TMP" "$AUDIT_BINARY_DEST"
 echo "done"
 if [ -n "$TEMP_OUTPUT_DIRECTORY" ]; then
     echo "files written to temporary directory: $TEMP_OUTPUT_DIRECTORY"
+fi
+
+if [ "$AUTO_START" -eq 1 ]; then
+    TEST_ALL_SCRIPT="$DEST_DIR/test_all.sh"
+    if [ ! -x "$TEST_ALL_SCRIPT" ]; then
+        echo "error: --auto-start requested but $TEST_ALL_SCRIPT is missing or not executable"
+        exit 1
+    fi
+
+    echo "auto-start: running $TEST_ALL_SCRIPT --output-http $WEB_SERVER"
+    /bin/sh "$TEST_ALL_SCRIPT" --output-http "$WEB_SERVER"
 fi
