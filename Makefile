@@ -99,7 +99,7 @@ $(OPENSSL_LIB):
 	mkdir -p $(OPENSSL_BUILD)
 	cd $(OPENSSL_DIR) && $(MAKE) distclean >/dev/null 2>&1 || true
 	# Use no-asm so cross builds (e.g. zig cc -target arm-*) don't pick host x86 asm paths.
-	cd $(OPENSSL_DIR) && CC="$(CC)" ./Configure $(OPENSSL_CONFIGURE_TARGET) no-asm no-shared no-tests no-docs --prefix="$(abspath $(OPENSSL_INSTALL))" --openssldir="$(abspath $(OPENSSL_INSTALL))/ssl" --libdir=lib
+	cd $(OPENSSL_DIR) && CC="$(CC)" ./Configure $(OPENSSL_CONFIGURE_TARGET) no-asm no-shared no-module no-tests no-docs --prefix="$(abspath $(OPENSSL_INSTALL))" --openssldir="$(abspath $(OPENSSL_INSTALL))/ssl" --libdir=lib
 	$(MAKE) -C $(OPENSSL_DIR) build_libs
 	$(MAKE) -C $(OPENSSL_DIR) install_sw
 
