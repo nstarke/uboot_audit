@@ -1,6 +1,6 @@
 # `uboot_audit image` Command
 
-Scans MTD/UBI and block devices (SD/eMMC such as `/dev/sd*` and `/dev/mmcblk*`) for likely U-Boot image signatures. FIT/uImage checks are validated structurally to reduce false positives.
+Scans mtdblock/UBI and block devices (SD/eMMC such as `/dev/sd*` and `/dev/mmcblk*`) for likely U-Boot image signatures. FIT/uImage checks are validated structurally to reduce false positives.
 
 ## `image` arguments
 
@@ -9,7 +9,7 @@ Scans MTD/UBI and block devices (SD/eMMC such as `/dev/sd*` and `/dev/mmcblk*`) 
 - `--step <bytes>` — scan stride (default `0x1000`)
 - `--allow-text[=<text>]` — also match plain text (default `U-Boot`; higher false-positive risk)
 - `--skip-remove` — keep any helper `/dev` nodes created during scan
-- `--skip-mtd` — skip MTD/mtdblock scan targets
+- `--skip-mtd` — skip `/dev/mtdblock*` scan targets
 - `--skip-ubi` — skip UBI/ubiblock scan targets
 - `--skip-sd` — skip `/dev/sd*` scan targets
 - `--skip-emmc` — skip `/dev/mmcblk*` scan targets

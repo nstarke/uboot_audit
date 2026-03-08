@@ -47,4 +47,16 @@ run_accept_case "image --pull + --output-http" \
 run_accept_case "image --pull + --output-https" \
     "$BIN" image --pull --dev /dev/null --offset 0x0 --output-https https://127.0.0.1:1/image
 
+help_log="$(mktemp /tmp/test_image_help.XXXXXX)"
+run_with_output_override "$BIN" image --help >"$help_log" 2>&1
+if grep -q "/dev/mtd\*" "$help_log"; then
+    echo "[FAIL] image --help should not advertise /dev/mtd* scan targets"
+    sed -n '1,80p' "$help_log"
+    FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
+else
+    echo "[PASS] image --help only advertises /dev/mtdblock* for MTD scans"
+    PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
+fi
+rm -f "$help_log"
+
 finish_tests

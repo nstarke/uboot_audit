@@ -1014,13 +1014,13 @@ static void usage(const char *prog)
 		"       %s --find-address --dev <device> --offset <bytes>\n"
 		"       %s --list-commands --dev <device> --offset <bytes>\n"
 		"       %s [--skip-remove] [--skip-mtd] [--skip-ubi] [--skip-sd] [--skip-emmc]\n"
-		"  no args: scan /dev/mtdblock*, /dev/mtd*, /dev/ubi*_*, /dev/ubiblock*_*, /dev/mmcblk* and /dev/sd* for U-Boot image signatures\n"
+		"  no args: scan /dev/mtdblock*, /dev/ubi*_*, /dev/ubiblock*_*, /dev/mmcblk* and /dev/sd* for U-Boot image signatures\n"
 		"  --verbose: print scan progress\n"
 		"  --dev: scan only a specific device\n"
 		"  --step: step size when scanning (default: 0x1000)\n"
 		"  --allow-text[=<text>]: also match plain text (default: 'U-Boot'; higher false-positive risk)\n"
 		"  --skip-remove: keep any helper /dev nodes created during scan\n"
-		"  --skip-mtd: skip MTD and mtdblock scan targets\n"
+		"  --skip-mtd: skip mtdblock scan targets\n"
 		"  --skip-ubi: skip UBI and ubiblock scan targets\n"
 		"  --skip-sd: skip /dev/sd* scan targets\n"
 		"  --skip-emmc: skip /dev/mmcblk* scan targets\n"
@@ -1642,7 +1642,7 @@ int uboot_image_scan_main(int argc, char **argv)
 	unsigned int scan_flags = 0;
 
 	if (!skip_mtd)
-		scan_flags |= (FW_SCAN_GLOB_MTDBLOCK | FW_SCAN_GLOB_MTDCHAR);
+		scan_flags |= FW_SCAN_GLOB_MTDBLOCK;
 	if (!skip_ubi)
 		scan_flags |= (FW_SCAN_GLOB_UBI | FW_SCAN_GLOB_UBIBLOCK);
 	if (!skip_emmc)
