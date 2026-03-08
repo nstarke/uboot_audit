@@ -80,7 +80,7 @@ def github_json_get(url: str, token: str | None = None) -> dict:
     req = urllib.request.Request(
         url,
         headers={
-            "User-Agent": "fw_env_scan-web_server_helper",
+            "User-Agent": "uboot_audit-web_server_helper",
             "Accept": "application/vnd.github+json",
             **({"Authorization": f"Bearer {token}"} if token else {}),
         },
@@ -162,7 +162,7 @@ def download_release_assets(
         req = urllib.request.Request(
             download_url,
             headers={
-                "User-Agent": "fw_env_scan-web_server_helper",
+                "User-Agent": "uboot_audit-web_server_helper",
                 **({"Authorization": f"Bearer {token}"} if token else {}),
             },
         )
@@ -381,8 +381,8 @@ def main() -> int:
     )
     parser.add_argument(
         "--repo",
-        default="nstarke/U-Boot-fw_env_scan",
-        help="GitHub repo in owner/name form (default: nstarke/U-Boot-fw_env_scan)",
+        default="nstarke/uboot_audit",
+        help="GitHub repo in owner/name form (default: nstarke/uboot_audit)",
     )
     parser.add_argument(
         "--assets-dir",
