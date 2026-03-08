@@ -15,6 +15,28 @@ CMAKE_C_COMPILER ?= $(CC)
 CMAKE_C_COMPILER_ARG1 ?=
 CMAKE_C_COMPILER_TARGET ?=
 
+OPENSSL_TARGET_TRIPLE ?= $(strip $(CMAKE_C_COMPILER_TARGET))
+OPENSSL_CONFIGURE_TARGET ?=
+
+ifeq ($(strip $(OPENSSL_CONFIGURE_TARGET)),)
+ifneq ($(strip $(OPENSSL_TARGET_TRIPLE)),)
+ifneq (,$(or \
+  $(findstring x86_64,$(OPENSSL_TARGET_TRIPLE)), \
+  $(findstring aarch64,$(OPENSSL_TARGET_TRIPLE)), \
+  $(findstring mips64,$(OPENSSL_TARGET_TRIPLE)), \
+  $(findstring powerpc64,$(OPENSSL_TARGET_TRIPLE)), \
+  $(findstring riscv64,$(OPENSSL_TARGET_TRIPLE)), \
+  $(findstring s390x,$(OPENSSL_TARGET_TRIPLE)), \
+  $(findstring sparc64,$(OPENSSL_TARGET_TRIPLE)), \
+  $(findstring loongarch64,$(OPENSSL_TARGET_TRIPLE)) \
+))
+OPENSSL_CONFIGURE_TARGET := linux-generic64
+else
+OPENSSL_CONFIGURE_TARGET := linux-generic32
+endif
+endif
+endif
+
 CMAKE_CC_ARGS := -DCMAKE_C_COMPILER=$(CMAKE_C_COMPILER)
 ifneq ($(strip $(CMAKE_C_COMPILER_ARG1)),)
 CMAKE_CC_ARGS += -DCMAKE_C_COMPILER_ARG1=$(CMAKE_C_COMPILER_ARG1)
@@ -77,7 +99,7 @@ $(OPENSSL_LIB):
 	mkdir -p $(OPENSSL_BUILD)
 	cd $(OPENSSL_DIR) && $(MAKE) distclean >/dev/null 2>&1 || true
 	# Use no-asm so cross builds (e.g. zig cc -target arm-*) don't pick host x86 asm paths.
-	cd $(OPENSSL_DIR) && CC="$(CC)" ./config no-asm no-shared no-tests no-docs --prefix="$(abspath $(OPENSSL_INSTALL))" --openssldir="$(abspath $(OPENSSL_INSTALL))/ssl" --libdir=lib
+	cd $(OPENSSL_DIR) && CC="$(CC)" ./Configure $(OPENSSL_CONFIGURE_TARGET) no-asm no-shared no-tests no-docs --prefix="$(abspath $(OPENSSL_INSTALL))" --openssldir="$(abspath $(OPENSSL_INSTALL))/ssl" --libdir=lib
 	$(MAKE) -C $(OPENSSL_DIR) build_libs
 	$(MAKE) -C $(OPENSSL_DIR) install_sw
 
