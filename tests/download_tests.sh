@@ -47,9 +47,9 @@ fi
 
 BASE_URL="${WEB_SERVER%/}"
 
-if command -v curl >/dev/null 2>&1; then
+if command -v curl >/dev/null 2>&1 || which curl >/dev/null 2>&1; then
     downloader="curl"
-elif command -v wget >/dev/null 2>&1; then
+elif command -v wget >/dev/null 2>&1 || which wget >/dev/null 2>&1; then
     downloader="wget"
 else
     echo "error: neither curl nor wget is installed"

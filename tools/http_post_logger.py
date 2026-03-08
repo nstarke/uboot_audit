@@ -31,13 +31,19 @@ def github_json_get(url: str, token: str | None = None) -> dict:
         return json.loads(resp.read().decode("utf-8"))
 
 
-def download_latest_release_assets(repo: str, out_dir: Path, token: str | None = None) -> list[Path]:
+def download_latest_release_assets(
+    repo: str,
+    out_dir: Path,
+    token: str | None = None,
+    force_download: bool = False,
+) -> tuple[list[Path], list[Path]]:
     out_dir.mkdir(parents=True, exist_ok=True)
     release_url = f"https://api.github.com/repos/{repo}/releases/latest"
     release = github_json_get(release_url, token=token)
     assets = release.get("assets", [])
 
     downloaded: list[Path] = []
+    skipped_existing: list[Path] = []
     for asset in assets:
         name = asset.get("name")
         download_url = asset.get("browser_download_url")
@@ -45,6 +51,10 @@ def download_latest_release_assets(repo: str, out_dir: Path, token: str | None =
             continue
 
         dest = out_dir / name
+        if dest.exists() and not force_download:
+            skipped_existing.append(dest)
+            continue
+
         req = urllib.request.Request(
             download_url,
             headers={
@@ -56,7 +66,7 @@ def download_latest_release_assets(repo: str, out_dir: Path, token: str | None =
             shutil.copyfileobj(resp, fp)
         downloaded.append(dest)
 
-    return downloaded
+    return downloaded, skipped_existing
 
 
 def build_handler(log_path: Path, assets_dir: Path, tests_dir: Path):
@@ -233,6 +243,11 @@ def main() -> int:
         default=os.environ.get("GITHUB_TOKEN", ""),
         help="Optional GitHub token (defaults to GITHUB_TOKEN env var)",
     )
+    parser.add_argument(
+        "--force-download",
+        action="store_true",
+        help="Force re-download of release binaries even if files already exist locally",
+    )
     parser.add_argument("--https", action="store_true", help="Enable HTTPS with TLS")
     parser.add_argument("--cert", default="tools/certs/localhost.crt", help="TLS cert path")
     parser.add_argument("--key", default="tools/certs/localhost.key", help="TLS private key path")
@@ -244,7 +259,12 @@ def main() -> int:
     token = args.github_token or None
 
     try:
-        downloaded = download_latest_release_assets(args.repo, assets_dir, token=token)
+        downloaded, skipped_existing = download_latest_release_assets(
+            args.repo,
+            assets_dir,
+            token=token,
+            force_download=args.force_download,
+        )
     except urllib.error.HTTPError as exc:
         print(f"Failed to fetch/download release assets from {args.repo}: HTTP {exc.code}")
         return 1
@@ -253,6 +273,12 @@ def main() -> int:
         return 1
 
     print(f"Downloaded {len(downloaded)} release asset(s) from {args.repo} into {assets_dir}")
+    if skipped_existing:
+        print(
+            "Skipped "
+            f"{len(skipped_existing)} existing release asset(s) in {assets_dir} "
+            "(use --force-download to replace them)"
+        )
 
     handler = build_handler(log_path, assets_dir, tests_dir)
     server = HTTPServer((args.host, args.port), handler)
