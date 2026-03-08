@@ -25,9 +25,9 @@ jobs:
           - name: aarch64-be
             zig_targets: aarch64_be-linux-musl
           - name: mips-le
-            zig_targets: mipsel-linux-musleabi,mipsel-linux-musleabihf,mipsel-linux-gnueabi,mipsel-linux-gnueabihf
+            zig_targets: mipsel-linux-musleabi,mipsel-linux-musleabihf
           - name: mips-be
-            zig_targets: mips-linux-musleabi,mips-linux-musleabihf,mips-linux-gnueabi,mips-linux-gnueabihf
+            zig_targets: mips-linux-musleabi,mips-linux-musleabihf
           - name: mips64-le
             zig_targets: mips64el-linux-muslabi64,mips64el-linux-muslabin32,mips64el-linux-gnuabi64,mips64el-linux-gnuabin32
           - name: mips64-be
