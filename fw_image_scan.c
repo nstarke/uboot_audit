@@ -14,6 +14,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -108,6 +109,25 @@ static uint32_t crc32_calc(const uint8_t *buf, size_t len)
 	return c ^ 0xFFFFFFFFU;
 }
 
+static bool str_contains_token_ci(const char *haystack, const char *needle)
+{
+	size_t needle_len;
+
+	if (!haystack || !needle)
+		return false;
+
+	needle_len = strlen(needle);
+	if (!needle_len)
+		return true;
+
+	for (const char *p = haystack; *p; p++) {
+		if (!strncasecmp(p, needle, needle_len))
+			return true;
+	}
+
+	return false;
+}
+
 static bool validate_fit_header(const uint8_t *p, uint64_t abs_off, uint64_t dev_size)
 {
 	uint32_t totalsize = fw_read_be32(p + 4);
@@ -166,24 +186,49 @@ static bool validate_uimage_header(const uint8_t *p, uint64_t abs_off, uint64_t 
 	return true;
 }
 
-static bool fit_find_load_address(const uint8_t *blob, size_t blob_size, uint32_t *addr_out)
+static bool fit_find_load_address(const uint8_t *blob,
+				  size_t blob_size,
+				  uint32_t *addr_out,
+				  uint64_t *uboot_off_out,
+				  bool *uboot_off_found_out)
 {
 	const uint32_t FDT_BEGIN_NODE = 1;
 	const uint32_t FDT_END_NODE = 2;
 	const uint32_t FDT_PROP = 3;
 	const uint32_t FDT_NOP = 4;
 	const uint32_t FDT_END = 9;
+	const int MAX_DEPTH = 64;
 	uint32_t off_dt_struct;
 	uint32_t off_dt_strings;
+	uint32_t total_size;
 	uint32_t size_dt_struct;
 	uint32_t size_dt_strings;
 	const uint8_t *p;
 	const uint8_t *end;
 	const char *strings;
+	const char *node_stack[MAX_DEPTH];
+	int depth = -1;
+	bool load_found = false;
+	uint32_t load_value = 0;
+	bool in_image_node = false;
+	int image_depth = -1;
+	bool image_name_uboot = false;
+	bool image_desc_uboot = false;
+	bool image_type_firmware = false;
+	bool image_payload_off_found = false;
+	uint64_t image_payload_off = 0;
+	bool chosen_uboot_off = false;
+	uint64_t chosen_uboot_off_val = 0;
+
+	if (uboot_off_found_out)
+		*uboot_off_found_out = false;
+	if (uboot_off_out)
+		*uboot_off_out = 0;
 
 	if (!blob || blob_size < 40 || !addr_out)
 		return false;
 
+	total_size = fw_read_be32(blob + 4);
 	off_dt_struct = fw_read_be32(blob + 8);
 	off_dt_strings = fw_read_be32(blob + 12);
 	size_dt_strings = fw_read_be32(blob + 32);
@@ -205,19 +250,55 @@ static bool fit_find_load_address(const uint8_t *blob, size_t blob_size, uint32_
 		switch (token) {
 		case FDT_BEGIN_NODE: {
 			const uint8_t *name_start = p;
+			const char *name;
 			while (p < end && *p)
 				p++;
 			if (p >= end)
 				return false;
+			name = (const char *)name_start;
 			p++;
 			p = name_start + align_up_4((size_t)(p - name_start));
+
+			if (depth + 1 >= MAX_DEPTH)
+				return false;
+			depth++;
+			node_stack[depth] = name;
+
+			if (depth == 2 && !strcmp(node_stack[1], "images")) {
+				in_image_node = true;
+				image_depth = depth;
+				image_name_uboot = str_contains_token_ci(name, "u-boot");
+				image_desc_uboot = false;
+				image_type_firmware = false;
+				image_payload_off_found = false;
+				image_payload_off = 0;
+			}
 			break;
 		}
 		case FDT_END_NODE:
+			if (depth < 0)
+				return false;
+			if (in_image_node && depth == image_depth) {
+				bool is_uboot_candidate = image_name_uboot || image_desc_uboot || image_type_firmware;
+				if (!chosen_uboot_off && is_uboot_candidate && image_payload_off_found) {
+					chosen_uboot_off = true;
+					chosen_uboot_off_val = image_payload_off;
+				}
+				in_image_node = false;
+				image_depth = -1;
+			}
+			depth--;
+			break;
 		case FDT_NOP:
 			break;
 		case FDT_END:
-			return false;
+			if (load_found)
+				*addr_out = load_value;
+			if (chosen_uboot_off && uboot_off_found_out)
+				*uboot_off_found_out = true;
+			if (chosen_uboot_off && uboot_off_out)
+				*uboot_off_out = chosen_uboot_off_val;
+			return load_found;
 		case FDT_PROP: {
 			uint32_t len;
 			uint32_t nameoff;
@@ -236,12 +317,40 @@ static bool fit_find_load_address(const uint8_t *blob, size_t blob_size, uint32_
 
 			name = strings + nameoff;
 			data = p;
-			if (!strcmp(name, "load") && len >= 4) {
-				uint32_t load = fw_read_be32(data);
-				if (len >= 8 && load == 0)
-					load = fw_read_be32(data + 4);
-				*addr_out = load;
-				return true;
+			if (!strcmp(name, "load") && len >= 4 && !load_found) {
+				load_value = fw_read_be32(data);
+				if (len >= 8 && load_value == 0)
+					load_value = fw_read_be32(data + 4);
+				load_found = true;
+			}
+
+			if (in_image_node) {
+				if (!strcmp(name, "description") && len > 0)
+					image_desc_uboot = str_contains_token_ci((const char *)data, "u-boot");
+
+				if (!strcmp(name, "type") && len > 0 && !strcasecmp((const char *)data, "firmware"))
+					image_type_firmware = true;
+
+				if (!strcmp(name, "data") && len > 0) {
+					image_payload_off_found = true;
+					image_payload_off = (uint64_t)(data - blob);
+				}
+
+				if (!strcmp(name, "data-position") && len >= 4) {
+					uint64_t pos = fw_read_be32(data);
+					if (len >= 8 && pos == 0)
+						pos = fw_read_be32(data + 4);
+					image_payload_off_found = true;
+					image_payload_off = pos;
+				}
+
+				if (!strcmp(name, "data-offset") && len >= 4) {
+					uint64_t ext_off = fw_read_be32(data);
+					if (len >= 8 && ext_off == 0)
+						ext_off = fw_read_be32(data + 4);
+					image_payload_off_found = true;
+					image_payload_off = (uint64_t)total_size + ext_off;
+				}
 			}
 
 			p += align_up_4((size_t)len);
@@ -252,7 +361,14 @@ static bool fit_find_load_address(const uint8_t *blob, size_t blob_size, uint32_
 		}
 	}
 
-	return false;
+	if (load_found)
+		*addr_out = load_value;
+	if (chosen_uboot_off && uboot_off_found_out)
+		*uboot_off_found_out = true;
+	if (chosen_uboot_off && uboot_off_out)
+		*uboot_off_out = chosen_uboot_off_val;
+
+	return load_found;
 }
 
 static uint64_t parse_u64(const char *s)
@@ -321,6 +437,8 @@ static int find_image_load_address(const char *dev, uint64_t offset)
 		uint32_t total_size;
 		uint8_t *fit_blob;
 		uint32_t load_addr;
+		uint64_t uboot_off = 0;
+		bool uboot_off_found = false;
 
 		if (!validate_fit_header(hdr, offset, dev_size ? dev_size : UINT64_MAX)) {
 			err_printf("FIT header validation failed at offset 0x%jx\n", (uintmax_t)offset);
@@ -343,10 +461,19 @@ static int find_image_load_address(const char *dev, uint64_t offset)
 			return 1;
 		}
 
-		if (fit_find_load_address(fit_blob, (size_t)total_size, &load_addr))
+		if (fit_find_load_address(fit_blob,
+					  (size_t)total_size,
+					  &load_addr,
+					  &uboot_off,
+					  &uboot_off_found))
 			out_printf("FIT load address: 0x%08x\n", load_addr);
 		else
 			err_printf("FIT load address not found\n");
+
+		if (uboot_off_found)
+			out_printf("FIT U-Boot code offset: 0x%jx\n", (uintmax_t)uboot_off);
+		else
+			err_printf("FIT U-Boot code offset not found\n");
 
 		free(fit_blob);
 		close(fd);
