@@ -23,6 +23,7 @@ RELEASE_STATE_FILE = ".release_state.json"
 VALID_CONTENT_TYPES: dict[str, str] = {
     "text/plain": "text_plain",
     "text/csv": "text_csv",
+    "application/x-ndjson": "application_x_ndjson",
     "application/octet-stream": "application_octet_stream",
 }
 

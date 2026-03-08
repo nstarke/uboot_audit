@@ -13,6 +13,8 @@ POST handling notes:
 - accepted `Content-Type` values:
   - `text/plain`
   - `text/csv`
+  - `application/x-ndjson`
   - `application/octet-stream`
 - invalid or missing `Content-Type` values are rejected with HTTP `415`.
 - log output is split by content type into files derived from `--log-prefix` (for example `post_requests.text_plain.log`, `post_requests.text_csv.log`, and `post_requests.application_octet_stream.log`).
+- `application/octet-stream` uploads are additionally written as raw `.bin` files for later analysis (default directory: `<log-prefix>.binary_files`, override with `--binary-out-dir`).
