@@ -82,7 +82,7 @@ jobs:
                     CMAKE_C_COMPILER_ARG1=cc \
                     CMAKE_C_COMPILER_TARGET="${T}" \
                     CC="zig cc -target ${T}"; then
-              cp uboot_audit dist/${{ matrix.name }}/uboot_audit-${{ matrix.name }}
+              cp embedded_linux_audit dist/${{ matrix.name }}/embedded_linux_audit-${{ matrix.name }}
               echo "Built successfully with target: ${T}"
               BUILT=1
               break
@@ -100,7 +100,7 @@ jobs:
         with:
           name: fw-tools-${{ matrix.name }}
           path: |
-            dist/${{ matrix.name }}/uboot_audit-${{ matrix.name }}
+            dist/${{ matrix.name }}/embedded_linux_audit-${{ matrix.name }}
 
   publish-release-assets:
     name: Publish release assets
@@ -117,4 +117,4 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            release-assets/**/uboot_audit-*
+            release-assets/**/embedded_linux_audit-*
