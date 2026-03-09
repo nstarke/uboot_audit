@@ -373,10 +373,9 @@ async function writeUploadFile(baseDir, relativePath, payload) {
   return dest;
 }
 
-function createApp({ logPrefix, assetsDir, testsDir, binaryOutDir, verbose }) {
+function createApp({ logPrefix, assetsDir, dataDir, testsDir, binaryOutDir, verbose }) {
   const app = express();
   app.use(express.raw({ type: '*/*', limit: '100mb' }));
-  const dataDir = path.dirname(assetsDir);
   const envDir = path.join(dataDir, 'env');
 
   function verboseRequestLog(req) {
@@ -513,7 +512,7 @@ async function main() {
     return 1;
   }
 
-  const app = createApp({ logPrefix, assetsDir, testsDir, binaryOutDir, verbose: args.verbose });
+  const app = createApp({ logPrefix, assetsDir, dataDir, testsDir, binaryOutDir, verbose: args.verbose });
   let server;
   let scheme = 'http';
 

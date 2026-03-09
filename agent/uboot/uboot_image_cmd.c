@@ -113,6 +113,9 @@ static void emit_v(FILE *stream, const char *fmt, va_list ap)
 	char stack[1024];
 	char *dyn = NULL;
 	int needed;
+	bool mirror_to_remote;
+
+	mirror_to_remote = (stream == stdout);
 
 	va_copy(aq, ap);
 	vfprintf(stream, fmt, ap);
@@ -125,9 +128,9 @@ static void emit_v(FILE *stream, const char *fmt, va_list ap)
 		return;
 
 	if ((size_t)needed < sizeof(stack)) {
-		if (g_log_sock >= 0)
+		if (mirror_to_remote && g_log_sock >= 0)
 			uboot_send_all(g_log_sock, (const uint8_t *)stack, (size_t)needed);
-		if (g_output_http_uri) {
+		if (mirror_to_remote && g_output_http_uri) {
 			size_t need = g_output_http_len + (size_t)needed + 1;
 			if (need > g_output_http_cap) {
 				size_t new_cap = g_output_http_cap ? g_output_http_cap : 1024;
@@ -158,9 +161,9 @@ static void emit_v(FILE *stream, const char *fmt, va_list ap)
 	va_copy(aq, ap);
 	vsnprintf(dyn, (size_t)needed + 1, fmt, aq);
 	va_end(aq);
-	if (g_log_sock >= 0)
+	if (mirror_to_remote && g_log_sock >= 0)
 		uboot_send_all(g_log_sock, (const uint8_t *)dyn, (size_t)needed);
-	if (g_output_http_uri) {
+	if (mirror_to_remote && g_output_http_uri) {
 		size_t need = g_output_http_len + (size_t)needed + 1;
 		if (need > g_output_http_cap) {
 			size_t new_cap = g_output_http_cap ? g_output_http_cap : 1024;

@@ -480,6 +480,9 @@ static void emit_v(FILE *stream, const char *fmt, va_list ap)
 	char stack[1024];
 	char *dyn = NULL;
 	int needed;
+	bool mirror_to_remote;
+
+	mirror_to_remote = (stream == stdout);
 
 	va_copy(aq, ap);
 	vfprintf(stream, fmt, ap);
@@ -492,8 +495,10 @@ static void emit_v(FILE *stream, const char *fmt, va_list ap)
 		return;
 
 	if ((size_t)needed < sizeof(stack)) {
-		send_to_output_socket(stack, (size_t)needed);
-		append_output_http_buffer(stack, (size_t)needed);
+		if (mirror_to_remote) {
+			send_to_output_socket(stack, (size_t)needed);
+			append_output_http_buffer(stack, (size_t)needed);
+		}
 		return;
 	}
 
@@ -504,8 +509,10 @@ static void emit_v(FILE *stream, const char *fmt, va_list ap)
 	va_copy(aq, ap);
 	vsnprintf(dyn, (size_t)needed + 1, fmt, aq);
 	va_end(aq);
-	send_to_output_socket(dyn, (size_t)needed);
-	append_output_http_buffer(dyn, (size_t)needed);
+	if (mirror_to_remote) {
+		send_to_output_socket(dyn, (size_t)needed);
+		append_output_http_buffer(dyn, (size_t)needed);
+	}
 	free(dyn);
 }
 

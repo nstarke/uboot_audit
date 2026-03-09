@@ -500,6 +500,14 @@ int linux_remote_copy_scan_main(int argc, char **argv)
 			fprintf(stderr, "Directory uploads require --output-http or --output-https\n");
 			return 2;
 		}
+		if (S_ISLNK(st.st_mode)) {
+			fprintf(stderr, "Symlink uploads require --output-http or --output-https\n");
+			return 2;
+		}
+		if (!stat_is_copyable_file(&st)) {
+			fprintf(stderr, "Path is not a supported file for TCP transfer: %s\n", path);
+			return 1;
+		}
 		return send_file_to_tcp(path, output_tcp, verbose) == 0 ? 0 : 1;
 	}
 
