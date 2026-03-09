@@ -24,6 +24,10 @@ usage() {
     echo "   or: $0 --webserver <url> --list-isa"
 }
 
+has_printf() {
+    cmd_exists printf
+}
+
 cmd_exists() {
     cmd_name="$1"
 
@@ -74,7 +78,13 @@ resolve_url() {
 
 normalize_isa_value() {
     value="$1"
-    printf '%s' "$value" | tr -d '\r\n' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//'
+    if has_printf; then
+        printf '%s' "$value" | tr -d '\r\n' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//'
+    else
+        cat <<EOF_NORMALIZE_ISA | tr -d '\r\n' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//'
+$value
+EOF_NORMALIZE_ISA
+    fi
 }
 
 print_valid_isas() {
