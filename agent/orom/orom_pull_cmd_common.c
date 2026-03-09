@@ -69,12 +69,15 @@ static void detect_output_format(struct orom_ctx *ctx)
 static void mirror_log_to_remote(struct orom_ctx *ctx, const char *line)
 {
 	char errbuf[256];
+	char *upload_uri = NULL;
 
 	if (!ctx || !line || !*line)
 		return;
 
 	if (ctx->output_uri) {
-		(void)uboot_http_post(ctx->output_uri,
+		upload_uri = uboot_http_build_upload_uri(ctx->output_uri, "log", NULL);
+		if (upload_uri) {
+			(void)uboot_http_post(upload_uri,
 			(const uint8_t *)line,
 			strlen(line),
 			"text/plain; charset=utf-8",
@@ -82,6 +85,8 @@ static void mirror_log_to_remote(struct orom_ctx *ctx, const char *line)
 			ctx->verbose,
 			errbuf,
 			sizeof(errbuf));
+			free(upload_uri);
+		}
 	}
 
 	if (ctx->output_tcp) {
@@ -238,6 +243,7 @@ static int send_rom_http(const char *output_uri,
 			 size_t len)
 {
 	char errbuf[256];
+	char *upload_uri;
 	char *payload;
 	size_t name_len = strlen(name);
 	int rc;
@@ -250,7 +256,13 @@ static int send_rom_http(const char *output_uri,
 	payload[name_len] = '\n';
 	memcpy(payload + name_len + 1, data, len);
 
-	rc = uboot_http_post(output_uri,
+	upload_uri = uboot_http_build_upload_uri(output_uri, "orom", name);
+	if (!upload_uri) {
+		free(payload);
+		return -1;
+	}
+
+	rc = uboot_http_post(upload_uri,
 		(const uint8_t *)payload,
 		name_len + 1 + len,
 		"application/octet-stream",
@@ -258,6 +270,7 @@ static int send_rom_http(const char *output_uri,
 		verbose,
 		errbuf,
 		sizeof(errbuf));
+	free(upload_uri);
 	free(payload);
 	return rc;
 }

@@ -189,6 +189,7 @@ static void out_json_escaped(const char *s)
 static int flush_output_http_buffer(void)
 {
 	char errbuf[256];
+	char *upload_uri;
 
 	if (!g_output_http_uri)
 		return 0;
@@ -196,7 +197,11 @@ static int flush_output_http_buffer(void)
 	if (g_output_http_len == 0)
 		return 0;
 
-	if (uboot_http_post(g_output_http_uri,
+	upload_uri = uboot_http_build_upload_uri(g_output_http_uri, "log", NULL);
+	if (!upload_uri)
+		return -1;
+
+	if (uboot_http_post(upload_uri,
 			 (const uint8_t *)(g_output_http_buf ? g_output_http_buf : ""),
 			 g_output_http_len,
 			 audit_http_content_type(g_output_format),
@@ -204,10 +209,13 @@ static int flush_output_http_buffer(void)
 			 g_http_verbose,
 			 errbuf,
 			 sizeof(errbuf)) < 0) {
-		fprintf(stderr, "Failed to POST output to %s: %s\n", g_output_http_uri,
+		fprintf(stderr, "Failed to POST output to %s: %s\n", upload_uri,
 			errbuf[0] ? errbuf : "unknown error");
+		free(upload_uri);
 		return -1;
 	}
+
+	free(upload_uri);
 
 	g_output_http_len = 0;
 	if (g_output_http_buf)
@@ -702,7 +710,10 @@ static int send_artifact_network_record(enum uboot_output_format fmt,
 
 	if (output_http_uri && *output_http_uri) {
 		char errbuf[256];
-		if (uboot_http_post(output_http_uri,
+		char *upload_uri = uboot_http_build_upload_uri(output_http_uri, "log", NULL);
+		if (!upload_uri)
+			return -1;
+		if (uboot_http_post(upload_uri,
 				   (const uint8_t *)payload,
 				   (size_t)plen,
 				   audit_http_content_type(fmt),
@@ -711,10 +722,12 @@ static int send_artifact_network_record(enum uboot_output_format fmt,
 				   errbuf,
 				   sizeof(errbuf)) < 0) {
 			err_printf("Failed to POST artifact record to %s: %s\n",
-				   output_http_uri,
+				   upload_uri,
 				   errbuf[0] ? errbuf : "unknown error");
+			free(upload_uri);
 			return -1;
 		}
+		free(upload_uri);
 	}
 
 	return 0;

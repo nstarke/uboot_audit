@@ -118,6 +118,7 @@ static void err_printf(const char *fmt, ...)
 static int flush_output_http_buffer(void)
 {
 	char errbuf[256];
+	char *upload_uri;
 
 	if (!g_output_http_uri)
 		return 0;
@@ -125,7 +126,11 @@ static int flush_output_http_buffer(void)
 	if (g_output_http_len == 0)
 		return 0;
 
-	if (uboot_http_post(g_output_http_uri,
+	upload_uri = uboot_http_build_upload_uri(g_output_http_uri, "dmesg", NULL);
+	if (!upload_uri)
+		return -1;
+
+	if (uboot_http_post(upload_uri,
 			 (const uint8_t *)(g_output_http_buf ? g_output_http_buf : ""),
 			 g_output_http_len,
 			 "text/plain; charset=utf-8",
@@ -133,10 +138,13 @@ static int flush_output_http_buffer(void)
 			 g_verbose,
 			 errbuf,
 			 sizeof(errbuf)) < 0) {
-		err_printf("Failed to POST dmesg output to %s: %s\n", g_output_http_uri,
+		err_printf("Failed to POST dmesg output to %s: %s\n", upload_uri,
 			   errbuf[0] ? errbuf : "unknown error");
+		free(upload_uri);
 		return -1;
 	}
+
+	free(upload_uri);
 
 	g_output_http_len = 0;
 	if (g_output_http_buf)

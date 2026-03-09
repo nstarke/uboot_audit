@@ -214,6 +214,64 @@ char *uboot_http_uri_normalize_default_port(const char *uri, uint16_t default_po
 	return out;
 }
 
+char *uboot_http_build_upload_uri(const char *base_uri, const char *upload_type, const char *file_path)
+{
+	const char *scheme_end;
+	const char *authority;
+	const char *authority_end;
+	const char *query = "";
+	char *out;
+	char *escaped_file = NULL;
+	size_t prefix_len;
+	size_t query_len;
+	size_t type_len;
+
+	if (!base_uri || !*base_uri || !upload_type || !*upload_type)
+		return NULL;
+
+	scheme_end = strstr(base_uri, "://");
+	if (!scheme_end)
+		return strdup(base_uri);
+
+	authority = scheme_end + 3;
+	authority_end = authority;
+	while (*authority_end && *authority_end != '/' && *authority_end != '?' && *authority_end != '#')
+		authority_end++;
+
+	if (file_path && *file_path) {
+		CURL *curl = curl_easy_init();
+		if (!curl)
+			return NULL;
+		escaped_file = curl_easy_escape(curl, file_path, 0);
+		curl_easy_cleanup(curl);
+		if (!escaped_file)
+			return NULL;
+		query = "?filePath=";
+	}
+
+	prefix_len = (size_t)(authority_end - base_uri);
+	type_len = strlen(upload_type);
+	query_len = strlen(query) + (escaped_file ? strlen(escaped_file) : 0);
+	out = malloc(prefix_len + strlen("/upload/") + type_len + query_len + 1);
+	if (!out) {
+		if (escaped_file)
+			curl_free(escaped_file);
+		return NULL;
+	}
+
+	memcpy(out, base_uri, prefix_len);
+	memcpy(out + prefix_len, "/upload/", strlen("/upload/"));
+	memcpy(out + prefix_len + strlen("/upload/"), upload_type, type_len);
+	memcpy(out + prefix_len + strlen("/upload/") + type_len, query, strlen(query));
+	if (escaped_file)
+		memcpy(out + prefix_len + strlen("/upload/") + type_len + strlen(query), escaped_file, strlen(escaped_file));
+	out[prefix_len + strlen("/upload/") + type_len + query_len] = '\0';
+
+	if (escaped_file)
+		curl_free(escaped_file);
+	return out;
+}
+
 int uboot_http_post(const char *uri, const uint8_t *data, size_t len,
 		 const char *content_type, bool insecure, bool verbose,
 		 char *errbuf, size_t errbuf_len)

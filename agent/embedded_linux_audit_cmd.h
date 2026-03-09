@@ -43,6 +43,7 @@ uint32_t uboot_read_be32(const uint8_t *p);
 int uboot_connect_tcp_ipv4(const char *spec);
 int uboot_send_all(int sock, const uint8_t *buf, size_t len);
 char *uboot_http_uri_normalize_default_port(const char *uri, uint16_t default_port);
+char *uboot_http_build_upload_uri(const char *base_uri, const char *upload_type, const char *file_path);
 int uboot_http_get_to_file(const char *uri, const char *output_path,
 			   bool insecure, bool verbose,
 			   char *errbuf, size_t errbuf_len);
