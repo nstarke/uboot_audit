@@ -28,3 +28,12 @@ Remote output notes:
 - `linux remote-copy --output-https <https://host:port/path>` sends raw file bytes in a single HTTPS POST request with `Content-Type: application/octet-stream`, using embedded CA certificates.
 - `linux remote-copy --insecure` disables TLS certificate and hostname verification for HTTPS output.
 - `--output-format` does not affect `linux remote-copy`; if specified, a warning is emitted.
+- `efi orom pull --output-tcp <ip:port>` sends matching EFI option ROM payloads over TCP.
+- `efi orom pull --output-http <http://host:port/path>` sends matching EFI option ROM payloads via HTTP POST with `Content-Type: application/octet-stream`.
+- `efi orom pull --output-https <https://host:port/path>` sends matching EFI option ROM payloads via HTTPS POST with `Content-Type: application/octet-stream`, using embedded CA certificates.
+- `bios orom pull --output-tcp <ip:port>` sends matching BIOS option ROM payloads over TCP.
+- `bios orom pull --output-http <http://host:port/path>` sends matching BIOS option ROM payloads via HTTP POST with `Content-Type: application/octet-stream`.
+- `bios orom pull --output-https <https://host:port/path>` sends matching BIOS option ROM payloads via HTTPS POST with `Content-Type: application/octet-stream`, using embedded CA certificates.
+- `efi orom list` and `bios orom list` honor `--output-format` and emit list records in txt/csv/json format.
+- `efi|bios orom --insecure` disables TLS certificate and hostname verification for HTTPS output.
+- `efi|bios orom` sends emitted output records and all log lines (including verbose logs) to the configured `--output-{tcp,http,https}` destination.

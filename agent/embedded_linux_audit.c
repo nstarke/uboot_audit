@@ -21,14 +21,18 @@ static void usage(const char *prog)
 		"  uboot audit        Run U-Boot audit rules\n"
 		"  linux dmesg        Dump kernel ring buffer output\n"
 		"  linux remote-copy  Copy a local file to remote destination\n"
+		"  efi orom           EFI option ROM utilities (pull/list)\n"
+		"  bios orom          BIOS option ROM utilities (pull/list)\n"
 		"\n"
 		"Examples:\n"
 		"  %s uboot env --verbose\n"
 		"  %s uboot image --dev /dev/mtdblock4 --step 0x1000\n"
 		"  %s uboot audit --dev /dev/mtdblock4 --offset 0x0 --size 0x10000\n"
 		"  %s linux dmesg --verbose --output-http http://127.0.0.1:5000/dmesg\n"
-		"  %s linux remote-copy /tmp/fw.bin --output-https https://127.0.0.1:5443/upload\n",
-		prog, prog, prog, prog, prog, prog);
+		"  %s linux remote-copy /tmp/fw.bin --output-https https://127.0.0.1:5443/upload\n"
+		"  %s efi orom pull --output-http http://127.0.0.1:5000/orom --verbose\n"
+		"  %s bios orom list --output-tcp 127.0.0.1:5001 --verbose\n",
+		prog, prog, prog, prog, prog, prog, prog, prog);
 }
 
 int main(int argc, char **argv)
@@ -138,6 +142,40 @@ int main(int argc, char **argv)
 		}
 
 		fprintf(stderr, "Unknown linux subcommand: %s\n\n", argv[sub_idx]);
+		usage(argv[0]);
+		return 2;
+	}
+
+	if (!strcmp(argv[cmd_idx], "efi")) {
+		int sub_idx = cmd_idx + 1;
+
+		if (sub_idx >= argc || !strcmp(argv[sub_idx], "-h") ||
+		    !strcmp(argv[sub_idx], "--help") || !strcmp(argv[sub_idx], "help")) {
+			usage(argv[0]);
+			return 0;
+		}
+
+		if (!strcmp(argv[sub_idx], "orom"))
+			return efi_orom_main(argc - sub_idx, argv + sub_idx);
+
+		fprintf(stderr, "Unknown efi subcommand: %s\n\n", argv[sub_idx]);
+		usage(argv[0]);
+		return 2;
+	}
+
+	if (!strcmp(argv[cmd_idx], "bios")) {
+		int sub_idx = cmd_idx + 1;
+
+		if (sub_idx >= argc || !strcmp(argv[sub_idx], "-h") ||
+		    !strcmp(argv[sub_idx], "--help") || !strcmp(argv[sub_idx], "help")) {
+			usage(argv[0]);
+			return 0;
+		}
+
+		if (!strcmp(argv[sub_idx], "orom"))
+			return bios_orom_main(argc - sub_idx, argv + sub_idx);
+
+		fprintf(stderr, "Unknown bios subcommand: %s\n\n", argv[sub_idx]);
 		usage(argv[0]);
 		return 2;
 	}

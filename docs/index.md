@@ -7,6 +7,8 @@
 - [`uboot_audit uboot audit` Command](audit-command.md)
 - [`uboot_audit linux dmesg` Command](dmesg-command.md)
 - [`uboot_audit linux remote-copy` Command](remote-copy-command.md)
+- [`uboot_audit efi orom` Command](efi-command.md)
+- [`uboot_audit bios orom` Command](bios-command.md)
 - [Audit Rules Reference](audit-rules.md)
 - [Tests](tests.md)
 - [Web Helper Server](web-helper-server.md)
