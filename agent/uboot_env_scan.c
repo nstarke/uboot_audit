@@ -1149,32 +1149,45 @@ static bool has_hint_var(const uint8_t *data, size_t len, const char *hint_overr
 	return false;
 }
 
-static MAYBE_UNUSED void dump_env_vars(const uint8_t *data, size_t len)
+static MAYBE_UNUSED void dump_env_vars(const char *dev, uint64_t env_off,
+				      const uint8_t *data, size_t len)
 {
-	size_t off = 0;
+	size_t cursor = 0;
 	size_t count = 0;
+	json_object *vars_arr = NULL;
+	json_object *obj = NULL;
+	bool json_mode = (g_output_format == FW_OUTPUT_JSON);
 
-	out_printf("    parsed env vars:\n");
-	while (off < len) {
+	if (json_mode) {
+		vars_arr = json_object_new_array();
+		if (!vars_arr)
+			return;
+	}
+
+	if (!json_mode)
+		out_printf("    parsed env vars:\n");
+	while (cursor < len) {
 		const char *s;
 		size_t slen;
 		const char *eq;
 		bool printable = true;
 
-		if (data[off] == '\0') {
-			if ((off + 1 < len && data[off + 1] == '\0') || off + 1 >= len)
+		if (data[cursor] == '\0') {
+			if ((cursor + 1 < len && data[cursor + 1] == '\0') || cursor + 1 >= len)
 				break;
-			off++;
+			cursor++;
 			continue;
 		}
 
-		s = (const char *)(data + off);
-		slen = strnlen(s, len - off);
-		if (slen == len - off)
+		s = (const char *)(data + cursor);
+		slen = strnlen(s, len - cursor);
+		if (slen == len - cursor)
 			break;
 
 		eq = memchr(s, '=', slen);
 		if (eq) {
+			size_t key_len = (size_t)(eq - s);
+			size_t val_len = slen - key_len - 1;
 			for (size_t i = 0; i < slen; i++) {
 				if (!isprint((unsigned char)s[i]) && s[i] != '\t') {
 					printable = false;
@@ -1183,16 +1196,51 @@ static MAYBE_UNUSED void dump_env_vars(const uint8_t *data, size_t len)
 			}
 
 			if (printable) {
-				out_printf("      %.*s\n", (int)slen, s);
-				count++;
+				if (json_mode) {
+					json_object *kv = json_object_new_object();
+					char *key = strndup(s, key_len);
+					char *value = strndup(eq + 1, val_len);
+
+					if (kv && key && value) {
+						json_object_object_add(kv, "key", json_object_new_string(key));
+						json_object_object_add(kv, "value", json_object_new_string(value));
+						json_object_array_add(vars_arr, kv);
+						count++;
+					} else if (kv) {
+						json_object_put(kv);
+					}
+
+					free(key);
+					free(value);
+				} else {
+					out_printf("      %.*s\n", (int)slen, s);
+					count++;
+				}
 			}
 		}
 
-		off += slen + 1;
+		cursor += slen + 1;
 		if (count >= 256) {
-			out_printf("      ... truncated after 256 vars ...\n");
+			if (!json_mode)
+				out_printf("      ... truncated after 256 vars ...\n");
 			break;
 		}
+	}
+
+	if (json_mode) {
+		obj = json_object_new_object();
+		if (!obj) {
+			json_object_put(vars_arr);
+			return;
+		}
+		json_object_object_add(obj, "record", json_object_new_string("env_vars"));
+		if (dev)
+			json_object_object_add(obj, "device", json_object_new_string(dev));
+		json_object_object_add(obj, "offset", json_object_new_uint64(env_off));
+		json_object_object_add(obj, "vars", vars_arr);
+		out_printf("%s\n", json_object_to_json_string_ext(obj, JSON_C_TO_STRING_PLAIN));
+		json_object_put(obj);
+		return;
 	}
 
 	if (!count)
@@ -1294,9 +1342,9 @@ static int scan_dev(const char *dev, uint64_t step, uint64_t env_size, const cha
 		}
 		if (g_parse_vars) {
 			if (crc_ok_redund && !crc_ok_std && env_size > 5)
-				dump_env_vars(buf + 5, (size_t)env_size - 5);
+				dump_env_vars(dev, (uint64_t)off, buf + 5, (size_t)env_size - 5);
 			else if (env_size > 4)
-				dump_env_vars(buf + 4, (size_t)env_size - 4);
+				dump_env_vars(dev, (uint64_t)off, buf + 4, (size_t)env_size - 4);
 			else
 				out_printf("    parsed env vars:\n      (no parseable variables found)\n");
 		}
