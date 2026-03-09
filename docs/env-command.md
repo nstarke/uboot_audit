@@ -20,13 +20,16 @@ Scans MTD/UBI plus block devices (SD/eMMC such as `/dev/sd*` and `/dev/mmcblk*`)
 - `--output-http <http://host:port/path>` — duplicate output to HTTP endpoint via POST
 - `--output-https <https://host:port/path>` — duplicate output to HTTPS endpoint via POST
 - `--insecure` — disable TLS certificate and hostname verification for HTTPS output
-- `--write <path>` — apply env updates from text file (native `fw_setenv`-style behavior)
+- `--write <path|http(s)://...>` — apply env updates from a local text file or fetch the script from HTTP(S)
 
 ## `--write` behavior
 
 - Uses `./fw_env.config` for write settings and applies updates through `libubootenv` (built from source in `third_party/libubootenv`).
   - If `./fw_env.config` exists, it is used directly.
   - If it does not exist, the tool first runs scan logic to generate it, then writes.
+- When `--write` begins with `http://` or `https://`, the script is downloaded to a temporary file and then processed as a normal write script.
+  - HTTPS certificate/hostname verification uses the embedded CA bundle by default.
+  - `--insecure` can be used to disable HTTPS verification for `--write` URL downloads.
 - Input file format (similar to `fw_setenv -s`):
   - `name=value` or `name value` → set variable
   - `name` (no value) → delete variable

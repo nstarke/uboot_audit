@@ -138,6 +138,14 @@ int uboot_send_all(int sock, const uint8_t *buf, size_t len)
 	return 0;
 }
 
+static size_t curl_write_to_fp(void *ptr, size_t size, size_t nmemb, void *userdata)
+{
+	FILE *fp = (FILE *)userdata;
+	if (!fp)
+		return 0;
+	return fwrite(ptr, size, nmemb, fp);
+}
+
 char *uboot_http_uri_normalize_default_port(const char *uri, uint16_t default_port)
 {
 	const char *scheme_end;
@@ -341,6 +349,155 @@ int uboot_http_post(const char *uri, const uint8_t *data, size_t len,
 
 	free(normalized_uri);
 
+	return 0;
+}
+
+int uboot_http_get_to_file(const char *uri, const char *output_path,
+			   bool insecure, bool verbose,
+			   char *errbuf, size_t errbuf_len)
+{
+	CURL *curl;
+	CURLcode rc;
+	long http_code = 0;
+	struct curl_blob ca_blob;
+	static bool curl_global_ready;
+	bool is_https;
+	char *normalized_uri = NULL;
+	const char *effective_uri = uri;
+	FILE *fp = NULL;
+
+	if (errbuf && errbuf_len)
+		errbuf[0] = '\0';
+
+	if (!uri || !*uri || !output_path || !*output_path) {
+		if (errbuf && errbuf_len)
+			snprintf(errbuf, errbuf_len, "HTTP GET requires URI and output path");
+		return -1;
+	}
+
+	is_https = !strncmp(uri, "https://", 8);
+	if (!strncmp(uri, "http://", 7)) {
+		normalized_uri = uboot_http_uri_normalize_default_port(uri, 80);
+	} else if (is_https) {
+		normalized_uri = uboot_http_uri_normalize_default_port(uri, 443);
+	} else {
+		if (errbuf && errbuf_len)
+			snprintf(errbuf, errbuf_len, "unsupported URI scheme (expected http:// or https://)");
+		return -1;
+	}
+
+	if (!normalized_uri) {
+		if (errbuf && errbuf_len)
+			snprintf(errbuf, errbuf_len, "failed to normalize HTTP URI");
+		return -1;
+	}
+	effective_uri = normalized_uri;
+
+	if (!curl_global_ready) {
+		if (curl_global_init(CURL_GLOBAL_DEFAULT) != CURLE_OK) {
+			if (errbuf && errbuf_len)
+				snprintf(errbuf, errbuf_len, "curl_global_init failed");
+			free(normalized_uri);
+			return -1;
+		}
+		curl_global_ready = true;
+	}
+
+	fp = fopen(output_path, "wb");
+	if (!fp) {
+		if (errbuf && errbuf_len)
+			snprintf(errbuf, errbuf_len, "cannot open output file %s: %s", output_path, strerror(errno));
+		free(normalized_uri);
+		return -1;
+	}
+
+	curl = curl_easy_init();
+	if (!curl) {
+		if (errbuf && errbuf_len)
+			snprintf(errbuf, errbuf_len, "curl_easy_init failed");
+		fclose(fp);
+		unlink(output_path);
+		free(normalized_uri);
+		return -1;
+	}
+
+	if (verbose) {
+		fprintf(stderr, "HTTP GET request uri=%s -> file=%s insecure=%s\n",
+			effective_uri,
+			output_path,
+			insecure ? "true" : "false");
+	}
+
+	curl_easy_setopt(curl, CURLOPT_URL, effective_uri);
+	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curl_write_to_fp);
+	curl_easy_setopt(curl, CURLOPT_WRITEDATA, fp);
+	curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10L);
+	curl_easy_setopt(curl, CURLOPT_TIMEOUT, 30L);
+
+	if (is_https) {
+		if (insecure) {
+			curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+			curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+		} else {
+			ca_blob.data = (void *)uboot_default_ca_bundle_pem;
+			ca_blob.len = uboot_default_ca_bundle_pem_len;
+			ca_blob.flags = CURL_BLOB_COPY;
+			rc = curl_easy_setopt(curl, CURLOPT_CAINFO_BLOB, &ca_blob);
+			if (rc != CURLE_OK) {
+				if (errbuf && errbuf_len)
+					snprintf(errbuf, errbuf_len, "failed to configure HTTPS CA bundle: %s",
+						 curl_easy_strerror(rc));
+				curl_easy_cleanup(curl);
+				fclose(fp);
+				unlink(output_path);
+				free(normalized_uri);
+				return -1;
+			}
+		}
+	}
+
+	rc = curl_easy_perform(curl);
+	if (rc != CURLE_OK) {
+		if (verbose)
+			fprintf(stderr, "HTTP GET transport failure uri=%s error=%s\n",
+				effective_uri, curl_easy_strerror(rc));
+		if (errbuf && errbuf_len)
+			snprintf(errbuf, errbuf_len, "curl perform failed: %s", curl_easy_strerror(rc));
+		curl_easy_cleanup(curl);
+		fclose(fp);
+		unlink(output_path);
+		free(normalized_uri);
+		return -1;
+	}
+
+	curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+	curl_easy_cleanup(curl);
+
+	if (fclose(fp) != 0) {
+		if (errbuf && errbuf_len)
+			snprintf(errbuf, errbuf_len, "failed to finalize output file %s", output_path);
+		unlink(output_path);
+		free(normalized_uri);
+		return -1;
+	}
+	fp = NULL;
+
+	if (http_code < 200 || http_code >= 300) {
+		if (verbose)
+			fprintf(stderr, "HTTP GET response failure uri=%s status=%ld\n",
+				effective_uri, http_code);
+		if (errbuf && errbuf_len)
+			snprintf(errbuf, errbuf_len, "HTTP status %ld", http_code);
+		unlink(output_path);
+		free(normalized_uri);
+		return -1;
+	}
+
+	if (verbose)
+		fprintf(stderr, "HTTP GET success uri=%s status=%ld\n", effective_uri, http_code);
+
+	free(normalized_uri);
 	return 0;
 }
 

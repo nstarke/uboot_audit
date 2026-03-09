@@ -547,6 +547,14 @@ static bool file_exists(const char *path)
 	return stat(path, &st) == 0;
 }
 
+static bool is_http_write_source(const char *s)
+{
+	if (!s)
+		return false;
+
+	return !strncmp(s, "http://", 7) || !strncmp(s, "https://", 8);
+}
+
 static bool uboot_valid_var_name(const char *name)
 {
 	if (!name || !*name)
@@ -1401,8 +1409,12 @@ int uboot_env_scan_main(int argc, char **argv)
 	const char *output_https_target = NULL;
 	const char *output_config_path = NULL;
 	const char *write_script_path = NULL;
+	const char *write_script_effective_path = NULL;
 	bool write_mode = false;
 	bool need_generate_config = false;
+	bool downloaded_write_script = false;
+	/* URL-based --write scripts are staged under /tmp before parsing/apply. */
+	char downloaded_write_script_path[] = "/tmp/uboot_env_write_script.XXXXXX";
 	bool skip_remove = false;
 	bool skip_mtd = false;
 	bool skip_ubi = false;
@@ -1486,12 +1498,45 @@ int uboot_env_scan_main(int argc, char **argv)
 	}
 
 	if (write_script_path) {
+		char errbuf[256];
+		int tmp_fd;
+
 		write_mode = true;
-		if (access(write_script_path, R_OK) < 0) {
+		write_script_effective_path = write_script_path;
+
+		if (is_http_write_source(write_script_path)) {
+			tmp_fd = mkstemp(downloaded_write_script_path);
+			if (tmp_fd < 0) {
+				err_printf("Cannot create temp file for --write URL %s: %s\n",
+					write_script_path,
+					strerror(errno));
+				ret = 2;
+				goto out;
+			}
+			close(tmp_fd);
+
+			if (uboot_http_get_to_file(write_script_path,
+						  downloaded_write_script_path,
+						  g_insecure,
+						  g_verbose,
+						  errbuf,
+						  sizeof(errbuf)) < 0) {
+				err_printf("Failed to fetch --write script from %s: %s\n",
+					write_script_path,
+					errbuf[0] ? errbuf : "unknown error");
+				unlink(downloaded_write_script_path);
+				ret = 2;
+				goto out;
+			}
+
+			downloaded_write_script = true;
+			write_script_effective_path = downloaded_write_script_path;
+		} else if (access(write_script_path, R_OK) < 0) {
 			err_printf("Cannot read --write file %s: %s\n", write_script_path, strerror(errno));
 			ret = 2;
 			goto out;
 		}
+
 		if (output_config_path && strcmp(output_config_path, "uboot_env.config")) {
 			err_printf("--write uses ./uboot_env.config only\n");
 			ret = 2;
@@ -1513,7 +1558,7 @@ int uboot_env_scan_main(int argc, char **argv)
 			uboot_ensure_ubi_nodes_collect(helper_verbose, &created_ubi_nodes, &created_ubi_count);
 		uboot_ensure_block_nodes_collect(helper_verbose, !skip_sd, !skip_emmc,
 			&created_block_nodes, &created_block_count);
-		ret = perform_write_operation("uboot_env.config", write_script_path);
+		ret = perform_write_operation("uboot_env.config", write_script_effective_path);
 		goto out;
 	}
 
@@ -1665,7 +1710,7 @@ post_scan:
 			fclose(g_output_config_fp);
 			g_output_config_fp = NULL;
 		}
-		ret = perform_write_operation("uboot_env.config", write_script_path);
+		ret = perform_write_operation("uboot_env.config", write_script_effective_path);
 	}
 
 out:
@@ -1702,5 +1747,7 @@ out:
 	g_output_http_len = 0;
 	g_output_http_cap = 0;
 	g_output_http_uri = NULL;
+	if (downloaded_write_script)
+		unlink(downloaded_write_script_path);
 	return ret;
 }
