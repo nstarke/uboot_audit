@@ -37,8 +37,14 @@ done
 run_accept_case "audit required args: --dev --size" \
     "$BIN" audit --dev /dev/null --size "$TEST_SIZE"
 
-run_accept_case "audit without --dev prepares fw_env.config" \
+run_accept_case "audit defaults --size to 0x10000 when omitted" \
+    "$BIN" audit --dev /dev/null
+
+run_accept_case "audit without --dev scans devices and writes fw_env.config" \
     "$BIN" audit
+
+run_exact_case "audit without --dev but with --size requires --dev" 2 \
+    "$BIN" audit --size "$TEST_SIZE"
 
 for output_format in txt csv json
 do

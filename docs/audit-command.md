@@ -2,11 +2,10 @@
 
 Runs compiled audit rules that are defined under `agent/audit-rules/` (one `.c` file per rule).
 
-Before running rules, `audit` ensures `./fw_env.config` exists for follow-on environment operations:
+Before running rules, `audit` ensures `./fw_env.config` exists for follow-on environment operations.
 
-- if `./fw_env.config` already exists, it is reused
-- else if `./uboot_env.config` exists, it is copied to `./fw_env.config`
-- else an env scan is run automatically to generate `./fw_env.config`
+- when `audit` is run **without** `--dev`, it performs an env-style device scan (same scan flow as the `env` subcommand) and writes `./fw_env.config`, then exits
+- when `audit` is run **with** `--dev`, it reuses `./fw_env.config` if present, otherwise falls back to `./uboot_env.config`, and otherwise runs env scan to generate `./fw_env.config`
 
 ## `audit` arguments
 
@@ -14,7 +13,7 @@ Before running rules, `audit` ensures `./fw_env.config` exists for follow-on env
 - `--rule <name>` — run a single rule by name
 - `--dev <device>` — input device/file to audit
 - `--offset <bytes>` — read offset (default `0`)
-- `--size <bytes>` — number of bytes to read and pass to rules
+- `--size <bytes>` — number of bytes to read and pass to rules (default `0x10000`)
 - `--signature-blob <path>` — blob file used by signature-verifying rules
 - `--signature-pubkey <path>` — PEM public key used by signature-verifying rules
 - `--scan-signature-devices` — force scan of MTD/UBI/eMMC/SD devices to auto-discover a FIT blob and embedded PEM public key
@@ -22,7 +21,7 @@ Before running rules, `audit` ensures `./fw_env.config` exists for follow-on env
 - `--signature-alg <name>` — digest algorithm for signature verification; if omitted, tries likely digests in order: `sha256`, `sha384`, `sha512`, `sha1`, `sha224`
 - `--verbose` — enable verbose rule behavior where supported
 
-When `audit` is run without `--dev`, it performs config preparation only: it ensures `./fw_env.config` exists (using the same fallback logic above, including env scan generation) and then exits without running rules.
+When `audit` is run without `--dev`, it scans devices and writes `./fw_env.config` for later use, then exits without running rules (unless `--size` is explicitly provided, in which case `--dev` is required).
 
 ## `audit` examples
 

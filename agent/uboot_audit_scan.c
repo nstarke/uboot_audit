@@ -24,6 +24,7 @@
 #define FIT_MIN_TOTAL_SIZE 0x100U
 #define FIT_MAX_TOTAL_SIZE (64U * 1024U * 1024U)
 #define AUTO_SCAN_STEP 0x1000ULL
+#define DEFAULT_AUDIT_SIZE 0x10000ULL
 
 static uint32_t read_be32_local(const uint8_t *p)
 {
@@ -47,6 +48,14 @@ static size_t g_output_http_len;
 static size_t g_output_http_cap;
 static bool g_http_insecure;
 static bool g_http_verbose;
+
+static bool buffer_has_newline(const char *buf, size_t len)
+{
+	if (!buf || !len)
+		return false;
+
+	return memchr(buf, '\n', len) != NULL;
+}
 
 static const char *audit_http_content_type(enum uboot_output_format fmt);
 static int flush_output_http_buffer(void);
@@ -126,7 +135,8 @@ static void emit_v(FILE *stream, const char *fmt, va_list ap)
 	if ((size_t)needed < sizeof(stack)) {
 		send_to_output_socket(stack, (size_t)needed);
 		append_output_http_buffer(stack, (size_t)needed);
-		if (g_http_verbose && g_output_http_uri && g_output_http_len > 0)
+		if (g_http_verbose && g_output_http_uri && g_output_http_len > 0 &&
+		    buffer_has_newline(stack, (size_t)needed))
 			(void)flush_output_http_buffer();
 		return;
 	}
@@ -140,7 +150,8 @@ static void emit_v(FILE *stream, const char *fmt, va_list ap)
 	va_end(aq);
 	send_to_output_socket(dyn, (size_t)needed);
 	append_output_http_buffer(dyn, (size_t)needed);
-	if (g_http_verbose && g_output_http_uri && g_output_http_len > 0)
+	if (g_http_verbose && g_output_http_uri && g_output_http_len > 0 &&
+	    buffer_has_newline(dyn, (size_t)needed))
 		(void)flush_output_http_buffer();
 	free(dyn);
 }
@@ -255,13 +266,13 @@ out:
 	return rc;
 }
 
-static int ensure_fw_env_config_exists(void)
+static int ensure_fw_env_config_exists(bool force_scan, bool verbose)
 {
 	const char *output_tcp = getenv("FW_AUDIT_OUTPUT_TCP");
 	const char *output_http = getenv("FW_AUDIT_OUTPUT_HTTP");
 	const char *output_https = getenv("FW_AUDIT_OUTPUT_HTTPS");
 	const char *output_insecure = getenv("FW_AUDIT_OUTPUT_INSECURE");
-	char *env_argv[8];
+	char *env_argv[9];
 	int env_argc = 0;
 
 	env_argv[env_argc++] = "env";
@@ -280,12 +291,14 @@ static int ensure_fw_env_config_exists(void)
 	}
 	if (output_insecure && *output_insecure && strcmp(output_insecure, "0"))
 		env_argv[env_argc++] = "--insecure";
+	if (verbose)
+		env_argv[env_argc++] = "--verbose";
 	env_argv[env_argc] = NULL;
 
-	if (access("fw_env.config", F_OK) == 0)
+	if (!force_scan && access("fw_env.config", F_OK) == 0)
 		return 0;
 
-	if (access("uboot_env.config", F_OK) == 0)
+	if (!force_scan && access("uboot_env.config", F_OK) == 0)
 		return copy_file_contents("uboot_env.config", "fw_env.config");
 
 	return uboot_env_scan_main(env_argc, env_argv);
@@ -610,12 +623,12 @@ static int auto_scan_signature_artifacts(char **blob_path_out, char **pubkey_pat
 static void usage(const char *prog)
 {
 	err_printf(
-		"Usage: %s [--list-rules] [--rule <name>] --dev <device> [--offset <bytes>] --size <bytes> [--verbose]\n"
+		"Usage: %s [--list-rules] [--rule <name>] --dev <device> [--offset <bytes>] [--size <bytes>] [--verbose]\n"
 		"  --list-rules    List compiled audit rules\n"
 		"  --rule <name>   Run only one rule by name\n"
 		"  --dev <device>  Input device/file to audit\n"
 		"  --offset <n>    Read offset (default: 0)\n"
-		"  --size <n>      Number of bytes to read for audit\n"
+		"  --size <n>      Number of bytes to read for audit (default: 0x10000)\n"
 		"  --signature-blob <path>   Blob file used for signature verification rules\n"
 		"  --signature-pubkey <path> Public key PEM file for signature verification rules\n"
 		"  --scan-signature-devices  Force device scan for FIT blob and PEM pubkey (default if paths missing)\n"
@@ -675,9 +688,12 @@ static int send_artifact_network_record(enum uboot_output_format fmt,
 
 	if (output_tcp_target && *output_tcp_target) {
 		int sock = uboot_connect_tcp_ipv4(output_tcp_target);
-		if (sock < 0)
+		if (sock < 0) {
+			err_printf("Failed to send artifact record over TCP to %s\n", output_tcp_target);
 			return -1;
+		}
 		if (uboot_send_all(sock, (const uint8_t *)payload, (size_t)plen) < 0) {
+			err_printf("Failed to send artifact record over TCP to %s\n", output_tcp_target);
 			close(sock);
 			return -1;
 		}
@@ -693,8 +709,12 @@ static int send_artifact_network_record(enum uboot_output_format fmt,
 				   insecure,
 				   verbose,
 				   errbuf,
-				   sizeof(errbuf)) < 0)
+				   sizeof(errbuf)) < 0) {
+			err_printf("Failed to POST artifact record to %s: %s\n",
+				   output_http_uri,
+				   errbuf[0] ? errbuf : "unknown error");
 			return -1;
+		}
 	}
 
 	return 0;
@@ -814,7 +834,8 @@ int uboot_audit_scan_main(int argc, char **argv)
 	bool scan_signature_devices = false;
 	bool insecure = false;
 	uint64_t offset = 0;
-	uint64_t size = 0;
+	uint64_t size = DEFAULT_AUDIT_SIZE;
+	bool size_explicit = false;
 	bool verbose = false;
 	bool list_rules = false;
 	uint32_t crc32_table[256];
@@ -877,6 +898,7 @@ int uboot_audit_scan_main(int argc, char **argv)
 			break;
 		case 's':
 			size = parse_u64(optarg);
+			size_explicit = true;
 			break;
 		case 'B':
 			signature_blob_path = optarg;
@@ -986,22 +1008,22 @@ int uboot_audit_scan_main(int argc, char **argv)
 	}
 
 	if (!dev) {
-		ret = ensure_fw_env_config_exists();
+		if (size_explicit) {
+			err_printf("--dev is required when running audit rules\n");
+			ret = 2;
+			goto out;
+		}
+
+		ret = ensure_fw_env_config_exists(true, verbose);
 		if (ret != 0) {
 			err_printf("fw_env.config not found and env scan failed (rc=%d)\n", ret);
 			ret = 1;
 			goto out;
 		}
 
-		if (!size) {
-			if (fmt == FW_OUTPUT_TXT)
-				out_printf("Prepared fw_env.config via env scan for subsequent auditing\n");
-			ret = 0;
-			goto out;
-		}
-
-		err_printf("--dev is required when running audit rules\n");
-		ret = 2;
+		if (fmt == FW_OUTPUT_TXT)
+			out_printf("Prepared fw_env.config via env scan for subsequent auditing\n");
+		ret = 0;
 		goto out;
 	}
 
@@ -1010,7 +1032,7 @@ int uboot_audit_scan_main(int argc, char **argv)
 		return 2;
 	}
 
-	ret = ensure_fw_env_config_exists();
+	ret = ensure_fw_env_config_exists(false, verbose);
 	if (ret != 0) {
 		err_printf("fw_env.config not found and env scan failed (rc=%d)\n", ret);
 		ret = 1;
