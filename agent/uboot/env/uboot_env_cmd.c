@@ -1389,15 +1389,16 @@ static int scan_dev(const char *dev, uint64_t step, uint64_t env_size, const cha
 
 static void usage(const char *prog)
 {
-	err_printf("Usage: %s [--verbose] [--size <env_size>] [--hint <hint>] [--dev <dev>] [--bruteforce] [--skip-remove] [--skip-mtd] [--skip-ubi] [--skip-sd] [--skip-emmc] [--output-config[=<path>]] [--write <path>] [<dev:step> ...]\n"
-		"             [--parse-vars]\n"
+	err_printf("Usage: %s [parse-vars] [--verbose] [--size <env_size>] [--hint <hint>] [--dev <dev>] [--bruteforce] [--skip-remove] [--skip-mtd] [--skip-ubi] [--skip-sd] [--skip-emmc] [--output-config[=<path>]] [<dev:step> ...]\n"
+		"       %s write <path|http(s)://...> [--verbose] [--size <env_size>] [--hint <hint>] [--dev <dev>] [--bruteforce] [--skip-remove] [--skip-mtd] [--skip-ubi] [--skip-sd] [--skip-emmc] [--output-config[=<path>]] [<dev:step> ...]\n"
+		"             (legacy flags still accepted: --parse-vars, --write <path>)\n"
 		"             [--output-tcp <ip:port>]\n"
 		"             [--output-http <http://host:port/>]\n"
 		"             [--output-https <https://host:port/>]\n"
-		"             [--insecure]\n", prog);
+		"             [--insecure]\n", prog, prog);
 }
 
-int uboot_env_scan_main(int argc, char **argv)
+int uboot_env_scan_core_main(int argc, char **argv)
 {
 	static const uint64_t common_sizes[] = { 0x1000, 0x2000, 0x4000, 0x8000, 0x10000, 0x20000, 0x40000, 0x80000 };
 	bool fixed_size = false;
@@ -1409,6 +1410,9 @@ int uboot_env_scan_main(int argc, char **argv)
 	const char *output_https_target = NULL;
 	const char *output_config_path = NULL;
 	const char *write_script_path = NULL;
+	char **parse_argv = argv;
+	int parse_argc = argc;
+	bool free_parse_argv = false;
 	const char *write_script_effective_path = NULL;
 	bool write_mode = false;
 	bool need_generate_config = false;
@@ -1430,6 +1434,7 @@ int uboot_env_scan_main(int argc, char **argv)
 	int ret = 0;
 	int argi;
 	int opt;
+ 	const char *prog = argv[0];
 
 	optind = 1;
 	detect_output_format();
@@ -1438,6 +1443,38 @@ int uboot_env_scan_main(int argc, char **argv)
 	g_insecure = false;
 	g_csv_header_emitted = false;
 	g_parse_vars = false;
+
+	if (argc >= 2 && !strcmp(argv[1], "parse-vars")) {
+		parse_argc = argc - 1;
+		parse_argv = calloc((size_t)parse_argc + 1, sizeof(*parse_argv));
+		if (!parse_argv)
+			return 2;
+		parse_argv[0] = argv[0];
+		for (int i = 1; i < parse_argc; i++)
+			parse_argv[i] = argv[i + 1];
+		parse_argv[parse_argc] = NULL;
+		free_parse_argv = true;
+		g_parse_vars = true;
+	} else if (argc >= 2 && !strcmp(argv[1], "write")) {
+		if (argc < 3) {
+			usage(argv[0]);
+			return 2;
+		}
+		write_script_path = argv[2];
+		parse_argc = argc - 2;
+		parse_argv = calloc((size_t)parse_argc + 1, sizeof(*parse_argv));
+		if (!parse_argv)
+			return 2;
+		parse_argv[0] = argv[0];
+		for (int i = 1; i < parse_argc; i++)
+			parse_argv[i] = argv[i + 2];
+		parse_argv[parse_argc] = NULL;
+		free_parse_argv = true;
+	}
+
+	if (parse_argv && parse_argv[0])
+		prog = parse_argv[0];
+
 	if (g_output_sock >= 0) {
 		close(g_output_sock);
 		g_output_sock = -1;
@@ -1464,9 +1501,9 @@ int uboot_env_scan_main(int argc, char **argv)
 		{ 0, 0, 0, 0 }
 	};
 
-	while ((opt = getopt_long(argc, argv, "hvs:H:d:bo:O:T:kRMUSEPc::w:", long_opts, NULL)) != -1) {
+	while ((opt = getopt_long(parse_argc, parse_argv, "hvs:H:d:bo:O:T:kRMUSEPc::w:", long_opts, NULL)) != -1) {
 		switch (opt) {
-		case 'h': usage(argv[0]); return 0;
+		case 'h': usage(prog); return 0;
 		case 'v': g_verbose = true; break;
 		case 's': env_size = parse_u64(optarg); fixed_size = true; break;
 		case 'H': hint_override = optarg; break;
@@ -1484,7 +1521,7 @@ int uboot_env_scan_main(int argc, char **argv)
 		case 'T': output_https_target = optarg; break;
 		case 'k': g_insecure = true; break;
 		case 'w': write_script_path = optarg; break;
-		default: usage(argv[0]); return 2;
+		default: usage(prog); return 2;
 		}
 	}
 
@@ -1550,18 +1587,6 @@ int uboot_env_scan_main(int argc, char **argv)
 		}
 	}
 
-	if (write_mode && !need_generate_config) {
-		uboot_crc32_init(crc32_table);
-		if (!skip_mtd)
-			uboot_ensure_mtd_nodes_collect(helper_verbose, &created_mtdblock_nodes, &created_mtdblock_count);
-		if (!skip_ubi)
-			uboot_ensure_ubi_nodes_collect(helper_verbose, &created_ubi_nodes, &created_ubi_count);
-		uboot_ensure_block_nodes_collect(helper_verbose, !skip_sd, !skip_emmc,
-			&created_block_nodes, &created_block_count);
-		ret = perform_write_operation("uboot_env.config", write_script_effective_path);
-		goto out;
-	}
-
 	if (output_tcp_target && *output_tcp_target) {
 		g_output_sock = uboot_connect_tcp_ipv4(output_tcp_target);
 		if (g_output_sock < 0) {
@@ -1592,6 +1617,18 @@ int uboot_env_scan_main(int argc, char **argv)
 			goto out;
 		}
 		g_output_http_uri = output_https_target;
+	}
+
+	if (write_mode && !need_generate_config) {
+		uboot_crc32_init(crc32_table);
+		if (!skip_mtd)
+			uboot_ensure_mtd_nodes_collect(helper_verbose, &created_mtdblock_nodes, &created_mtdblock_count);
+		if (!skip_ubi)
+			uboot_ensure_ubi_nodes_collect(helper_verbose, &created_ubi_nodes, &created_ubi_count);
+		uboot_ensure_block_nodes_collect(helper_verbose, !skip_sd, !skip_emmc,
+			&created_block_nodes, &created_block_count);
+		ret = perform_write_operation("uboot_env.config", write_script_effective_path);
+		goto out;
 	}
 
 	if (output_config_path && *output_config_path) {
@@ -1638,7 +1675,7 @@ one_scan_done:
 		goto post_scan;
 	}
 
-	if (argi >= argc) {
+	if (argi >= parse_argc) {
 		glob_t g;
 		unsigned int scan_flags = 0;
 
@@ -1675,8 +1712,8 @@ one_scan_done:
 		goto post_scan;
 	}
 
-	for (int i = argi; i < argc; i++) {
-		char *arg = argv[i];
+	for (int i = argi; i < parse_argc; i++) {
+		char *arg = parse_argv[i];
 		char *colon = strrchr(arg, ':');
 		if (!colon || colon == arg || *(colon + 1) == '\0')
 			continue;
@@ -1749,5 +1786,18 @@ out:
 	g_output_http_uri = NULL;
 	if (downloaded_write_script)
 		unlink(downloaded_write_script_path);
+	if (free_parse_argv)
+		free(parse_argv);
 	return ret;
+}
+
+int uboot_env_scan_main(int argc, char **argv)
+{
+	if (argc >= 2 && !strcmp(argv[1], "read-vars"))
+		return uboot_env_read_vars_main(argc - 1, argv + 1);
+
+	if (argc >= 2 && !strcmp(argv[1], "write-vars"))
+		return uboot_env_write_vars_main(argc - 1, argv + 1);
+
+	return uboot_env_scan_core_main(argc, argv);
 }

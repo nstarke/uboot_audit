@@ -70,7 +70,7 @@ run_accept_case "uboot env --skip-mtd --size $TEST_SIZE" "$BIN" uboot env --skip
 run_accept_case "uboot env --skip-ubi --size $TEST_SIZE" "$BIN" uboot env --skip-ubi --size "$TEST_SIZE"
 run_accept_case "uboot env --skip-sd --size $TEST_SIZE" "$BIN" uboot env --skip-sd --size "$TEST_SIZE"
 run_accept_case "uboot env --skip-emmc --size $TEST_SIZE" "$BIN" uboot env --skip-emmc --size "$TEST_SIZE"
-run_accept_case "uboot env --parse-vars --size $TEST_SIZE" "$BIN" uboot env --parse-vars --size "$TEST_SIZE"
+run_accept_case "uboot env read-vars --size $TEST_SIZE" "$BIN" uboot env read-vars --size "$TEST_SIZE"
 run_accept_case "uboot env --output-config (implicit path) --size $TEST_SIZE" "$BIN" uboot env --output-config --size "$TEST_SIZE"
 run_accept_case "uboot env --output-config=path --size $TEST_SIZE" "$BIN" uboot env --output-config="$REPO_ROOT/tests/.tmp_fw_env.config" --size "$TEST_SIZE"
 run_accept_case "uboot env --output-tcp --size $TEST_SIZE" "$BIN" uboot env --output-tcp 127.0.0.1:9 --size "$TEST_SIZE"
@@ -79,8 +79,8 @@ run_accept_case "uboot env --output-https --size $TEST_SIZE" "$BIN" uboot env --
 run_accept_case "uboot env --insecure --size $TEST_SIZE" "$BIN" uboot env --insecure --size "$TEST_SIZE"
 
 if [ "$(id -u)" -ne 0 ]; then
-    run_accept_case "uboot env --write https URL (accepted before root check)" \
-        "$BIN" uboot env --write https://127.0.0.1/fw_setenv_script.txt
+    run_accept_case "uboot env write-vars https URL (accepted before root check)" \
+        "$BIN" uboot env write-vars https://127.0.0.1/fw_setenv_script.txt
 fi
 
 if [ "$(id -u)" -eq 0 ]; then
@@ -101,8 +101,8 @@ image = struct.pack('<I', crc) + data
 with open(path, 'wb') as f:
     f.write(image)
 PY
-    run_exact_case "uboot env --parse-vars synthetic image" 0 \
-        "$BIN" --output-format txt uboot env --parse-vars --size "$TEST_SIZE" "$TMP_ENV_IMAGE:0x10000"
+    run_exact_case "uboot env read-vars synthetic image" 0 \
+        "$BIN" --output-format txt uboot env read-vars --size "$TEST_SIZE" "$TMP_ENV_IMAGE:0x10000"
     rm -f "$TMP_ENV_IMAGE"
 fi
 

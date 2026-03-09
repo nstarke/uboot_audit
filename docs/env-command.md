@@ -14,22 +14,22 @@ Scans MTD/UBI plus block devices (SD/eMMC such as `/dev/sd*` and `/dev/mmcblk*`)
 - `--skip-ubi` — skip UBI/ubiblock scan targets and helper node handling
 - `--skip-sd` — skip `/dev/sd*` scan targets
 - `--skip-emmc` — skip `/dev/mmcblk*` scan targets
-- `--parse-vars` — print parsed key/value variables from candidate environments (parsed via `libubootenv`)
+- `read-vars` — subcommand to print parsed key/value variables from candidate environments (parsed via `libubootenv`)
 - `--output-config[=<path>]` — write discovered `fw_env.config` lines to file (default `fw_env.config`)
 - `--output-tcp <IPv4:port>` — duplicate output to TCP destination
 - `--output-http <http://host:port/path>` — duplicate output to HTTP endpoint via POST
 - `--output-https <https://host:port/path>` — duplicate output to HTTPS endpoint via POST
 - `--insecure` — disable TLS certificate and hostname verification for HTTPS output
-- `--write <path|http(s)://...>` — apply env updates from a local text file or fetch the script from HTTP(S)
+- `write-vars <path|http(s)://...>` — subcommand to apply env updates from a local text file or fetch the script from HTTP(S)
 
-## `--write` behavior
+## `write-vars` behavior
 
 - Uses `./fw_env.config` for write settings and applies updates through `libubootenv` (built from source in `third_party/libubootenv`).
   - If `./fw_env.config` exists, it is used directly.
   - If it does not exist, the tool first runs scan logic to generate it, then writes.
-- When `--write` begins with `http://` or `https://`, the script is downloaded to a temporary file and then processed as a normal write script.
+- When `write-vars` argument begins with `http://` or `https://`, the script is downloaded to a temporary file and then processed as a normal write script.
   - HTTPS certificate/hostname verification uses the embedded CA bundle by default.
-  - `--insecure` can be used to disable HTTPS verification for `--write` URL downloads.
+- `--insecure` can be used to disable HTTPS verification for `write-vars` URL downloads.
 - Input file format (similar to `fw_setenv -s`):
   - `name=value` or `name value` → set variable
   - `name` (no value) → delete variable
@@ -57,7 +57,8 @@ Scans MTD/UBI plus block devices (SD/eMMC such as `/dev/sd*` and `/dev/mmcblk*`)
 ./uboot_audit uboot env --output-tcp 192.168.1.50:5000 --verbose
 ./uboot_audit uboot env --output-http http://192.168.1.50:5000/env --verbose
 ./uboot_audit uboot env --output-https https://192.168.1.50:5443/env --verbose
-./uboot_audit uboot env --write ./new_env.txt
+./uboot_audit uboot env read-vars --size 0x10000
+./uboot_audit uboot env write-vars ./new_env.txt
 ```
 
 For machine-readable output:

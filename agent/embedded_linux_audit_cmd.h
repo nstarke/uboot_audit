@@ -55,6 +55,9 @@ void uboot_crc32_init(uint32_t table[256]);
 uint32_t uboot_crc32_calc(const uint32_t table[256], const uint8_t *buf, size_t len);
 
 int uboot_env_scan_main(int argc, char **argv);
+int uboot_env_scan_core_main(int argc, char **argv);
+int uboot_env_read_vars_main(int argc, char **argv);
+int uboot_env_write_vars_main(int argc, char **argv);
 int uboot_image_scan_main(int argc, char **argv);
 int uboot_audit_scan_main(int argc, char **argv);
 int linux_dmesg_scan_main(int argc, char **argv);
