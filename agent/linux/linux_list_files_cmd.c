@@ -33,8 +33,9 @@ struct output_buffer {
 static void usage(const char *prog)
 {
 	fprintf(stderr,
-		"Usage: %s [absolute-directory] [--insecure]\n"
+		"Usage: %s [absolute-directory] [--insecure] [--suid-only]\n"
 		"  Recursively list files under the given absolute directory (default: /)\n"
+		"  When --suid-only is set, only files with the SUID bit set are returned\n"
 		"  When --output-http or --output-https is configured, POST the list to /:mac/upload/file-list\n",
 		prog);
 }
@@ -96,7 +97,8 @@ static int emit_path(const char *path,
 static int list_files_recursive(const char *dir_path,
 				int output_sock,
 				bool capture,
-				struct output_buffer *buf)
+				struct output_buffer *buf,
+				bool suid_only)
 {
 	DIR *dir;
 	struct dirent *de;
@@ -131,12 +133,15 @@ static int list_files_recursive(const char *dir_path,
 		}
 
 		if (S_ISDIR(st.st_mode)) {
-			if (list_files_recursive(child, output_sock, capture, buf) != 0) {
+			if (list_files_recursive(child, output_sock, capture, buf, suid_only) != 0) {
 				closedir(dir);
 				return -1;
 			}
 			continue;
 		}
+
+		if (suid_only && !(st.st_mode & S_ISUID))
+			continue;
 
 		if (emit_path(child, output_sock, capture, buf) != 0) {
 			closedir(dir);
@@ -156,6 +161,7 @@ int linux_list_files_scan_main(int argc, char **argv)
 	const char *output_uri = NULL;
 	const char *dir_path = "/";
 	bool insecure = false;
+	bool suid_only = false;
 	int output_sock = -1;
 	struct stat st;
 	struct output_buffer buf = {0};
@@ -170,11 +176,12 @@ int linux_list_files_scan_main(int argc, char **argv)
 		{ "output-http", required_argument, NULL, 'O' },
 		{ "output-https", required_argument, NULL, 'T' },
 		{ "insecure", no_argument, NULL, 'k' },
+		{ "suid-only", no_argument, NULL, 's' },
 		{ 0, 0, 0, 0 }
 	};
 
 	optind = 1;
-	while ((opt = getopt_long(argc, argv, "ho:O:T:k", long_opts, NULL)) != -1) {
+	while ((opt = getopt_long(argc, argv, "ho:O:T:ks", long_opts, NULL)) != -1) {
 		switch (opt) {
 		case 'h':
 			usage(argv[0]);
@@ -190,6 +197,9 @@ int linux_list_files_scan_main(int argc, char **argv)
 			break;
 		case 'k':
 			insecure = true;
+			break;
+		case 's':
+			suid_only = true;
 			break;
 		default:
 			usage(argv[0]);
@@ -250,7 +260,7 @@ int linux_list_files_scan_main(int argc, char **argv)
 		}
 	}
 
-	if (list_files_recursive(dir_path, output_sock, output_uri != NULL, &buf) != 0) {
+	if (list_files_recursive(dir_path, output_sock, output_uri != NULL, &buf, suid_only) != 0) {
 		ret = 1;
 		goto out;
 	}

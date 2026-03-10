@@ -58,7 +58,7 @@ sh tests/agent/test_efi_bios_orom_args.sh
 - `test_uboot_image_args.sh`: validates accepted/expected behavior of `uboot image` arguments and mode combinations.
 - `test_uboot_audit_args.sh`: validates accepted/expected behavior of `uboot audit` arguments, output formats, and rule selections.
 - `test_linux_dmesg_args.sh`: validates accepted/expected behavior of `linux dmesg` arguments and `--output-format` warning behavior.
-- `test_linux_list_files_args.sh`: validates accepted/expected behavior of `linux list-files` arguments, directory requirements, remote output options, and `--output-format` warning behavior.
+- `test_linux_list_files_args.sh`: validates accepted/expected behavior of `linux list-files` arguments, directory requirements, remote output options, `--suid-only` filtering, and `--output-format` warning behavior.
 - `test_linux_remote_copy_args.sh`: validates accepted/expected behavior of `linux remote-copy` arguments and transfer-target constraints.
 - `test_efi_bios_orom_args.sh`: validates accepted/expected behavior of `efi/bios orom` arguments.
 
