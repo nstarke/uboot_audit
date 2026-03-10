@@ -7,7 +7,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <termios.h>
 #include <sys/types.h>
+#include <unistd.h>
 
 #if defined(ELA_HAS_READLINE)
 #include <readline/history.h>
@@ -68,6 +70,9 @@ static char **interactive_completion(const char *text, int start, int end);
 #endif
 static void interactive_free_argv(char **argv, int argc);
 static int interactive_parse_line(const char *line, char ***argv_out, int *argc_out);
+static void interactive_restore_terminal(int tty_fd,
+					 const struct termios *saved_termios,
+					 bool have_saved_termios);
 
 static void interactive_usage(const char *prog)
 {
@@ -410,10 +415,29 @@ static int interactive_parse_line(const char *line, char ***argv_out, int *argc_
 	return 0;
 }
 
+static void interactive_restore_terminal(int tty_fd,
+					 const struct termios *saved_termios,
+					 bool have_saved_termios)
+{
+	if (tty_fd < 0 || !saved_termios || !have_saved_termios)
+		return;
+
+	(void)tcsetattr(tty_fd, TCSANOW, saved_termios);
+}
+
 static int interactive_loop(const char *prog)
 {
 	char *line;
 	int last_rc = 0;
+	int tty_fd = -1;
+	struct termios saved_termios;
+	bool have_saved_termios = false;
+
+	if (isatty(STDIN_FILENO)) {
+		tty_fd = STDIN_FILENO;
+		if (tcgetattr(tty_fd, &saved_termios) == 0)
+			have_saved_termios = true;
+	}
 
 	printf("Entering interactive mode for %s. Type 'help' for commands or 'quit' to exit.\n\n", prog);
 	interactive_usage(prog);
@@ -432,6 +456,7 @@ static int interactive_loop(const char *prog)
 		char prompt[128];
 
 		snprintf(prompt, sizeof(prompt), "%s> ", prog);
+		interactive_restore_terminal(tty_fd, &saved_termios, have_saved_termios);
 		line = readline(prompt);
 		if (!line) {
 			putchar('\n');
@@ -445,6 +470,7 @@ static int interactive_loop(const char *prog)
 		size_t line_cap = 0;
 
 		snprintf(prompt, sizeof(prompt), "%s> ", prog);
+		interactive_restore_terminal(tty_fd, &saved_termios, have_saved_termios);
 		fputs(prompt, stdout);
 		fflush(stdout);
 		line = NULL;
@@ -510,6 +536,8 @@ static int interactive_loop(const char *prog)
 		interactive_free_argv(argv, argc);
 		free(line);
 	}
+
+	interactive_restore_terminal(tty_fd, &saved_termios, have_saved_termios);
 
 	return last_rc;
 }
