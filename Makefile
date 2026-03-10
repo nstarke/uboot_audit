@@ -147,7 +147,7 @@ static: LDFLAGS += -static
 static: all
 
 test:
-	bash tests/test_all.sh
+	bash tests/agent/test_all.sh
 
 clean:
 	rm -f $(TARGET)

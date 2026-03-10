@@ -3,7 +3,7 @@
 set -u
 
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 BIN="$REPO_ROOT/embedded_linux_audit"
 
 TEST_OUTPUT_HTTP="${TEST_OUTPUT_HTTP:-}"
@@ -50,7 +50,7 @@ fi
 export TEST_OUTPUT_HTTP
 export TEST_OUTPUT_HTTPS
 
-# shellcheck source=tests/common.sh
+# shellcheck source=tests/agent/common.sh
 . "$SCRIPT_DIR/common.sh"
 
 require_binary "$BIN"

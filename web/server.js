@@ -307,7 +307,7 @@ function parseArgs(argv) {
     logPrefix: 'post_requests',
     repo: 'nstarke/embedded_linux_audit',
     assetsDir: 'data/release_binaries',
-    testsDir: 'tests',
+    testsDir: 'tests/agent',
     binaryOutDir: '',
     githubToken: process.env.GITHUB_TOKEN || '',
     forceDownload: false,

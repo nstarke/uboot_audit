@@ -40,4 +40,4 @@ POST handling notes:
 - `/upload/log` and `/upload/logs` are both accepted and stored under `web/data/<startup_timestamp>/<mac_address>/logs/`.
 - downloaded release binaries are cached separately under `web/data/release_binaries`.
 - `GET /` returns an HTML index of release binaries and test scripts.
-- `GET /tests/:name`, `GET /isa/:isa`, and `GET /uboot-env/:env_filename` serve test scripts, ISA binaries, and U-Boot environment helper files respectively.
+- `GET /tests/:name`, `GET /isa/:isa`, and `GET /uboot-env/:env_filename` serve agent test scripts, ISA binaries, and U-Boot environment helper files respectively.
