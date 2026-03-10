@@ -76,6 +76,7 @@ int uboot_image_scan_main(int argc, char **argv);
 int embedded_linux_audit_scan_main(int argc, char **argv);
 int linux_dmesg_scan_main(int argc, char **argv);
 int linux_execute_command_scan_main(int argc, char **argv);
+int linux_grep_scan_main(int argc, char **argv);
 int linux_list_files_scan_main(int argc, char **argv);
 int linux_list_symlinks_scan_main(int argc, char **argv);
 int linux_remote_copy_scan_main(int argc, char **argv);

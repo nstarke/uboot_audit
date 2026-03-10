@@ -49,6 +49,7 @@ static const char *const interactive_group_uboot[] = {
 static const char *const interactive_group_linux[] = {
 	"dmesg",
 	"execute-command",
+	"grep",
 	"list-files",
 	"list-symlinks",
 	"remote-copy",
@@ -130,6 +131,7 @@ static void interactive_usage(const char *prog)
 	       "  uboot audit\n"
 	       "  linux dmesg\n"
 	       "  linux execute-command\n"
+	       "  linux grep\n"
 	       "  linux list-files\n"
 	       "  linux list-symlinks\n"
 	       "  linux remote-copy\n"
@@ -853,6 +855,7 @@ static void usage(const char *prog)
 		"  uboot audit        Run U-Boot audit rules\n"
 		"  linux dmesg        Dump kernel ring buffer output\n"
 		"  linux execute-command Execute a shell command and capture/upload its output\n"
+		"  linux grep         Search files in a directory for a string\n"
 		"  linux list-files   List files under a directory (use --recursive to recurse)\n"
 		"  linux list-symlinks List symlinks under a directory (use --recursive to recurse)\n"
 		"  linux remote-copy  Copy a local file to remote destination\n"
@@ -869,13 +872,14 @@ static void usage(const char *prog)
 		"  %s uboot audit --dev /dev/mtdblock4 --offset 0x0 --size 0x10000\n"
 		"  %s --output-http http://127.0.0.1:5000/dmesg linux dmesg\n"
 		"  %s --output-format json --output-http http://127.0.0.1:5000 linux execute-command \"uname -a\"\n"
+		"  %s --output-http http://127.0.0.1:5000 linux grep --search root --path /etc --recursive\n"
 		"  %s --output-http http://127.0.0.1:5000 linux list-files /etc\n"
 		"  %s --output-format json --output-http http://127.0.0.1:5000 linux list-symlinks /etc --recursive\n"
 		"  %s --output-https https://127.0.0.1:5443 linux remote-copy /tmp/fw.bin\n"
 		"  %s --quiet --output-http http://127.0.0.1:5000/orom efi orom pull\n"
 		"  %s --quiet --output-tcp 127.0.0.1:5001 bios orom list\n"
 		"  %s --output-format json --script ./commands.txt\n",
-		prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog);
+		prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog);
 }
 
 static bool is_http_script_source(const char *value)
@@ -1365,6 +1369,12 @@ static int embedded_linux_audit_dispatch(int argc, char **argv)
 
 		if (!strcmp(argv[sub_idx], "execute-command"))
 			ret = linux_execute_command_scan_main(argc - sub_idx, argv + sub_idx);
+		else if (!strcmp(argv[sub_idx], "grep")) {
+			if (output_format_explicit)
+				fprintf(stderr,
+					"Warning: --output-format has no effect for grep; output is always text/plain\n");
+			ret = linux_grep_scan_main(argc - sub_idx, argv + sub_idx);
+		}
 		else if (!strcmp(argv[sub_idx], "remote-copy")) {
 			if (output_format_explicit)
 				fprintf(stderr,
