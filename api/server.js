@@ -65,7 +65,7 @@ function augmentJsonPayload(payloadBuffer, timestamp, srcIp) {
       if (obj === null || Array.isArray(obj) || typeof obj !== 'object') {
         return payloadBuffer;
       }
-      obj.timestamp = timestamp;
+      obj.api_timestamp = timestamp;
       obj.src_ip = srcIp;
       outLines.push(JSON.stringify(obj));
       changed = true;
@@ -80,7 +80,7 @@ function augmentJsonPayload(payloadBuffer, timestamp, srcIp) {
   if (obj === null || Array.isArray(obj) || typeof obj !== 'object') {
     return payloadBuffer;
   }
-  obj.timestamp = timestamp;
+  obj.api_timestamp = timestamp;
   obj.src_ip = srcIp;
   return Buffer.from(`${JSON.stringify(obj)}\n`, 'utf8');
 }

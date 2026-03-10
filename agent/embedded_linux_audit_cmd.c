@@ -172,7 +172,7 @@ static int build_lifecycle_payload(const char *output_format,
 		return -1;
 
 	if (!strcmp(fmt, "json")) {
-		if (append_text(&buf, &len, &cap, "{\"record\":\"log\",\"timestamp\":\"") != 0 ||
+		if (append_text(&buf, &len, &cap, "{\"record\":\"log\",\"agent_timetsamp\":\"") != 0 ||
 		    append_json_escaped(&buf, &len, &cap, ts_buf) != 0 ||
 		    append_text(&buf, &len, &cap, "\",\"phase\":\"") != 0 ||
 		    append_json_escaped(&buf, &len, &cap, phase) != 0 ||
@@ -195,7 +195,7 @@ static int build_lifecycle_payload(const char *output_format,
 		    append_text(&buf, &len, &cap, "\n") != 0)
 			goto fail;
 	} else {
-		if (append_text(&buf, &len, &cap, "log timestamp=") != 0 ||
+		if (append_text(&buf, &len, &cap, "log agent_timetsamp=") != 0 ||
 		    append_text(&buf, &len, &cap, ts_buf) != 0 ||
 		    append_text(&buf, &len, &cap, " phase=") != 0 ||
 		    append_text(&buf, &len, &cap, phase) != 0 ||
