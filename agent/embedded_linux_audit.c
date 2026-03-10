@@ -24,7 +24,7 @@ static void usage(const char *prog)
 		"  uboot image        Scan or extract U-Boot images\n"
 		"  uboot audit        Run U-Boot audit rules\n"
 		"  linux dmesg        Dump kernel ring buffer output\n"
-		"  linux list-files   Recursively list files under a directory\n"
+		"  linux list-files   List files under a directory (use --recursive to recurse)\n"
 		"  linux remote-copy  Copy a local file to remote destination\n"
 		"  efi orom           EFI option ROM utilities (pull/list)\n"
 		"  bios orom          BIOS option ROM utilities (pull/list)\n"
