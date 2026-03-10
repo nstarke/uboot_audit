@@ -20,7 +20,32 @@ const registerAssetRoute = require('./routes/assets');
 const registerUploadRoute = require('./routes/upload');
 
 const RELEASE_STATE_FILE = '.release_state.json';
-const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
+
+function findProjectRoot(startDir) {
+  const markers = [
+    ['tests', 'agent', 'download_tests.sh'],
+    ['api', 'agent', 'package.json'],
+    ['Makefile']
+  ];
+
+  let current = path.resolve(startDir);
+  while (true) {
+    const hasAllMarkers = markers.every((segments) => fs.existsSync(path.join(current, ...segments)));
+    if (hasAllMarkers) {
+      return current;
+    }
+
+    const parent = path.dirname(current);
+    if (parent === current) {
+      break;
+    }
+    current = parent;
+  }
+
+  return path.resolve(startDir, '..', '..');
+}
+
+const PROJECT_ROOT = findProjectRoot(__dirname);
 const WEB_ROOT = __dirname;
 const VALID_UPLOAD_TYPES = new Set(['cmd', 'dmesg', 'file', 'file-list', 'log', 'logs', 'orom', 'symlink-list', 'uboot-image', 'uboot-environment']);
 const VALID_CONTENT_TYPES = {

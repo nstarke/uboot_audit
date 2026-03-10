@@ -15,6 +15,7 @@ trap 'rm -rf "$TMPDIR_ARGS"' EXIT INT TERM
 
 TEST_TMPDIR_ARGS="$TMPDIR_ARGS" REPO_ROOT="$REPO_ROOT" node - <<'NODE'
 const path = require('path');
+const fs = require('fs');
 const repoRoot = process.env.REPO_ROOT;
 const tmpDir = process.env.TEST_TMPDIR_ARGS;
 const { parseArgs, printHelp } = require(path.join(repoRoot, 'api', 'agent', 'server.js'));
@@ -36,6 +37,10 @@ if (serverModule.PROJECT_ROOT !== repoRoot) {
 
 if (serverModule.resolveProjectPath('tests') !== path.join(repoRoot, 'tests')) {
   fail(`expected resolveProjectPath('tests') to resolve under repo root, got: ${serverModule.resolveProjectPath('tests')}`);
+}
+
+if (!fs.existsSync(serverModule.resolveProjectPath('tests/agent/download_tests.sh'))) {
+  fail(`expected download_tests.sh to exist at resolved path, got: ${serverModule.resolveProjectPath('tests/agent/download_tests.sh')}`);
 }
 
 let help = '';
