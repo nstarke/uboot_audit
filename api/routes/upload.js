@@ -44,6 +44,8 @@ module.exports = function registerUploadRoute(app, deps) {
       case 'log':
       case 'logs':
         return path.join(targetDir, 'log');
+      case 'dmesg':
+        return path.join(targetDir, `dmesg.${new Date().toISOString().replace(/[-:]/g, '').replace(/\..+/, 'Z')}`);
       default:
         return path.join(targetDir, uploadType);
     }

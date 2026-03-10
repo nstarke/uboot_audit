@@ -54,8 +54,14 @@ run_curl_case "POST logs alias stores in same directory" POST "$TEST_WEB_BASE_UR
 assert_file_contains "logs upload appends csv log" "$MAC_DIR/logs/log.text_csv.log" "col1,col2"
 
 run_curl_case "POST ndjson augments object payload" POST "$TEST_WEB_BASE_URL/$MAC/upload/dmesg" 200 "ok" -H "Content-Type: application/x-ndjson" --data-binary '{"event":"boot"}'
-assert_file_contains "ndjson upload records timestamp" "$MAC_DIR/dmesg/dmesg.application_x_ndjson.log" '"timestamp"'
-assert_file_contains "ndjson upload records source ip" "$MAC_DIR/dmesg/dmesg.application_x_ndjson.log" '"src_ip"'
+dmesg_log="$(find "$MAC_DIR/dmesg" -maxdepth 1 -type f -name 'dmesg.*.application_x_ndjson.log' | head -n 1)"
+if [ -n "$dmesg_log" ]; then
+    pass_case "ndjson upload creates timestamped dmesg log"
+else
+    fail_case "ndjson upload creates timestamped dmesg log" sh -c "find \"$MAC_DIR/dmesg\" -maxdepth 1 -type f -print 2>/dev/null || true"
+fi
+assert_file_contains "ndjson upload records timestamp" "$dmesg_log" '"timestamp"'
+assert_file_contains "ndjson upload records source ip" "$dmesg_log" '"src_ip"'
 
 run_curl_case "POST invalid json falls back to raw body" POST "$TEST_WEB_BASE_URL/$MAC/upload/orom" 200 "ok" -H "Content-Type: text/plain" --data-binary '{not-json}'
 assert_file_contains "invalid json payload remains raw" "$MAC_DIR/orom/orom.text_plain.log" "{not-json}"
