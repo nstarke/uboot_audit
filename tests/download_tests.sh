@@ -46,75 +46,45 @@ cmd_exists() {
 list_valid_isas_from_index_file() {
     index_file="$1"
 
-    tr -d '\r' <"$index_file" | \
-        sed 's/[^A-Za-z0-9_./-]/\
-/g' | \
-        grep '^/*\(embedded_linux_audit\|uboot_audit\)-[A-Za-z0-9._-]\+$' | \
-        sed 's#^/*##' | \
-        sed 's#^embedded_linux_audit-##' | \
-        sed 's#^uboot_audit-##' | \
-        sort -u
+    sed -n 's#.*href="/isa/\([^"]*\)".*#\1#p' "$index_file" | \
+        tr -d '\r' | sed 's/%2F/\//g' | sed 's/[[:space:]]*$//' | sed '/^$/d' | sort -u
 }
 
-find_release_binary_name_for_isa() {
+find_release_binary_url_for_isa() {
     index_file="$1"
     isa="$2"
-    want_embedded="embedded_linux_audit-$isa"
-    want_legacy="uboot_audit-$isa"
 
-    # Prefer the current binary name, but keep compatibility with older releases.
-    bin_name=""
-    for candidate in $(
-        tr -d '\r' <"$index_file" | \
-            sed 's/[^A-Za-z0-9_./-]/\
-/g' | \
-            grep '^/*embedded_linux_audit-[A-Za-z0-9._-]\+$' | \
-            sed 's#^/*##'
-    ); do
-        if [ "$candidate" = "$want_embedded" ]; then
-            bin_name="$candidate"
-            break
-        fi
-    done
+    sed -n "s#.*href=\"\(/isa/${isa}\)\".*#\1#p" "$index_file" | \
+        tr -d '\r' | sed 's/[[:space:]]*$//' | sed '/^$/d' | head -n 1
+}
 
-    if [ -n "$bin_name" ]; then
-        echo "$bin_name"
-        return 0
-    fi
+resolve_url() {
+    base_url="$1"
+    rel_or_abs="$2"
 
-    bin_name=""
-    for candidate in $(
-        tr -d '\r' <"$index_file" | \
-            sed 's/[^A-Za-z0-9_./-]/\
-/g' | \
-            grep '^/*uboot_audit-[A-Za-z0-9._-]\+$' | \
-            sed 's#^/*##'
-    ); do
-        if [ "$candidate" = "$want_legacy" ]; then
-            bin_name="$candidate"
-            break
-        fi
-    done
-
-    if [ -n "$bin_name" ]; then
-        echo "$bin_name"
-        return 0
-    fi
-
-    return 1
+    case "$rel_or_abs" in
+        http://*|https://*)
+            echo "$rel_or_abs"
+            ;;
+        /*)
+            base_origin="$(echo "$base_url" | sed 's#^\(https\{0,1\}://[^/]*\).*#\1#')"
+            echo "$base_origin$rel_or_abs"
+            ;;
+        *)
+            echo "${base_url%/}/$rel_or_abs"
+            ;;
+    esac
 }
 
 normalize_isa_value() {
     value="$1"
-    # Strip carriage returns/newlines that may be introduced by copy/paste or CRLF sources.
     if has_printf; then
         printf '%s' "$value" | tr -d '\r\n' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//'
     else
-        # shell fallback when printf is unavailable
-        cat <<EOF_NORMALIZE_ISA | tr -d '\r\n'
+        cat <<EOF_NORMALIZE_ISA | tr -d '\r\n' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//'
 $value
 EOF_NORMALIZE_ISA
-    fi | sed 's/^[[:space:]]*//; s/[[:space:]]*$//'
+    fi
 }
 
 print_valid_isas() {
@@ -268,10 +238,8 @@ fi
 
 echo "output directory: $DEST_DIR"
 
-sed 's/[^A-Za-z0-9_./-]/\
-/g' "$INDEX_FILE" | \
-    grep '^/*tests/.*\.sh$' | \
-    sed 's#^/*##' | sort -u >"$SCRIPT_LIST_FILE"
+sed -n 's#.*href="\(/tests/[^"]*\.sh\)".*#\1#p' "$INDEX_FILE" | \
+    tr -d '\r' | sed 's/[[:space:]]*$//' | sed '/^$/d' | sort -u >"$SCRIPT_LIST_FILE"
 
 if [ ! -s "$SCRIPT_LIST_FILE" ]; then
     echo "error: no test shell scripts found in index at $BASE_URL/"
@@ -279,28 +247,28 @@ if [ ! -s "$SCRIPT_LIST_FILE" ]; then
 fi
 
 while IFS= read -r rel_path; do
+    script_url="$(resolve_url "$BASE_URL" "$rel_path")"
     script_file="$(basename "$rel_path")"
 
     if [ "$script_file" = "$SCRIPT_NAME" ]; then
         continue
     fi
 
-    url="$BASE_URL/$rel_path"
     dest="$DEST_DIR/$script_file"
 
-    echo "downloading $url -> $dest"
+    echo "downloading $script_url -> $dest"
 
-    fetch_to_file "$url" "$dest"
+    fetch_to_file "$script_url" "$dest"
     chmod +x "$dest"
 done <"$SCRIPT_LIST_FILE"
 
-AUDIT_BINARY_NAME="$(find_release_binary_name_for_isa "$INDEX_FILE" "$ISA")"
-if [ -z "$AUDIT_BINARY_NAME" ]; then
-    echo "error: could not find a release binary for ISA '$ISA' in index at $BASE_URL/"
+AUDIT_BINARY_PATH="$(find_release_binary_url_for_isa "$INDEX_FILE" "$ISA")"
+if [ -z "$AUDIT_BINARY_PATH" ]; then
+    echo "error: could not find a release binary URL for ISA '$ISA' in index at $BASE_URL/"
     exit 1
 fi
 
-AUDIT_BINARY_URL="$BASE_URL/$AUDIT_BINARY_NAME"
+AUDIT_BINARY_URL="$(resolve_url "$BASE_URL" "$AUDIT_BINARY_PATH")"
 AUDIT_BINARY_TMP="$(mktemp /tmp/embedded_linux_audit.XXXXXX)"
 AUDIT_BINARY_DEST="/tmp/embedded_linux_audit"
 

@@ -425,6 +425,7 @@ static void append_output_http_buffer(const char *buf, size_t len)
 static int flush_output_http_buffer(void)
 {
 	char errbuf[256];
+	char *upload_uri;
 
 	if (!g_output_http_uri)
 		return 0;
@@ -432,7 +433,11 @@ static int flush_output_http_buffer(void)
 	if (g_output_http_len == 0)
 		return 0;
 
-	if (uboot_http_post(g_output_http_uri,
+	upload_uri = uboot_http_build_upload_uri(g_output_http_uri, "uboot-environment", NULL);
+	if (!upload_uri)
+		return -1;
+
+	if (uboot_http_post(upload_uri,
 			 (const uint8_t *)(g_output_http_buf ? g_output_http_buf : ""),
 			 g_output_http_len,
 			 env_http_content_type(),
@@ -440,10 +445,13 @@ static int flush_output_http_buffer(void)
 			 g_verbose,
 			 errbuf,
 			 sizeof(errbuf)) < 0) {
-		err_printf("Failed to POST output to %s: %s\n", g_output_http_uri,
+		err_printf("Failed to POST output to %s: %s\n", upload_uri,
 			   errbuf[0] ? errbuf : "unknown error");
+		free(upload_uri);
 		return -1;
 	}
+
+	free(upload_uri);
 
 	g_output_http_len = 0;
 	if (g_output_http_buf)
@@ -472,6 +480,9 @@ static void emit_v(FILE *stream, const char *fmt, va_list ap)
 	char stack[1024];
 	char *dyn = NULL;
 	int needed;
+	bool mirror_to_remote;
+
+	mirror_to_remote = (stream == stdout);
 
 	va_copy(aq, ap);
 	vfprintf(stream, fmt, ap);
@@ -484,8 +495,10 @@ static void emit_v(FILE *stream, const char *fmt, va_list ap)
 		return;
 
 	if ((size_t)needed < sizeof(stack)) {
-		send_to_output_socket(stack, (size_t)needed);
-		append_output_http_buffer(stack, (size_t)needed);
+		if (mirror_to_remote) {
+			send_to_output_socket(stack, (size_t)needed);
+			append_output_http_buffer(stack, (size_t)needed);
+		}
 		return;
 	}
 
@@ -496,8 +509,10 @@ static void emit_v(FILE *stream, const char *fmt, va_list ap)
 	va_copy(aq, ap);
 	vsnprintf(dyn, (size_t)needed + 1, fmt, aq);
 	va_end(aq);
-	send_to_output_socket(dyn, (size_t)needed);
-	append_output_http_buffer(dyn, (size_t)needed);
+	if (mirror_to_remote) {
+		send_to_output_socket(dyn, (size_t)needed);
+		append_output_http_buffer(dyn, (size_t)needed);
+	}
 	free(dyn);
 }
 

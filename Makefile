@@ -158,3 +158,5 @@ clean:
 	rm -rf $(CURL_DIR)/build*
 	-cd $(OPENSSL_DIR) && $(MAKE) distclean >/dev/null 2>&1 || true
 	rm -rf $(OPENSSL_BUILD)
+	-git submodule foreach --recursive 'git clean -xfd >/dev/null 2>&1 || true'
+	-git submodule foreach --recursive 'git reset --hard >/dev/null 2>&1 || true'

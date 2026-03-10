@@ -3,3 +3,5 @@ embedded_linux_audit
 generated/
 __pycache__
 release_binaries
+node_modules
+web/data/*

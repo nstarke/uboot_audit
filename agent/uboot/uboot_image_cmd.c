@@ -59,6 +59,7 @@ static void err_printf(const char *fmt, ...);
 static int flush_output_http_buffer(void)
 {
 	char errbuf[256];
+	char *upload_uri;
 
 	if (!g_output_http_uri)
 		return 0;
@@ -66,7 +67,11 @@ static int flush_output_http_buffer(void)
 	if (g_output_http_len == 0)
 		return 0;
 
-	if (uboot_http_post(g_output_http_uri,
+	upload_uri = uboot_http_build_upload_uri(g_output_http_uri, "log", NULL);
+	if (!upload_uri)
+		return -1;
+
+	if (uboot_http_post(upload_uri,
 			 (const uint8_t *)(g_output_http_buf ? g_output_http_buf : ""),
 			 g_output_http_len,
 			 image_http_content_type(),
@@ -74,10 +79,13 @@ static int flush_output_http_buffer(void)
 			 g_verbose,
 			 errbuf,
 			 sizeof(errbuf)) < 0) {
-		err_printf("Failed to POST output to %s: %s\n", g_output_http_uri,
+		err_printf("Failed to POST output to %s: %s\n", upload_uri,
 			errbuf[0] ? errbuf : "unknown error");
+		free(upload_uri);
 		return -1;
 	}
+
+	free(upload_uri);
 
 	g_output_http_len = 0;
 	if (g_output_http_buf)
@@ -105,6 +113,9 @@ static void emit_v(FILE *stream, const char *fmt, va_list ap)
 	char stack[1024];
 	char *dyn = NULL;
 	int needed;
+	bool mirror_to_remote;
+
+	mirror_to_remote = (stream == stdout);
 
 	va_copy(aq, ap);
 	vfprintf(stream, fmt, ap);
@@ -117,9 +128,9 @@ static void emit_v(FILE *stream, const char *fmt, va_list ap)
 		return;
 
 	if ((size_t)needed < sizeof(stack)) {
-		if (g_log_sock >= 0)
+		if (mirror_to_remote && g_log_sock >= 0)
 			uboot_send_all(g_log_sock, (const uint8_t *)stack, (size_t)needed);
-		if (g_output_http_uri) {
+		if (mirror_to_remote && g_output_http_uri) {
 			size_t need = g_output_http_len + (size_t)needed + 1;
 			if (need > g_output_http_cap) {
 				size_t new_cap = g_output_http_cap ? g_output_http_cap : 1024;
@@ -150,9 +161,9 @@ static void emit_v(FILE *stream, const char *fmt, va_list ap)
 	va_copy(aq, ap);
 	vsnprintf(dyn, (size_t)needed + 1, fmt, aq);
 	va_end(aq);
-	if (g_log_sock >= 0)
+	if (mirror_to_remote && g_log_sock >= 0)
 		uboot_send_all(g_log_sock, (const uint8_t *)dyn, (size_t)needed);
-	if (g_output_http_uri) {
+	if (mirror_to_remote && g_output_http_uri) {
 		size_t need = g_output_http_len + (size_t)needed + 1;
 		if (need > g_output_http_cap) {
 			size_t new_cap = g_output_http_cap ? g_output_http_cap : 1024;
@@ -1192,6 +1203,8 @@ static int pull_image_to_output_http(const char *dev, uint64_t offset, const cha
 	uint8_t *img = NULL;
 	int fd;
 	char errbuf[256];
+	char file_path[512];
+	char *upload_uri = NULL;
 
 	fd = open(dev, O_RDONLY | O_CLOEXEC);
 	if (fd < 0) {
@@ -1239,11 +1252,21 @@ static int pull_image_to_output_http(const char *dev, uint64_t offset, const cha
 		return 1;
 	}
 
-	if (uboot_http_post(output_http_uri, img, (size_t)total_size,
+	snprintf(file_path, sizeof(file_path), "%s@0x%jx.bin", dev, (uintmax_t)offset);
+	upload_uri = uboot_http_build_upload_uri(output_http_uri, "uboot-image", file_path);
+	if (!upload_uri) {
+		err_printf("Failed to build upload URI for %s\n", dev);
+		free(img);
+		close(fd);
+		return 1;
+	}
+
+	if (uboot_http_post(upload_uri, img, (size_t)total_size,
 			 g_pull_binary_content_type, g_insecure,
 			 g_verbose,
 			 errbuf, sizeof(errbuf)) < 0) {
-		err_printf("Failed HTTP POST to %s: %s\n", output_http_uri, errbuf[0] ? errbuf : "unknown error");
+		err_printf("Failed HTTP POST to %s: %s\n", upload_uri, errbuf[0] ? errbuf : "unknown error");
+		free(upload_uri);
 		free(img);
 		close(fd);
 		return 1;
@@ -1252,10 +1275,11 @@ static int pull_image_to_output_http(const char *dev, uint64_t offset, const cha
 	if (g_verbose) {
 		char msg[256];
 		snprintf(msg, sizeof(msg), "Pulled %ju bytes from %s @ 0x%jx to %s",
-			(uintmax_t)total_size, dev, (uintmax_t)offset, output_http_uri);
+			(uintmax_t)total_size, dev, (uintmax_t)offset, upload_uri);
 		emit_image_verbose(dev, offset, msg);
 	}
 
+	free(upload_uri);
 	free(img);
 	close(fd);
 	return 0;
