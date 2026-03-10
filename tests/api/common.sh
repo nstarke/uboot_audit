@@ -85,7 +85,6 @@ const app = createApp({
   assetsDir: path.join(tmpDir, 'assets'),
   dataDir: path.join(tmpDir, 'data'),
   testsDir: path.join(tmpDir, 'tests'),
-  binaryOutDir: path.join(tmpDir, 'binary_files'),
   verbose: false
 });
 

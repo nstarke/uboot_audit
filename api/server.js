@@ -309,7 +309,6 @@ function parseArgs(argv) {
     repo: 'nstarke/embedded_linux_audit',
     assetsDir: 'data/release_binaries',
     testsDir: 'tests',
-    binaryOutDir: '',
     githubToken: process.env.GITHUB_TOKEN || '',
     forceDownload: false,
     clean: defaultClean,
@@ -329,7 +328,6 @@ function parseArgs(argv) {
       case '--repo': args.repo = argv[++i]; break;
       case '--assets-dir': args.assetsDir = argv[++i]; break;
       case '--tests-dir': args.testsDir = argv[++i]; break;
-      case '--binary-out-dir': args.binaryOutDir = argv[++i]; break;
       case '--github-token': args.githubToken = argv[++i]; break;
       case '--force-download': args.forceDownload = true; break;
       case '--clean': args.clean = true; break;
@@ -354,7 +352,7 @@ function parseArgs(argv) {
 }
 
 function printHelp() {
-  console.log(`Usage: node server.js [options]\n\nOptions:\n  --host HOST\n  --port PORT\n  --log-prefix PREFIX\n  --repo OWNER/NAME\n  --assets-dir DIR\n  --tests-dir DIR\n  --binary-out-dir DIR\n  --github-token TOKEN\n  --force-download\n  --clean\n  --https\n  --verbose\n  --cert PATH\n  --key PATH\n  --help`);
+  console.log(`Usage: node server.js [options]\n\nOptions:\n  --host HOST\n  --port PORT\n  --log-prefix PREFIX\n  --repo OWNER/NAME\n  --assets-dir DIR\n  --tests-dir DIR\n  --github-token TOKEN\n  --force-download\n  --clean\n  --https\n  --verbose\n  --cert PATH\n  --key PATH\n  --help`);
 }
   
 function resolveProjectPath(targetPath) {
@@ -394,7 +392,7 @@ async function writeUploadFile(baseDir, relativePath, payload) {
   return dest;
 }
 
-function createApp({ logPrefix, assetsDir, dataDir, testsDir, binaryOutDir, verbose }) {
+function createApp({ logPrefix, assetsDir, dataDir, testsDir, verbose }) {
   const app = express();
   app.use(express.raw({ type: '*/*', limit: '100mb' }));
   const envDir = path.join(dataDir, 'env');
@@ -481,7 +479,6 @@ async function main() {
       ? defaultAssetsDir
       : path.resolve(defaultDataDir, args.assetsDir));
   const testsDir = resolveProjectPath(args.testsDir);
-  const binaryOutDir = resolveProjectPath(args.binaryOutDir || path.join(path.dirname(logPrefix), `${path.basename(logPrefix)}.binary_files`));
   const token = args.githubToken || null;
   const dataDir = defaultDataDir;
 
@@ -531,7 +528,7 @@ async function main() {
     return 1;
   }
 
-  const app = createApp({ logPrefix, assetsDir, dataDir, testsDir, binaryOutDir, verbose: args.verbose });
+  const app = createApp({ logPrefix, assetsDir, dataDir, testsDir, verbose: args.verbose });
   let server;
   let scheme = 'http';
 
@@ -556,7 +553,6 @@ async function main() {
   console.log(`Listening on ${scheme}://${args.host}:${args.port}/`);
   console.log(`Logging POST requests with prefix: ${logPrefix}`);
   console.log('Per-type logs: <prefix>.text_plain.log, <prefix>.text_csv.log, <prefix>.application_octet_stream.log');
-  console.log(`Binary uploads directory: ${binaryOutDir}`);
   console.log('GET / shows index of downloaded release binaries and test shell scripts');
 
   process.on('SIGINT', () => {
