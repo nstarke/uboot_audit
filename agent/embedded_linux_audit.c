@@ -24,6 +24,7 @@ static void usage(const char *prog)
 		"  uboot image        Scan or extract U-Boot images\n"
 		"  uboot audit        Run U-Boot audit rules\n"
 		"  linux dmesg        Dump kernel ring buffer output\n"
+		"  linux list-files   Recursively list files under a directory\n"
 		"  linux remote-copy  Copy a local file to remote destination\n"
 		"  efi orom           EFI option ROM utilities (pull/list)\n"
 		"  bios orom          BIOS option ROM utilities (pull/list)\n"
@@ -33,10 +34,11 @@ static void usage(const char *prog)
 		"  %s uboot image --dev /dev/mtdblock4 --step 0x1000\n"
 		"  %s uboot audit --dev /dev/mtdblock4 --offset 0x0 --size 0x10000\n"
 		"  %s --verbose --output-http http://127.0.0.1:5000/dmesg linux dmesg\n"
+		"  %s --output-http http://127.0.0.1:5000 linux list-files /etc\n"
 		"  %s --output-https https://127.0.0.1:5443/upload linux remote-copy /tmp/fw.bin\n"
 		"  %s --output-http http://127.0.0.1:5000/orom --verbose efi orom pull\n"
 		"  %s --output-tcp 127.0.0.1:5001 --verbose bios orom list\n",
-		prog, prog, prog, prog, prog, prog, prog, prog);
+		prog, prog, prog, prog, prog, prog, prog, prog, prog);
 }
 
 int main(int argc, char **argv)
@@ -254,6 +256,13 @@ int main(int argc, char **argv)
 				fprintf(stderr,
 					"Warning: --output-format has no effect for remote-copy; file transfer is raw bytes\n");
 			return linux_remote_copy_scan_main(argc - sub_idx, argv + sub_idx);
+		}
+
+		if (!strcmp(argv[sub_idx], "list-files")) {
+			if (output_format_explicit)
+				fprintf(stderr,
+					"Warning: --output-format has no effect for list-files; output is always text/plain\n");
+			return linux_list_files_scan_main(argc - sub_idx, argv + sub_idx);
 		}
 
 		fprintf(stderr, "Unknown linux subcommand: %s\n\n", argv[sub_idx]);

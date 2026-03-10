@@ -36,7 +36,7 @@ POST handling notes:
 - invalid or missing `Content-Type` values are rejected with HTTP `415`.
 - log output is split by content type into files derived from `--log-prefix` (for example `post_requests.text_plain.log`, `post_requests.text_csv.log`, and `post_requests.application_octet_stream.log`).
 - `application/octet-stream` uploads are additionally written as raw `.bin` files for later analysis (default directory: `<log-prefix>.binary_files`, override with `--binary-out-dir`).
-- runtime upload data is stored under `web/data/<startup_timestamp>/<mac_address>/...` for `fs`, `env`, `logs`, `dmesg`, `orom`, `uboot/image`, and `uboot/env`.
+- runtime upload data is stored under `web/data/<startup_timestamp>/<mac_address>/...` for `fs`, `file-list`, `env`, `logs`, `dmesg`, `orom`, `uboot/image`, and `uboot/env`.
 - downloaded release binaries are cached separately under `web/data/release_binaries`.
 - `GET /` returns an HTML index of release binaries and test scripts.
 - `GET /tests/:name`, `GET /isa/:isa`, and `GET /uboot-env/:env_filename` serve test scripts, ISA binaries, and U-Boot environment helper files respectively.

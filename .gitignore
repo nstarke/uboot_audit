@@ -5,3 +5,4 @@ __pycache__
 release_binaries
 node_modules
 web/data/*
+*.log

@@ -64,6 +64,7 @@ int uboot_env_write_vars_main(int argc, char **argv);
 int uboot_image_scan_main(int argc, char **argv);
 int embedded_linux_audit_scan_main(int argc, char **argv);
 int linux_dmesg_scan_main(int argc, char **argv);
+int linux_list_files_scan_main(int argc, char **argv);
 int linux_remote_copy_scan_main(int argc, char **argv);
 int efi_orom_main(int argc, char **argv);
 int bios_orom_main(int argc, char **argv);

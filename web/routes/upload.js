@@ -23,6 +23,8 @@ module.exports = function registerUploadRoute(app, deps) {
         return path.join(baseDir, 'logs');
       case 'dmesg':
         return path.join(baseDir, 'dmesg');
+      case 'file-list':
+        return path.join(baseDir, 'file-list');
       case 'orom':
         return path.join(baseDir, 'orom');
       case 'uboot-image':
@@ -48,6 +50,28 @@ module.exports = function registerUploadRoute(app, deps) {
       }
     }
     await fsp.symlink(symlinkTarget, dest);
+  }
+
+  function sanitizeFileListPath(filePath) {
+    if (!filePath || typeof filePath !== 'string') {
+      return null;
+    }
+
+    const normalized = path.posix.normalize(filePath.replace(/\\/g, '/'));
+    if (!normalized.startsWith('/')) {
+      return null;
+    }
+
+    if (normalized === '/..' || normalized.startsWith('/../') || normalized.includes('/../')) {
+      return null;
+    }
+
+    return normalized;
+  }
+
+  function fileListNameForPath(filePath) {
+    const stripped = filePath.replace(/^\/+/, '');
+    return (stripped ? stripped.replace(/\//g, '-') : 'root');
   }
 
   app.post('/:mac/upload/:type', async (req, res) => {
@@ -157,7 +181,21 @@ module.exports = function registerUploadRoute(app, deps) {
       const targetDir = uploadDirectoryForType(macDataDir, uploadType);
       await fsp.mkdir(targetDir, { recursive: true });
 
-      if (normalizedContentType === 'application/octet-stream') {
+      if (uploadType === 'file-list') {
+        const requestedListPath = sanitizeFileListPath(req.query.filePath);
+        if (!requestedListPath) {
+          const body = 'file-list uploads require absolute filePath\n';
+          res.status(400).type('text').send(body);
+          verboseResponseLog(req, 400, Buffer.byteLength(body));
+          return;
+        }
+
+        const targetListPath = path.join(targetDir, fileListNameForPath(requestedListPath));
+        await fsp.writeFile(
+          targetListPath,
+          payloadToLog[payloadToLog.length - 1] === 0x0a ? payloadToLog : Buffer.concat([payloadToLog, Buffer.from('\n')])
+        );
+      } else if (normalizedContentType === 'application/octet-stream') {
         const tsSafe = new Date().toISOString().replace(/[-:]/g, '').replace(/\..+/, 'Z').replace(/:/g, '');
         const unique = crypto.randomUUID().replace(/-/g, '').slice(0, 8);
         const safeIp = srcIp.replace(/:/g, '_');

@@ -21,7 +21,7 @@ const registerUploadRoute = require('./routes/upload');
 const RELEASE_STATE_FILE = '.release_state.json';
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 const WEB_ROOT = __dirname;
-const VALID_UPLOAD_TYPES = new Set(['dmesg', 'file', 'log', 'orom', 'uboot-image', 'uboot-environment']);
+const VALID_UPLOAD_TYPES = new Set(['dmesg', 'file', 'file-list', 'log', 'orom', 'uboot-image', 'uboot-environment']);
 const VALID_CONTENT_TYPES = {
   'text/plain': 'text_plain',
   'text/csv': 'text_csv',
