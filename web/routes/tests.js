@@ -1,19 +1,19 @@
-const { isSafeRelativePath } = require('./shared');
+const { isSafeSinglePathSegment } = require('./shared');
 
 module.exports = function registerTestsRoute(app, deps) {
   const { testsDir, fsp, isWithinRoot, verboseRequestLog, verboseResponseLog } = deps;
-  const testsRoute = /^\/tests\/(.+)$/;
+  const agentTestsDir = deps.path.join(testsDir, 'agent');
 
-  app.get(testsRoute, async (req, res) => {
+  app.get('/tests/agent/:name', async (req, res) => {
     verboseRequestLog(req);
-    const requestedPath = req.params[0];
-    if (!isSafeRelativePath(requestedPath)) {
+    const requestedPath = req.params.name;
+    if (!isSafeSinglePathSegment(requestedPath) || !requestedPath.endsWith('.sh')) {
       res.status(400).type('text').send('invalid path\n');
       verboseResponseLog(req, 400, 13);
       return;
     }
-    const candidate = deps.path.resolve(testsDir, requestedPath);
-    if (!isWithinRoot(candidate, testsDir)) {
+    const candidate = deps.path.resolve(agentTestsDir, requestedPath);
+    if (!isWithinRoot(candidate, agentTestsDir)) {
       res.status(404).type('text').send('not found\n');
       verboseResponseLog(req, 404, 10);
       return;
@@ -28,5 +28,11 @@ module.exports = function registerTestsRoute(app, deps) {
       res.status(404).type('text').send('not found\n');
       verboseResponseLog(req, 404, 10);
     }
+  });
+
+  app.get('/tests/*', (req, res) => {
+    verboseRequestLog(req);
+    res.status(404).type('text').send('not found\n');
+    verboseResponseLog(req, 404, 10);
   });
 };

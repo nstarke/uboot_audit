@@ -2,25 +2,21 @@ const { listBinaryEntries } = require('./shared');
 
 module.exports = function registerRootRoute(app, deps) {
   const { testsDir, fsp, verboseRequestLog, verboseResponseLog } = deps;
+  const agentTestsDir = deps.path.join(testsDir, 'agent');
 
-  async function listTestEntries(dir, prefix = '') {
+  async function listAgentTestEntries(dir) {
     const entries = await fsp.readdir(dir, { withFileTypes: true }).catch(() => []);
-    const nested = await Promise.all(entries.map(async (entry) => {
-      const relPath = prefix ? `${prefix}/${entry.name}` : entry.name;
-      const fullPath = deps.path.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        return listTestEntries(fullPath, relPath);
-      }
+    const tests = entries.map((entry) => {
       if (entry.isFile() && entry.name.endsWith('.sh')) {
         return [{
-          name: relPath,
-          url: `/tests/${encodeURIComponent(relPath).replace(/%2F/g, '/')}`
+          name: entry.name,
+          url: `/tests/agent/${encodeURIComponent(entry.name)}`
         }];
       }
       return [];
-    }));
+    });
 
-    return nested.flat().sort((a, b) => a.name.localeCompare(b.name));
+    return tests.flat().sort((a, b) => a.name.localeCompare(b.name));
   }
 
   function escapeHtml(value) {
@@ -35,15 +31,15 @@ module.exports = function registerRootRoute(app, deps) {
   app.get('/', async (req, res) => {
     verboseRequestLog(req);
     const binaryEntries = await listBinaryEntries(deps.assetsDir, fsp, deps.releaseStateFile);
-    const testEntries = await listTestEntries(testsDir);
+    const testEntries = await listAgentTestEntries(agentTestsDir);
 
     const assetItems = binaryEntries.length
       ? binaryEntries.map(({ fileName, url }) => `      <li><a href="${escapeHtml(url)}">${escapeHtml(fileName)}</a></li>`).join('\n')
       : '      <li><em>No binaries downloaded.</em></li>';
 
     const testItems = testEntries.length
-      ? testEntries.map(({ name, url }) => `      <li><a href="${escapeHtml(url)}">tests/${escapeHtml(name)}</a></li>`).join('\n')
-      : '      <li><em>No test shell scripts found.</em></li>';
+      ? testEntries.map(({ name, url }) => `      <li><a href="${escapeHtml(url)}">tests/agent/${escapeHtml(name)}</a></li>`).join('\n')
+      : '      <li><em>No agent test shell scripts found.</em></li>';
 
     const html = `<!doctype html>
 <html lang="en">
@@ -59,7 +55,7 @@ ${assetItems}
     </ul>
 
     <h1>Test Scripts</h1>
-    <p>Serving scripts from: ${escapeHtml(testsDir)}</p>
+    <p>Serving agent scripts from: ${escapeHtml(agentTestsDir)}</p>
     <ul>
 ${testItems}
     </ul>

@@ -39,5 +39,5 @@ POST handling notes:
 - runtime upload data is stored under `web/data/<startup_timestamp>/<mac_address>/...` for `fs`, `file-list`, `env`, `logs`, `dmesg`, `orom`, `uboot/image`, and `uboot/env`.
 - `/upload/log` and `/upload/logs` are both accepted and stored under `web/data/<startup_timestamp>/<mac_address>/logs/`.
 - downloaded release binaries are cached separately under `web/data/release_binaries`.
-- `GET /` returns an HTML index of release binaries and test scripts.
-- `GET /tests/<relative-path>`, `GET /isa/:isa`, and `GET /uboot-env/:env_filename` serve test scripts under `tests/` (for example `/tests/agent/download_tests.sh` and `/tests/web/test_all.sh`), ISA binaries, and U-Boot environment helper files respectively.
+- `GET /` returns an HTML index of release binaries and agent test scripts.
+- `GET /tests/agent/:name` serves `.sh` files from `tests/agent/` (for example `/tests/agent/download_tests.sh`). `GET /isa/:isa` and `GET /uboot-env/:env_filename` serve ISA binaries and U-Boot environment helper files respectively.
