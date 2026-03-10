@@ -221,6 +221,20 @@ async function clearDownloadedAssets(outDir) {
   }
 }
 
+async function removeDirectoryContents(dirPath) {
+  try {
+    const entries = await fsp.readdir(dirPath, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = path.join(dirPath, entry.name);
+      await fsp.rm(fullPath, { recursive: true, force: true });
+    }
+  } catch (err) {
+    if (err.code !== 'ENOENT') {
+      throw err;
+    }
+  }
+}
+
 async function downloadReleaseAssets(release, outDir, token, forceDownload) {
   await fsp.mkdir(outDir, { recursive: true });
   const assets = Array.isArray(release.assets) ? release.assets : [];
@@ -293,6 +307,7 @@ function parseArgs(argv) {
     binaryOutDir: '',
     githubToken: process.env.GITHUB_TOKEN || '',
     forceDownload: false,
+    clean: false,
     https: false,
     verbose: defaultVerbose,
     cert: 'tools/certs/localhost.crt',
@@ -312,6 +327,7 @@ function parseArgs(argv) {
       case '--binary-out-dir': args.binaryOutDir = argv[++i]; break;
       case '--github-token': args.githubToken = argv[++i]; break;
       case '--force-download': args.forceDownload = true; break;
+      case '--clean': args.clean = true; break;
       case '--https': args.https = true; break;
       case '--verbose': args.verbose = true; break;
       case '--cert': args.cert = argv[++i]; break;
@@ -333,7 +349,7 @@ function parseArgs(argv) {
 }
 
 function printHelp() {
-  console.log(`Usage: node server.js [options]\n\nOptions:\n  --host HOST\n  --port PORT\n  --log-prefix PREFIX\n  --repo OWNER/NAME\n  --assets-dir DIR\n  --tests-dir DIR\n  --binary-out-dir DIR\n  --github-token TOKEN\n  --force-download\n  --https\n  --verbose\n  --cert PATH\n  --key PATH\n  --help`);
+  console.log(`Usage: node server.js [options]\n\nOptions:\n  --host HOST\n  --port PORT\n  --log-prefix PREFIX\n  --repo OWNER/NAME\n  --assets-dir DIR\n  --tests-dir DIR\n  --binary-out-dir DIR\n  --github-token TOKEN\n  --force-download\n  --clean\n  --https\n  --verbose\n  --cert PATH\n  --key PATH\n  --help`);
 }
 
 function resolveProjectPath(targetPath) {
@@ -462,6 +478,10 @@ async function main() {
   const binaryOutDir = resolveProjectPath(args.binaryOutDir || path.join(path.dirname(logPrefix), `${path.basename(logPrefix)}.binary_files`));
   const token = args.githubToken || null;
   const dataDir = defaultDataDir;
+
+  if (args.clean) {
+    await removeDirectoryContents(path.join(WEB_ROOT, 'data'));
+  }
 
   await Promise.all([
     fsp.mkdir(path.join(WEB_ROOT, 'data'), { recursive: true }),
