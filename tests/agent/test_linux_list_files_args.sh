@@ -55,9 +55,6 @@ export TEST_OUTPUT_HTTPS
 require_binary "$BIN"
 print_section "linux list-files subcommand argument coverage"
 
-TEST_DISABLE_OUTPUT_OVERRIDE=1
-export TEST_DISABLE_OUTPUT_OVERRIDE
-
 TMP_DIR="$(mktemp -d /tmp/test_list_files_args.XXXXXX)"
 TMP_SUBDIR="$TMP_DIR/subdir"
 TMP_TOP_FILE="$TMP_DIR/top.txt"
