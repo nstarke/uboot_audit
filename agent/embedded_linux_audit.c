@@ -3,13 +3,23 @@
 #include "embedded_linux_audit_cmd.h"
 
 #include <ctype.h>
+#include <errno.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <termios.h>
+#include <fcntl.h>
 #include <sys/types.h>
 #include <unistd.h>
+
+#ifndef O_CLOEXEC
+#define O_CLOEXEC 0
+#endif
+
+#ifndef PATH_MAX
+#define PATH_MAX 4096
+#endif
 
 #if defined(ELA_HAS_READLINE)
 #include <readline/history.h>
@@ -65,6 +75,9 @@ static const char *const *interactive_completion_candidates;
 #endif
 
 static int embedded_linux_audit_dispatch(int argc, char **argv);
+static int execute_script_commands(const char *prog, const char *script_source);
+static bool is_http_script_source(const char *value);
+static char *script_trim(char *s);
 
 #if defined(ELA_HAS_READLINE)
 static char *interactive_completion_generator(const char *text, int state);
@@ -76,6 +89,26 @@ static void interactive_restore_terminal(int tty_fd,
 					 const struct termios *saved_termios,
 					 bool have_saved_termios);
 
+#if !defined(ELA_HAS_READLINE)
+struct interactive_history {
+	char **entries;
+	size_t count;
+	size_t cap;
+};
+
+static void interactive_history_free(struct interactive_history *history);
+static int interactive_history_add(struct interactive_history *history, const char *line);
+static int interactive_set_raw_mode(int tty_fd,
+				    const struct termios *saved_termios,
+				    bool have_saved_termios);
+static void interactive_redraw_prompt_line(const char *prompt, const char *line);
+static char *interactive_read_line_fallback(const char *prompt,
+					    int tty_fd,
+					    const struct termios *saved_termios,
+					    bool have_saved_termios,
+					    struct interactive_history *history);
+#endif
+
 static void interactive_usage(const char *prog)
 {
 	printf("Interactive mode commands:\n"
@@ -84,6 +117,8 @@ static void interactive_usage(const char *prog)
 
 #if defined(ELA_HAS_READLINE)
 	       "  <Tab>                         Complete commands/groups/subcommands\n"
+#else
+	       "  <Up>/<Down>                   Recall previous commands from history\n"
 #endif
 	       "  set                           Show supported interactive environment variables\n"
 	       "  set ELA_API_URL <url>         Set default HTTP/HTTPS upload endpoint\n"
@@ -427,6 +462,251 @@ static void interactive_restore_terminal(int tty_fd,
 	(void)tcsetattr(tty_fd, TCSANOW, saved_termios);
 }
 
+#if !defined(ELA_HAS_READLINE)
+static void interactive_history_free(struct interactive_history *history)
+{
+	if (!history)
+		return;
+
+	for (size_t i = 0; i < history->count; i++)
+		free(history->entries[i]);
+	free(history->entries);
+	history->entries = NULL;
+	history->count = 0;
+	history->cap = 0;
+}
+
+static int interactive_history_add(struct interactive_history *history, const char *line)
+{
+	char **tmp_entries;
+	char *copy;
+
+	if (!history || !line || !*line)
+		return 0;
+
+	copy = strdup(line);
+	if (!copy)
+		return -1;
+
+	if (history->count == history->cap) {
+		size_t new_cap = history->cap ? history->cap * 2 : 16;
+
+		tmp_entries = realloc(history->entries, new_cap * sizeof(*tmp_entries));
+		if (!tmp_entries) {
+			free(copy);
+			return -1;
+		}
+
+		history->entries = tmp_entries;
+		history->cap = new_cap;
+	}
+
+	history->entries[history->count++] = copy;
+	return 0;
+}
+
+static int interactive_set_raw_mode(int tty_fd,
+				    const struct termios *saved_termios,
+				    bool have_saved_termios)
+{
+	struct termios raw;
+
+	if (tty_fd < 0 || !saved_termios || !have_saved_termios)
+		return 0;
+
+	raw = *saved_termios;
+	raw.c_iflag &= (tcflag_t)~(IXON | ICRNL);
+	raw.c_lflag &= (tcflag_t)~(ICANON | ECHO);
+	raw.c_cc[VMIN] = 1;
+	raw.c_cc[VTIME] = 0;
+
+	return tcsetattr(tty_fd, TCSANOW, &raw);
+}
+
+static void interactive_redraw_prompt_line(const char *prompt, const char *line)
+{
+	printf("\r\033[2K%s%s", prompt ? prompt : "", line ? line : "");
+	fflush(stdout);
+}
+
+static char *interactive_read_line_fallback(const char *prompt,
+					    int tty_fd,
+					    const struct termios *saved_termios,
+					    bool have_saved_termios,
+					    struct interactive_history *history)
+{
+	char *line = NULL;
+	char *draft = NULL;
+	size_t len = 0;
+	size_t cap = 0;
+	ssize_t history_index;
+	bool tty_input;
+
+	tty_input = tty_fd >= 0 && have_saved_termios && isatty(tty_fd);
+	if (!tty_input) {
+		size_t line_cap = 0;
+
+		fputs(prompt, stdout);
+		fflush(stdout);
+		if (getline(&line, &line_cap, stdin) < 0) {
+			free(line);
+			return NULL;
+		}
+
+		if (line[0]) {
+			size_t line_len = strlen(line);
+
+			if (line_len > 0 && line[line_len - 1] == '\n')
+				line[line_len - 1] = '\0';
+		}
+
+		if (interactive_history_add(history, line) != 0) {
+			free(line);
+			return NULL;
+		}
+
+		return line;
+	}
+
+	if (interactive_set_raw_mode(tty_fd, saved_termios, have_saved_termios) != 0)
+		return NULL;
+
+	history_index = (ssize_t)(history ? history->count : 0);
+	interactive_redraw_prompt_line(prompt, "");
+
+	for (;;) {
+		unsigned char ch;
+		ssize_t nread = read(tty_fd, &ch, 1);
+
+		if (nread <= 0) {
+			if (nread < 0 && errno == EINTR)
+				continue;
+			free(line);
+			free(draft);
+			interactive_restore_terminal(tty_fd, saved_termios, have_saved_termios);
+			return NULL;
+		}
+
+		if (ch == '\r' || ch == '\n') {
+			putchar('\n');
+			break;
+		}
+
+		if (ch == 0x04) {
+			if (len == 0) {
+				putchar('\n');
+				free(line);
+				free(draft);
+				interactive_restore_terminal(tty_fd, saved_termios, have_saved_termios);
+				return NULL;
+			}
+			continue;
+		}
+
+		if (ch == 0x7f || ch == 0x08) {
+			if (len > 0) {
+				line[--len] = '\0';
+				interactive_redraw_prompt_line(prompt, line);
+			}
+			continue;
+		}
+
+		if (ch == '\033') {
+			unsigned char seq[2];
+
+			if (read(tty_fd, &seq[0], 1) != 1 || read(tty_fd, &seq[1], 1) != 1)
+				continue;
+
+			if (seq[0] == '[' && history) {
+				const char *replacement = NULL;
+				size_t replacement_len;
+
+				if (seq[1] == 'A') {
+					if (history->count == 0 || history_index <= 0)
+						continue;
+					if (history_index == (ssize_t)history->count) {
+						free(draft);
+						draft = strdup(line ? line : "");
+						if (!draft)
+							goto oom;
+					}
+					history_index--;
+					replacement = history->entries[history_index];
+				} else if (seq[1] == 'B') {
+					if (history->count == 0 || history_index >= (ssize_t)history->count)
+						continue;
+					history_index++;
+					if (history_index == (ssize_t)history->count)
+						replacement = draft ? draft : "";
+					else
+						replacement = history->entries[history_index];
+				} else {
+					continue;
+				}
+
+				replacement_len = strlen(replacement);
+				if (replacement_len + 1 > cap) {
+					size_t new_cap = replacement_len + 32;
+					char *tmp = realloc(line, new_cap);
+
+					if (!tmp)
+						goto oom;
+					line = tmp;
+					cap = new_cap;
+				}
+
+				memcpy(line, replacement, replacement_len + 1);
+				len = replacement_len;
+				interactive_redraw_prompt_line(prompt, line);
+			}
+			continue;
+		}
+
+		if (isprint(ch)) {
+			if (len + 2 > cap) {
+				size_t new_cap = cap ? cap * 2 : 64;
+				char *tmp;
+
+				while (new_cap < len + 2)
+					new_cap *= 2;
+
+				tmp = realloc(line, new_cap);
+				if (!tmp)
+					goto oom;
+				line = tmp;
+				cap = new_cap;
+			}
+
+			line[len++] = (char)ch;
+			line[len] = '\0';
+			interactive_redraw_prompt_line(prompt, line);
+		}
+	}
+
+	interactive_restore_terminal(tty_fd, saved_termios, have_saved_termios);
+	free(draft);
+
+	if (!line) {
+		line = strdup("");
+		if (!line)
+			return NULL;
+	}
+
+	if (interactive_history_add(history, line) != 0) {
+		free(line);
+		return NULL;
+	}
+
+	return line;
+
+oom:
+	interactive_restore_terminal(tty_fd, saved_termios, have_saved_termios);
+	free(line);
+	free(draft);
+	return NULL;
+}
+#endif
+
 static int interactive_loop(const char *prog)
 {
 	char *line;
@@ -434,6 +714,10 @@ static int interactive_loop(const char *prog)
 	int tty_fd = -1;
 	struct termios saved_termios;
 	bool have_saved_termios = false;
+
+#if !defined(ELA_HAS_READLINE)
+	struct interactive_history history = {0};
+#endif
 
 	if (isatty(STDIN_FILENO)) {
 		tty_fd = STDIN_FILENO;
@@ -469,15 +753,14 @@ static int interactive_loop(const char *prog)
 			add_history(line);
 #else
 		char prompt[128];
-		size_t line_cap = 0;
 
 		snprintf(prompt, sizeof(prompt), "%s> ", prog);
-		interactive_restore_terminal(tty_fd, &saved_termios, have_saved_termios);
-		fputs(prompt, stdout);
-		fflush(stdout);
-		line = NULL;
-		if (getline(&line, &line_cap, stdin) < 0) {
-			free(line);
+		line = interactive_read_line_fallback(prompt,
+						 tty_fd,
+						 &saved_termios,
+						 have_saved_termios,
+						 &history);
+		if (!line) {
 			putchar('\n');
 			break;
 		}
@@ -541,13 +824,17 @@ static int interactive_loop(const char *prog)
 
 	interactive_restore_terminal(tty_fd, &saved_termios, have_saved_termios);
 
+#if !defined(ELA_HAS_READLINE)
+	interactive_history_free(&history);
+#endif
+
 	return last_rc;
 }
 
 static void usage(const char *prog)
 {
 	fprintf(stderr,
-		"Usage: %s [--output-format <csv|json|txt>] [--quiet] [--insecure] [--output-tcp <IPv4:port>] [--output-http <http://host:port/path>] [--output-https <https://host:port/path>] <group> <subcommand> [options]\n"
+		"Usage: %s [--output-format <csv|json|txt>] [--quiet] [--insecure] [--output-tcp <IPv4:port>] [--output-http <http://host:port/path>] [--output-https <https://host:port/path>] [--script <path|http(s)://...>] <group> <subcommand> [options]\n"
 		"\n"
 		"Run without arguments to enter interactive mode.\n"
 		"\n"
@@ -558,6 +845,7 @@ static void usage(const char *prog)
 		"  --output-tcp <IPv4:port>         Configure TCP remote output for commands/subcommands\n"
 		"  --output-http <http://...>       Configure HTTP remote output for commands/subcommands\n"
 		"  --output-https <https://...>     Configure HTTPS remote output for commands/subcommands\n"
+		"  --script <path|http(s)://...>    Execute commands from a local or remote script file\n"
 		"\n"
 		"Groups and subcommands:\n"
 		"  uboot env          Scan for U-Boot environment candidates\n"
@@ -585,8 +873,150 @@ static void usage(const char *prog)
 		"  %s --output-format json --output-http http://127.0.0.1:5000 linux list-symlinks /etc --recursive\n"
 		"  %s --output-https https://127.0.0.1:5443 linux remote-copy /tmp/fw.bin\n"
 		"  %s --quiet --output-http http://127.0.0.1:5000/orom efi orom pull\n"
-		"  %s --quiet --output-tcp 127.0.0.1:5001 bios orom list\n",
-		prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog);
+		"  %s --quiet --output-tcp 127.0.0.1:5001 bios orom list\n"
+		"  %s --output-format json --script ./commands.txt\n",
+		prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog);
+}
+
+static bool is_http_script_source(const char *value)
+{
+	if (!value)
+		return false;
+
+	return !strncmp(value, "http://", 7) || !strncmp(value, "https://", 8);
+}
+
+static char *script_trim(char *s)
+{
+	char *end;
+
+	if (!s)
+		return NULL;
+
+	while (*s && isspace((unsigned char)*s))
+		s++;
+
+	if (!*s)
+		return s;
+
+	end = s + strlen(s) - 1;
+	while (end >= s && isspace((unsigned char)*end)) {
+		*end = '\0';
+		end--;
+	}
+
+	return s;
+}
+
+static int execute_script_commands(const char *prog, const char *script_source)
+{
+	FILE *fp = NULL;
+	char line[4096];
+	char script_path[PATH_MAX];
+	char errbuf[256];
+	const char *effective_path = script_source;
+	bool downloaded = false;
+	bool insecure;
+	unsigned long lineno = 0;
+	int last_rc = 0;
+
+	if (!prog || !script_source || !*script_source)
+		return 2;
+
+	insecure = getenv("FW_AUDIT_OUTPUT_INSECURE") &&
+		!strcmp(getenv("FW_AUDIT_OUTPUT_INSECURE"), "1");
+
+	if (is_http_script_source(script_source)) {
+		int tmp_fd;
+
+		snprintf(script_path, sizeof(script_path), "/tmp/embedded_linux_audit_script.XXXXXX");
+		tmp_fd = mkstemp(script_path);
+		if (tmp_fd < 0) {
+			fprintf(stderr, "Failed to create temp file for script %s: %s\n",
+				script_source,
+				strerror(errno));
+			return 2;
+		}
+		close(tmp_fd);
+
+		if (uboot_http_get_to_file(script_source,
+					  script_path,
+					  insecure,
+					  false,
+					  errbuf,
+					  sizeof(errbuf)) < 0) {
+			fprintf(stderr, "Failed to fetch script %s: %s\n",
+				script_source,
+				errbuf[0] ? errbuf : "unknown error");
+			unlink(script_path);
+			return 2;
+		}
+
+		effective_path = script_path;
+		downloaded = true;
+	}
+
+	fp = fopen(effective_path, "r");
+	if (!fp) {
+		fprintf(stderr, "Cannot open script %s: %s\n", effective_path, strerror(errno));
+		last_rc = 2;
+		goto out;
+	}
+
+	while (fgets(line, sizeof(line), fp)) {
+		char **argv = NULL;
+		char **dispatch_argv = NULL;
+		char *trimmed;
+		int argc = 0;
+		int rc;
+
+		lineno++;
+		trimmed = script_trim(line);
+		if (!trimmed || !*trimmed || *trimmed == '#')
+			continue;
+
+		rc = interactive_parse_line(trimmed, &argv, &argc);
+		if (rc == -1) {
+			fprintf(stderr, "Out of memory while parsing script line %lu\n", lineno);
+			last_rc = 2;
+			goto out;
+		}
+		if (rc != 0) {
+			fprintf(stderr, "Failed parsing script line %lu in %s\n", lineno, effective_path);
+			last_rc = rc;
+			interactive_free_argv(argv, argc);
+			goto out;
+		}
+		if (argc == 0) {
+			interactive_free_argv(argv, argc);
+			continue;
+		}
+
+		dispatch_argv = calloc((size_t)argc + 2, sizeof(*dispatch_argv));
+		if (!dispatch_argv) {
+			fprintf(stderr, "Out of memory while preparing script line %lu\n", lineno);
+			interactive_free_argv(argv, argc);
+			last_rc = 2;
+			goto out;
+		}
+
+		dispatch_argv[0] = (char *)prog;
+		for (int i = 0; i < argc; i++)
+			dispatch_argv[i + 1] = argv[i];
+
+		last_rc = embedded_linux_audit_dispatch(argc + 1, dispatch_argv);
+		free(dispatch_argv);
+		interactive_free_argv(argv, argc);
+		if (last_rc != 0)
+			break;
+	}
+
+out:
+	if (fp)
+		fclose(fp);
+	if (downloaded)
+		unlink(script_path);
+	return last_rc;
 }
 
 static int summary_append_text(char **buf, size_t *len, size_t *cap, const char *text)
@@ -644,17 +1074,21 @@ fail:
 static int embedded_linux_audit_dispatch(int argc, char **argv)
 {
 	const char *output_format = "txt";
-	const char *output_tcp = NULL;
-	const char *output_http = NULL;
-	const char *output_https = NULL;
+	const char *output_tcp = getenv("FW_AUDIT_OUTPUT_TCP");
+	const char *output_http = getenv("FW_AUDIT_OUTPUT_HTTP");
+	const char *output_https = getenv("FW_AUDIT_OUTPUT_HTTPS");
+	const char *script_path = NULL;
 	const char *ela_api_url = NULL;
 	const char *ela_api_insecure = NULL;
 	bool verbose = true;
-	bool insecure = false;
+	bool insecure = getenv("FW_AUDIT_OUTPUT_INSECURE") && !strcmp(getenv("FW_AUDIT_OUTPUT_INSECURE"), "1");
 	bool output_format_explicit = false;
 	int cmd_idx = 1;
 	int ret;
 	char *command_summary;
+
+	if (getenv("FW_AUDIT_OUTPUT_FORMAT") && *getenv("FW_AUDIT_OUTPUT_FORMAT"))
+		output_format = getenv("FW_AUDIT_OUTPUT_FORMAT");
 
 	while (cmd_idx < argc) {
 		if (!strcmp(argv[cmd_idx], "--output-format")) {
@@ -739,6 +1173,23 @@ static int embedded_linux_audit_dispatch(int argc, char **argv)
 			continue;
 		}
 
+		if (!strcmp(argv[cmd_idx], "--script")) {
+			cmd_idx++;
+			if (cmd_idx >= argc) {
+				fprintf(stderr, "Missing value for --script\n\n");
+				usage(argv[0]);
+				return 2;
+			}
+			script_path = argv[cmd_idx++];
+			continue;
+		}
+
+		if (!strncmp(argv[cmd_idx], "--script=", 9)) {
+			script_path = argv[cmd_idx] + 9;
+			cmd_idx++;
+			continue;
+		}
+
 		if (!strcmp(argv[cmd_idx], "-h") || !strcmp(argv[cmd_idx], "--help") || !strcmp(argv[cmd_idx], "help")) {
 			usage(argv[0]);
 			return 0;
@@ -791,7 +1242,7 @@ static int embedded_linux_audit_dispatch(int argc, char **argv)
 		return 2;
 	}
 
-	if (cmd_idx >= argc) {
+	if (cmd_idx >= argc && !script_path) {
 		usage(argv[0]);
 		return 2;
 	}
@@ -838,12 +1289,20 @@ static int embedded_linux_audit_dispatch(int argc, char **argv)
 		unsetenv("FW_AUDIT_OUTPUT_HTTPS");
 	}
 
-	if (!strcmp(argv[cmd_idx], "-h") || !strcmp(argv[cmd_idx], "--help") || !strcmp(argv[cmd_idx], "help")) {
+	if (cmd_idx < argc && (!strcmp(argv[cmd_idx], "-h") || !strcmp(argv[cmd_idx], "--help") || !strcmp(argv[cmd_idx], "help"))) {
 		usage(argv[0]);
 		return 0;
 	}
 
-	command_summary = build_command_summary(argc, argv, cmd_idx);
+	if (script_path && (cmd_idx < argc)) {
+		fprintf(stderr, "Use either --script or a direct command, not both\n\n");
+		usage(argv[0]);
+		return 2;
+	}
+
+	command_summary = script_path
+		? build_command_summary(argc, argv, 1)
+		: build_command_summary(argc, argv, cmd_idx);
 	if (!command_summary)
 		command_summary = strdup("unknown");
 	if (command_summary)
@@ -855,6 +1314,11 @@ static int embedded_linux_audit_dispatch(int argc, char **argv)
 			command_summary,
 			"start",
 			0);
+
+	if (script_path) {
+		ret = execute_script_commands(argv[0], script_path);
+		goto done;
+	}
 
 	if (!strcmp(argv[cmd_idx], "uboot")) {
 		int sub_idx = cmd_idx + 1;

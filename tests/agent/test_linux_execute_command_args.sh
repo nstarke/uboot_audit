@@ -55,9 +55,22 @@ export TEST_OUTPUT_HTTPS
 require_binary "$BIN"
 print_section "linux execute-command subcommand argument coverage"
 
+script_file="$(mktemp /tmp/ela-script.XXXXXX)"
+cat >"$script_file" <<'EOF_SCRIPT'
+linux execute-command "echo hello"
+linux execute-command "printf second"
+EOF_SCRIPT
+missing_script="/tmp/ela-missing-script-$$.txt"
+
+trap 'rm -f "$script_file"' EXIT INT TERM
+
 run_exact_case "linux execute-command --help" 0 "$BIN" linux execute-command --help
 run_exact_case "linux execute-command no args" 2 "$BIN" linux execute-command
 run_exact_case "linux execute-command extra positional arg" 2 "$BIN" linux execute-command "echo hello" extra
+run_exact_case "top-level --script missing value" 2 "$BIN" --script
+run_exact_case "top-level --script cannot be combined with direct command" 2 "$BIN" --script "$script_file" linux execute-command "echo hello"
+run_exact_case "top-level --script missing file" 2 "$BIN" --script "$missing_script"
+run_accept_case "top-level --script local file" "$BIN" --script "$script_file"
 run_exact_case "linux execute-command invalid global --output-http" 2 "$BIN" --output-http ftp://127.0.0.1:1 linux execute-command "echo hello"
 run_exact_case "linux execute-command invalid global --output-https" 2 "$BIN" --output-https http://127.0.0.1:1 linux execute-command "echo hello"
 run_exact_case "linux execute-command both global http+https" 2 "$BIN" --output-http http://127.0.0.1:1 --output-https https://127.0.0.1:1 linux execute-command "echo hello"

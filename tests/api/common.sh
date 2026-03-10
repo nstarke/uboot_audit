@@ -49,7 +49,7 @@ require_web_test_tools() {
 
 create_web_test_layout() {
     TEST_WEB_TMPDIR="$(mktemp -d /tmp/fw_web_tests.XXXXXX)"
-    mkdir -p "$TEST_WEB_TMPDIR/assets" "$TEST_WEB_TMPDIR/data/env" "$TEST_WEB_TMPDIR/tests/agent" "$TEST_WEB_TMPDIR/tests/api"
+    mkdir -p "$TEST_WEB_TMPDIR/assets" "$TEST_WEB_TMPDIR/data/env" "$TEST_WEB_TMPDIR/tests/agent" "$TEST_WEB_TMPDIR/tests/api" "$TEST_WEB_TMPDIR/tests/scripts"
 
     printf 'asset-one\n' > "$TEST_WEB_TMPDIR/assets/embedded_linux_audit-arm64"
     printf 'asset-two\n' > "$TEST_WEB_TMPDIR/assets/custom-tool.bin"
@@ -57,7 +57,9 @@ create_web_test_layout() {
     mkdir -p "$TEST_WEB_TMPDIR/assets/not_a_file"
 
     printf '#!/bin/sh\necho test-one\n' > "$TEST_WEB_TMPDIR/tests/agent/test_one.sh"
+    printf 'linux execute-command "echo scripted"\nlinux execute-command "printf second"\n' > "$TEST_WEB_TMPDIR/tests/scripts/sample-script.txt"
     printf '#!/bin/sh\necho test-two\n' > "$TEST_WEB_TMPDIR/tests/api/test_two.sh"
+    mkdir -p "$TEST_WEB_TMPDIR/tests/scripts/not_a_file"
     chmod +x "$TEST_WEB_TMPDIR/tests/agent/test_one.sh" "$TEST_WEB_TMPDIR/tests/api/test_two.sh"
     mkdir -p "$TEST_WEB_TMPDIR/tests/not_a_file" "$TEST_WEB_TMPDIR/tests/agent/not_a_file"
 

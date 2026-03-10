@@ -12,6 +12,7 @@ const mime = require('mime-types');
 const { execFileSync } = require('child_process');
 const express = require('express');
 const registerRootRoute = require('./routes/root');
+const registerScriptsRoute = require('./routes/scripts');
 const registerTestsRoute = require('./routes/tests');
 const registerUbootEnvRoute = require('./routes/ubootEnv');
 const registerIsaRoute = require('./routes/isa');
@@ -402,6 +403,7 @@ function createApp({ logPrefix, assetsDir, dataDir, testsDir, verbose }) {
   const app = express();
   app.use(express.raw({ type: '*/*', limit: '100mb' }));
   const envDir = path.join(dataDir, 'env');
+  const scriptsDir = path.join(testsDir, 'scripts');
 
   function verboseRequestLog(req) {
     if (!verbose) {
@@ -438,6 +440,7 @@ function createApp({ logPrefix, assetsDir, dataDir, testsDir, verbose }) {
     crypto,
     assetsDir,
     testsDir,
+    scriptsDir,
     envDir,
     dataDir,
     releaseStateFile: RELEASE_STATE_FILE,
@@ -456,6 +459,7 @@ function createApp({ logPrefix, assetsDir, dataDir, testsDir, verbose }) {
   };
 
   registerRootRoute(app, routeDeps);
+  registerScriptsRoute(app, routeDeps);
   registerTestsRoute(app, routeDeps);
   registerUbootEnvRoute(app, routeDeps);
   registerIsaRoute(app, routeDeps);
@@ -559,7 +563,7 @@ async function main() {
   console.log(`Listening on ${scheme}://${args.host}:${args.port}/`);
   console.log(`Logging POST requests with prefix: ${logPrefix}`);
   console.log('Per-type logs: <prefix>.text_plain.log, <prefix>.text_csv.log, <prefix>.application_octet_stream.log');
-  console.log('GET / shows index of downloaded release binaries and test shell scripts');
+  console.log('GET / shows index of downloaded release binaries, test shell scripts, and command scripts');
 
   process.on('SIGINT', () => {
     server.close(() => process.exit(0));
