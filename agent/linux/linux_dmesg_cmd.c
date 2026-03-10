@@ -162,7 +162,8 @@ static int flush_output_http_buffer(void)
 
 static void usage(const char *prog)
 {
-	err_printf("Usage: %s [--insecure]\n",
+	err_printf("Usage: %s [--insecure]\n"
+		   "  Remote output is configured via global --output-tcp, --output-http, or --output-https\n",
 		prog);
 }
 
@@ -187,29 +188,17 @@ int linux_dmesg_scan_main(int argc, char **argv)
 	static const struct option long_opts[] = {
 		{ "help", no_argument, NULL, 'h' },
 		{ "verbose", no_argument, NULL, 'v' },
-		{ "output-tcp", required_argument, NULL, 'o' },
-		{ "output-http", required_argument, NULL, 'O' },
-		{ "output-https", required_argument, NULL, 'T' },
 		{ "insecure", no_argument, NULL, 'k' },
 		{ 0, 0, 0, 0 }
 	};
 
-	while ((opt = getopt_long(argc, argv, "hvo:O:T:k", long_opts, NULL)) != -1) {
+	while ((opt = getopt_long(argc, argv, "hvk", long_opts, NULL)) != -1) {
 		switch (opt) {
 		case 'h':
 			usage(argv[0]);
 			return 0;
 		case 'v':
 			g_verbose = true;
-			break;
-		case 'o':
-			output_tcp_target = optarg;
-			break;
-		case 'O':
-			output_http_target = optarg;
-			break;
-		case 'T':
-			output_https_target = optarg;
 			break;
 		case 'k':
 			g_insecure = true;

@@ -70,30 +70,30 @@ ln -s ../plain.txt "$TMP_LINK_SUB"
 run_exact_case "linux list-symlinks --help" 0 "$BIN" --verbose linux list-symlinks --help
 run_exact_case "linux list-symlinks relative path" 2 "$BIN" --verbose linux list-symlinks ./relative
 run_exact_case "linux list-symlinks file path" 2 "$BIN" --verbose linux list-symlinks "$TMP_FILE"
-run_exact_case "linux list-symlinks invalid --output-http" 2 "$BIN" --verbose linux list-symlinks "$TMP_DIR" --output-http ftp://127.0.0.1:1/symlink-list
-run_exact_case "linux list-symlinks invalid --output-https" 2 "$BIN" --verbose linux list-symlinks "$TMP_DIR" --output-https http://127.0.0.1:1/symlink-list
-run_exact_case "linux list-symlinks both http+https" 2 "$BIN" --verbose linux list-symlinks "$TMP_DIR" --output-http http://127.0.0.1:1/symlink-list --output-https https://127.0.0.1:1/symlink-list
-run_exact_case "linux list-symlinks invalid --output-tcp" 2 "$BIN" --verbose linux list-symlinks "$TMP_DIR" --output-tcp invalid-target
+run_exact_case "linux list-symlinks invalid global --output-http" 2 "$BIN" --verbose --output-http ftp://127.0.0.1:1/symlink-list linux list-symlinks "$TMP_DIR"
+run_exact_case "linux list-symlinks invalid global --output-https" 2 "$BIN" --verbose --output-https http://127.0.0.1:1/symlink-list linux list-symlinks "$TMP_DIR"
+run_exact_case "linux list-symlinks both global http+https" 2 "$BIN" --verbose --output-http http://127.0.0.1:1/symlink-list --output-https https://127.0.0.1:1/symlink-list linux list-symlinks "$TMP_DIR"
+run_exact_case "linux list-symlinks invalid global --output-tcp" 2 "$BIN" --verbose --output-tcp invalid-target linux list-symlinks "$TMP_DIR"
 run_exact_case "linux list-symlinks extra positional argument" 2 "$BIN" --verbose linux list-symlinks "$TMP_DIR" /tmp/extra
 
 run_exact_case "linux list-symlinks no directory argument defaults to /" 0 "$BIN" --verbose linux list-symlinks
 run_exact_case "linux list-symlinks default directory" 0 "$BIN" --verbose linux list-symlinks "$TMP_DIR"
 run_exact_case "linux list-symlinks --recursive" 0 "$BIN" --verbose linux list-symlinks "$TMP_DIR" --recursive
-run_accept_case "linux list-symlinks --output-http" "$BIN" --verbose linux list-symlinks "$TMP_DIR" --output-http http://127.0.0.1:1/symlink-list
-run_accept_case "linux list-symlinks --output-https" "$BIN" --verbose linux list-symlinks "$TMP_DIR" --output-https https://127.0.0.1:1/symlink-list
+run_accept_case "linux list-symlinks global --output-http" "$BIN" --verbose --output-http http://127.0.0.1:1/symlink-list linux list-symlinks "$TMP_DIR"
+run_accept_case "linux list-symlinks global --output-https" "$BIN" --verbose --output-https https://127.0.0.1:1/symlink-list linux list-symlinks "$TMP_DIR"
 tcp_log="$(mktemp /tmp/test_list_symlinks_tcp.XXXXXX)"
-"$BIN" --verbose linux list-symlinks "$TMP_DIR" --output-tcp 127.0.0.1:9 >"$tcp_log" 2>&1
+"$BIN" --verbose --output-tcp 127.0.0.1:9 linux list-symlinks "$TMP_DIR" >"$tcp_log" 2>&1
 rc=$?
 if [ "$rc" -eq 2 ] && grep -q "Invalid/failed output target (expected IPv4:port): 127.0.0.1:9" "$tcp_log"; then
-    echo "[PASS] linux list-symlinks --output-tcp reaches TCP output validation path"
+    echo "[PASS] linux list-symlinks global --output-tcp reaches TCP output validation path"
     PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
 else
-    echo "[FAIL] linux list-symlinks --output-tcp reaches TCP output validation path (rc=$rc)"
+    echo "[FAIL] linux list-symlinks global --output-tcp reaches TCP output validation path (rc=$rc)"
     sed -n '1,80p' "$tcp_log"
     FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
 fi
 rm -f "$tcp_log"
-run_accept_case "--insecure linux list-symlinks --output-https" "$BIN" --insecure --verbose linux list-symlinks "$TMP_DIR" --output-https https://127.0.0.1:1/symlink-list
+run_accept_case "--insecure linux list-symlinks global --output-https" "$BIN" --insecure --verbose --output-https https://127.0.0.1:1/symlink-list linux list-symlinks "$TMP_DIR"
 run_exact_case "linux list-symlinks with --output-format txt" 0 "$BIN" --output-format txt --verbose linux list-symlinks "$TMP_DIR"
 run_exact_case "linux list-symlinks with --output-format csv" 0 "$BIN" --output-format csv --verbose linux list-symlinks "$TMP_DIR"
 run_exact_case "linux list-symlinks with --output-format json" 0 "$BIN" --output-format json --verbose linux list-symlinks "$TMP_DIR"

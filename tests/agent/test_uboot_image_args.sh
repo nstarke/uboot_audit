@@ -83,8 +83,8 @@ run_accept_case "uboot image find-address --offset" \
 run_accept_case "uboot image list-commands --offset" \
     "$BIN" uboot image list-commands --dev /dev/null --offset 0x0
 
-run_accept_case "uboot image --send-logs + --output-tcp" \
-    "$BIN" uboot image --verbose --send-logs --output-tcp 127.0.0.1:9
+run_accept_case "uboot image --send-logs + global --output-tcp" \
+	"$BIN" --output-tcp 127.0.0.1:9 uboot image --verbose --send-logs
 
 run_accept_case "uboot image pull --output-tcp" \
     "$BIN" uboot image pull --dev /dev/null --offset 0x0 --output-tcp 127.0.0.1:9

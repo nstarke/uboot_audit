@@ -1505,15 +1505,12 @@ int uboot_env_scan_core_main(int argc, char **argv)
 		{ "skip-emmc", no_argument, NULL, 'E' },
 		{ "parse-vars", no_argument, NULL, 'P' },
 		{ "output-config", optional_argument, NULL, 'c' },
-		{ "output-tcp", required_argument, NULL, 'o' },
-		{ "output-http", required_argument, NULL, 'O' },
-		{ "output-https", required_argument, NULL, 'T' },
 		{ "insecure", no_argument, NULL, 'k' },
 		{ "write", required_argument, NULL, 'w' },
 		{ 0, 0, 0, 0 }
 	};
 
-	while ((opt = getopt_long(parse_argc, parse_argv, "hvs:H:d:bo:O:T:kRMUSEPc::w:", long_opts, NULL)) != -1) {
+	while ((opt = getopt_long(parse_argc, parse_argv, "hvs:H:d:bkRMUSEPc::w:", long_opts, NULL)) != -1) {
 		switch (opt) {
 		case 'h': usage(prog); return 0;
 		case 'v': g_verbose = true; break;
@@ -1528,9 +1525,6 @@ int uboot_env_scan_core_main(int argc, char **argv)
 		case 'E': skip_emmc = true; break;
 		case 'P': g_parse_vars = true; break;
 		case 'c': output_config_path = optarg ? optarg : "uboot_env.config"; break;
-		case 'o': output_tcp_target = optarg; break;
-		case 'O': output_http_target = optarg; break;
-		case 'T': output_https_target = optarg; break;
 		case 'k': g_insecure = true; break;
 		case 'w': write_script_path = optarg; break;
 		default: usage(prog); return 2;

@@ -72,14 +72,14 @@ run_accept_case "uboot env --skip-emmc --size $TEST_SIZE" "$BIN" uboot env --ski
 run_accept_case "uboot env read-vars --size $TEST_SIZE" "$BIN" uboot env read-vars --size "$TEST_SIZE"
 run_accept_case "uboot env --output-config (implicit path) --size $TEST_SIZE" "$BIN" uboot env --output-config --size "$TEST_SIZE"
 run_accept_case "uboot env --output-config=path --size $TEST_SIZE" "$BIN" uboot env --output-config="$REPO_ROOT/tests/.tmp_fw_env.config" --size "$TEST_SIZE"
-run_accept_case "uboot env --output-tcp --size $TEST_SIZE" "$BIN" uboot env --output-tcp 127.0.0.1:9 --size "$TEST_SIZE"
-run_accept_case "uboot env --output-http --size $TEST_SIZE" "$BIN" uboot env --output-http http://127.0.0.1:1/env --size "$TEST_SIZE"
-run_accept_case "uboot env --output-https --size $TEST_SIZE" "$BIN" uboot env --output-https https://127.0.0.1:1/env --size "$TEST_SIZE"
+run_accept_case "uboot env global --output-tcp --size $TEST_SIZE" "$BIN" --output-tcp 127.0.0.1:9 uboot env --size "$TEST_SIZE"
+run_accept_case "uboot env global --output-http --size $TEST_SIZE" "$BIN" --output-http http://127.0.0.1:1/env uboot env --size "$TEST_SIZE"
+run_accept_case "uboot env global --output-https --size $TEST_SIZE" "$BIN" --output-https https://127.0.0.1:1/env uboot env --size "$TEST_SIZE"
 run_accept_case "--insecure uboot env --size $TEST_SIZE" "$BIN" --insecure uboot env --size "$TEST_SIZE"
 run_exact_case "uboot env invalid --size" 2 "$BIN" uboot env --size nope
-run_accept_case "uboot env invalid --output-http reaches pre-root path" "$BIN" uboot env --output-http ftp://127.0.0.1:1/env --size "$TEST_SIZE"
-run_accept_case "uboot env invalid --output-https reaches pre-root path" "$BIN" uboot env --output-https http://127.0.0.1:1/env --size "$TEST_SIZE"
-run_accept_case "uboot env both http+https reaches pre-root path" "$BIN" uboot env --output-http http://127.0.0.1:1/env --output-https https://127.0.0.1:1/env --size "$TEST_SIZE"
+run_accept_case "uboot env invalid global --output-http reaches pre-root path" "$BIN" --output-http ftp://127.0.0.1:1/env uboot env --size "$TEST_SIZE"
+run_accept_case "uboot env invalid global --output-https reaches pre-root path" "$BIN" --output-https http://127.0.0.1:1/env uboot env --size "$TEST_SIZE"
+run_accept_case "uboot env both global http+https reaches pre-root path" "$BIN" --output-http http://127.0.0.1:1/env --output-https https://127.0.0.1:1/env uboot env --size "$TEST_SIZE"
 run_accept_case "uboot env rejects raw mtd char device after root check path" "$BIN" uboot env --dev /dev/mtd0 --size "$TEST_SIZE"
 
 if [ "$(current_uid)" -ne 0 ]; then

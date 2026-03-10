@@ -70,7 +70,7 @@ static void usage(const char *prog)
 		"  When --permissions is set, filter by exact octal mode (e.g. 4755) or symbolic permissions (e.g. u+rx,g-w)\n"
 		"  When --user is set, only files owned by that user name or numeric uid are returned\n"
 		"  When --group is set, only files owned by that group name or numeric gid are returned\n"
-		"  When --output-http or --output-https is configured, POST the list to /:mac/upload/file-list\n",
+		"  When global --output-http or --output-https is configured, POST the list to /:mac/upload/file-list\n",
 		prog);
 }
 
@@ -413,18 +413,15 @@ static int list_files_recursive(const char *dir_path,
 
 		if (lstat(child, &st) != 0) {
 			fprintf(stderr, "Cannot stat %s: %s\n", child, strerror(errno));
-			closedir(dir);
-			return -1;
+			continue;
 		}
 
 		if (S_ISDIR(st.st_mode)) {
 			if (!recursive)
 				continue;
 
-			if (list_files_recursive(child, output_sock, capture, buf, recursive, filters) != 0) {
-				closedir(dir);
+			if (list_files_recursive(child, output_sock, capture, buf, recursive, filters) != 0)
 				return -1;
-			}
 			continue;
 		}
 
@@ -464,9 +461,6 @@ int linux_list_files_scan_main(int argc, char **argv)
 
 	static const struct option long_opts[] = {
 		{ "help", no_argument, NULL, 'h' },
-		{ "output-tcp", required_argument, NULL, 'o' },
-		{ "output-http", required_argument, NULL, 'O' },
-		{ "output-https", required_argument, NULL, 'T' },
 		{ "recursive", no_argument, NULL, 'r' },
 		{ "insecure", no_argument, NULL, 'k' },
 		{ "suid-only", no_argument, NULL, 's' },
@@ -477,20 +471,11 @@ int linux_list_files_scan_main(int argc, char **argv)
 	};
 
 	optind = 1;
-	while ((opt = getopt_long(argc, argv, "ho:O:T:rksp:u:g:", long_opts, NULL)) != -1) {
+	while ((opt = getopt_long(argc, argv, "hrksp:u:g:", long_opts, NULL)) != -1) {
 		switch (opt) {
 		case 'h':
 			usage(argv[0]);
 			return 0;
-		case 'o':
-			output_tcp = optarg;
-			break;
-		case 'O':
-			output_http = optarg;
-			break;
-		case 'T':
-			output_https = optarg;
-			break;
 		case 'r':
 			recursive = true;
 			break;

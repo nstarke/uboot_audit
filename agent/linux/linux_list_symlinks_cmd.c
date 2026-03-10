@@ -28,11 +28,11 @@ struct output_buffer {
 static void usage(const char *prog)
 {
 	fprintf(stderr,
-		"Usage: %s [absolute-directory] [--recursive] [--insecure] [--output-tcp <IPv4:port>] [--output-http <http://host:port/path>] [--output-https <https://host:port/path>]\n"
+		"Usage: %s [absolute-directory] [--recursive] [--insecure]\n"
 		"  List symlinks under the given absolute directory (default: /)\n"
 		"  When --recursive is set, recurse into subdirectories\n"
 		"  Output honors --output-format as txt, csv, or json\n"
-		"  When --output-http or --output-https is configured, POST the list to /:mac/upload/symlink-list\n",
+		"  When global --output-http or --output-https is configured, POST the list to /:mac/upload/symlink-list\n",
 		prog);
 }
 
@@ -236,16 +236,14 @@ static int list_symlinks_recursive(const char *dir_path,
 
 		if (lstat(child, &st) != 0) {
 			fprintf(stderr, "Cannot stat %s: %s\n", child, strerror(errno));
-			closedir(dir);
-			return -1;
+			continue;
 		}
 
 		if (S_ISLNK(st.st_mode)) {
 			target_len = readlink(child, target, sizeof(target) - 1);
 			if (target_len < 0) {
 				fprintf(stderr, "Cannot read symlink %s: %s\n", child, strerror(errno));
-				closedir(dir);
-				return -1;
+				continue;
 			}
 			target[target_len] = '\0';
 
@@ -257,10 +255,8 @@ static int list_symlinks_recursive(const char *dir_path,
 		}
 
 		if (S_ISDIR(st.st_mode) && recursive) {
-			if (list_symlinks_recursive(child, output_format, output_sock, capture, buf, recursive) != 0) {
-				closedir(dir);
+			if (list_symlinks_recursive(child, output_format, output_sock, capture, buf, recursive) != 0)
 				return -1;
-			}
 		}
 	}
 
@@ -288,9 +284,6 @@ int linux_list_symlinks_scan_main(int argc, char **argv)
 
 	static const struct option long_opts[] = {
 		{ "help", no_argument, NULL, 'h' },
-		{ "output-tcp", required_argument, NULL, 'o' },
-		{ "output-http", required_argument, NULL, 'O' },
-		{ "output-https", required_argument, NULL, 'T' },
 		{ "recursive", no_argument, NULL, 'r' },
 		{ "insecure", no_argument, NULL, 'k' },
 		{ 0, 0, 0, 0 }
@@ -300,20 +293,11 @@ int linux_list_symlinks_scan_main(int argc, char **argv)
 		output_format = "txt";
 
 	optind = 1;
-	while ((opt = getopt_long(argc, argv, "ho:O:T:rk", long_opts, NULL)) != -1) {
+	while ((opt = getopt_long(argc, argv, "hrk", long_opts, NULL)) != -1) {
 		switch (opt) {
 		case 'h':
 			usage(argv[0]);
 			return 0;
-		case 'o':
-			output_tcp = optarg;
-			break;
-		case 'O':
-			output_http = optarg;
-			break;
-		case 'T':
-			output_https = optarg;
-			break;
 		case 'r':
 			recursive = true;
 			break;

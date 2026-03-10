@@ -89,10 +89,10 @@ chmod 4755 "$TMP_SUID_FILE"
 run_exact_case "linux list-files --help" 0 "$BIN" --verbose linux list-files --help
 run_exact_case "linux list-files relative path" 2 "$BIN" --verbose linux list-files ./relative
 run_exact_case "linux list-files file path" 2 "$BIN" --verbose linux list-files "$TMP_FILE"
-run_exact_case "linux list-files invalid --output-http" 2 "$BIN" --verbose linux list-files "$TMP_DIR" --output-http ftp://127.0.0.1:1/file-list
-run_exact_case "linux list-files invalid --output-https" 2 "$BIN" --verbose linux list-files "$TMP_DIR" --output-https http://127.0.0.1:1/file-list
-run_exact_case "linux list-files both http+https" 2 "$BIN" --verbose linux list-files "$TMP_DIR" --output-http http://127.0.0.1:1/file-list --output-https https://127.0.0.1:1/file-list
-run_exact_case "linux list-files invalid --output-tcp" 2 "$BIN" --verbose linux list-files "$TMP_DIR" --output-tcp invalid-target
+run_exact_case "linux list-files invalid global --output-http" 2 "$BIN" --verbose --output-http ftp://127.0.0.1:1/file-list linux list-files "$TMP_DIR"
+run_exact_case "linux list-files invalid global --output-https" 2 "$BIN" --verbose --output-https http://127.0.0.1:1/file-list linux list-files "$TMP_DIR"
+run_exact_case "linux list-files both global http+https" 2 "$BIN" --verbose --output-http http://127.0.0.1:1/file-list --output-https https://127.0.0.1:1/file-list linux list-files "$TMP_DIR"
+run_exact_case "linux list-files invalid global --output-tcp" 2 "$BIN" --verbose --output-tcp invalid-target linux list-files "$TMP_DIR"
 run_exact_case "linux list-files extra positional argument" 2 "$BIN" --verbose linux list-files "$TMP_DIR" /tmp/extra
 run_exact_case "linux list-files invalid --permissions" 2 "$BIN" --verbose linux list-files "$TMP_DIR" --permissions invalid
 run_exact_case "linux list-files invalid symbolic --permissions" 2 "$BIN" --verbose linux list-files "$TMP_DIR" --permissions u+
@@ -108,21 +108,21 @@ run_exact_case "linux list-files --permissions octal" 0 "$BIN" --verbose linux l
 run_exact_case "linux list-files --permissions symbolic" 0 "$BIN" --verbose linux list-files "$TMP_DIR" --permissions u+rw,go-rwx
 run_exact_case "linux list-files --user" 0 "$BIN" --verbose linux list-files "$TMP_DIR" --user "$CURRENT_USER"
 run_exact_case "linux list-files --group" 0 "$BIN" --verbose linux list-files "$TMP_DIR" --group "$CURRENT_GROUP"
-run_accept_case "linux list-files --output-http" "$BIN" --verbose linux list-files "$TMP_DIR" --output-http http://127.0.0.1:1/file-list
-run_accept_case "linux list-files --output-https" "$BIN" --verbose linux list-files "$TMP_DIR" --output-https https://127.0.0.1:1/file-list
+run_accept_case "linux list-files global --output-http" "$BIN" --verbose --output-http http://127.0.0.1:1/file-list linux list-files "$TMP_DIR"
+run_accept_case "linux list-files global --output-https" "$BIN" --verbose --output-https https://127.0.0.1:1/file-list linux list-files "$TMP_DIR"
 tcp_log="$(mktemp /tmp/test_list_files_tcp.XXXXXX)"
-"$BIN" --verbose linux list-files "$TMP_DIR" --output-tcp 127.0.0.1:9 >"$tcp_log" 2>&1
+"$BIN" --verbose --output-tcp 127.0.0.1:9 linux list-files "$TMP_DIR" >"$tcp_log" 2>&1
 rc=$?
 if [ "$rc" -eq 2 ] && grep -q "Invalid/failed output target (expected IPv4:port): 127.0.0.1:9" "$tcp_log"; then
-    echo "[PASS] linux list-files --output-tcp reaches TCP output validation path"
+    echo "[PASS] linux list-files global --output-tcp reaches TCP output validation path"
     PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
 else
-    echo "[FAIL] linux list-files --output-tcp reaches TCP output validation path (rc=$rc)"
+    echo "[FAIL] linux list-files global --output-tcp reaches TCP output validation path (rc=$rc)"
     sed -n '1,80p' "$tcp_log"
     FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
 fi
 rm -f "$tcp_log"
-run_accept_case "--insecure linux list-files --output-https" "$BIN" --insecure --verbose linux list-files "$TMP_DIR" --output-https https://127.0.0.1:1/file-list
+run_accept_case "--insecure linux list-files global --output-https" "$BIN" --insecure --verbose --output-https https://127.0.0.1:1/file-list linux list-files "$TMP_DIR"
 
 run_accept_case "linux list-files with --output-format txt" "$BIN" --output-format txt --verbose linux list-files "$TMP_DIR"
 run_accept_case "linux list-files with --output-format csv" "$BIN" --output-format csv --verbose linux list-files "$TMP_DIR"

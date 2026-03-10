@@ -1423,9 +1423,6 @@ int uboot_image_scan_main(int argc, char **argv)
 		{ "dev", required_argument, NULL, 'd' },
 		{ "step", required_argument, NULL, 's' },
 		{ "send-logs", no_argument, NULL, 'L' },
-		{ "output-tcp", required_argument, NULL, 'o' },
-		{ "output-http", required_argument, NULL, 'O' },
-		{ "output-https", required_argument, NULL, 'T' },
 		{ "insecure", no_argument, NULL, 'k' },
 		{ "allow-text", optional_argument, NULL, 't' },
 		{ "skip-remove", no_argument, NULL, 'R' },
@@ -1437,7 +1434,7 @@ int uboot_image_scan_main(int argc, char **argv)
 		{ 0, 0, 0, 0 }
 	};
 
-	while ((opt = getopt_long(argc, argv, "hvd:s:o:O:T:kt::LRMUSE", long_opts, NULL)) != -1) {
+	while ((opt = getopt_long(argc, argv, "hvd:s:kt::LRMUSE", long_opts, NULL)) != -1) {
 		switch (opt) {
 		case 'h':
 			usage(argv[0]);
@@ -1455,15 +1452,6 @@ int uboot_image_scan_main(int argc, char **argv)
 			break;
 		case 'L':
 			send_logs = true;
-			break;
-		case 'o':
-			output_tcp_target = optarg;
-			break;
-		case 'O':
-			output_http_target = optarg;
-			break;
-		case 'T':
-			output_https_target = optarg;
 			break;
 		case 'k':
 			g_insecure = true;
