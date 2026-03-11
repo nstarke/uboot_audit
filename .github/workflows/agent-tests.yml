@@ -1,0 +1,113 @@
+name: Agent Tests
+
+'on':
+  workflow_run:
+    workflows:
+      - Release Cross Static Builds
+    types:
+      - completed
+  workflow_dispatch:
+
+jobs:
+  shell-tests:
+    name: tests/agent/shell
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Install build dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y autoconf automake libtool
+
+      - name: Build native agent binary
+        run: |
+          set -euo pipefail
+          make
+          cp embedded_linux_audit /tmp/embedded_linux_audit
+          chmod +x /tmp/embedded_linux_audit
+
+      - name: Run shell tests
+        env:
+          BIN: /tmp/embedded_linux_audit
+        run: |
+          set -euo pipefail
+          bash tests/agent/shell/test_all.sh
+
+  script-tests:
+    name: tests/agent/scripts
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Install build dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y autoconf automake libtool
+
+      - name: Build native agent binary
+        run: |
+          set -euo pipefail
+          make
+
+      - name: Run script coverage files
+        run: |
+          set -euo pipefail
+          rc=0
+          for script in tests/agent/scripts/*.ela; do
+            echo
+            echo "===== Running $(basename "$script") ====="
+            if ./embedded_linux_audit --script "$script"; then
+              script_rc=0
+            else
+              script_rc=$?
+            fi
+
+            if [ "$script_rc" -eq 2 ]; then
+              echo "error: script parser/usage failure for $script"
+              rc=1
+            fi
+          done
+          exit "$rc"
+
+  qemu-tests:
+    name: tests/agent/qemu
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Install qemu/build dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y \
+            autoconf \
+            automake \
+            bubblewrap \
+            libtool \
+            qemu-user \
+            qemu-user-binfmt \
+            qemu-user-static \
+            xz-utils
+
+      - name: Run qemu ISA tests
+        run: |
+          set -euo pipefail
+          bash tests/agent/qemu/test_all.sh
