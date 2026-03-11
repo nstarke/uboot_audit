@@ -70,13 +70,13 @@ These are argument/CLI behavior coverage tests, not full hardware integration te
 
 ```bash
 bash tests/agent/test_all.sh --output-http http://127.0.0.1:5000/test
-bash tests/agent/test_all.sh --output-https https://127.0.0.1:5443/test
+bash tests/agent/test_all.sh --output-http https://127.0.0.1:5443/test
 ```
 
 You can also set environment variables used by shared test helpers:
 
 - `TEST_OUTPUT_HTTP`
-- `TEST_OUTPUT_HTTPS`
+- `TEST_OUTPUT_HTTP`
 
 Set only one of them at a time.
 

@@ -303,7 +303,7 @@ static int ensure_fw_env_config_exists(bool force_scan, bool verbose)
 		env_argv[env_argc++] = (char *)output_http;
 	}
 	if (output_https && *output_https) {
-		env_argv[env_argc++] = "--output-https";
+		env_argv[env_argc++] = "--output-http";
 		env_argv[env_argc++] = (char *)output_https;
 	}
 	if (output_insecure && *output_insecure && strcmp(output_insecure, "0"))

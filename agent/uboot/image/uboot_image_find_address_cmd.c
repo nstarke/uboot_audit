@@ -23,6 +23,8 @@ int uboot_image_find_address_main(int argc, char **argv)
 	const char *output_tcp = getenv("FW_AUDIT_OUTPUT_TCP");
 	const char *output_http = getenv("FW_AUDIT_OUTPUT_HTTP");
 	const char *output_https = getenv("FW_AUDIT_OUTPUT_HTTPS");
+	const char *parsed_output_http = NULL;
+	const char *parsed_output_https = NULL;
 	uint64_t offset = 0;
 	bool have_offset = false;
 	bool verbose = getenv("FW_AUDIT_VERBOSE") && !strcmp(getenv("FW_AUDIT_VERBOSE"), "1");
@@ -39,12 +41,11 @@ int uboot_image_find_address_main(int argc, char **argv)
 		{ "offset", required_argument, NULL, 'o' },
 		{ "output-tcp", required_argument, NULL, 't' },
 		{ "output-http", required_argument, NULL, 'O' },
-		{ "output-https", required_argument, NULL, 'T' },
 		{ "send-logs", no_argument, NULL, 'L' },
 		{ 0, 0, 0, 0 }
 	};
 
-	while ((opt = getopt_long(argc, argv, "hd:o:t:O:TL", long_opts, NULL)) != -1) {
+	while ((opt = getopt_long(argc, argv, "hd:o:t:O:L", long_opts, NULL)) != -1) {
 		switch (opt) {
 		case 'h':
 			usage(argv[0]);
@@ -60,10 +61,16 @@ int uboot_image_find_address_main(int argc, char **argv)
 			output_tcp = optarg;
 			break;
 		case 'O':
-			output_http = optarg;
-			break;
-		case 'T':
-			output_https = optarg;
+			if (fw_audit_parse_http_output_uri(optarg,
+						  &parsed_output_http,
+						  &parsed_output_https,
+						  NULL,
+						  0) < 0) {
+				fprintf(stderr, "Invalid --output-http URI (expected http://host:port/... or https://host:port/...): %s\n", optarg);
+				return 2;
+			}
+			output_http = parsed_output_http;
+			output_https = parsed_output_https;
 			break;
 		case 'L':
 			send_logs = true;

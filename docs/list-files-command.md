@@ -14,7 +14,7 @@ Output is always newline-delimited absolute paths.
 - `--group <name|gid>` — filter by group name or numeric GID
 - `--output-tcp <IPv4:port>` — top-level global option to duplicate output to TCP
 - `--output-http <http://host:port/path>` — top-level global option to POST output to the helper API
-- `--output-https <https://host:port/path>` — top-level global option to POST output to the helper API over HTTPS
+- `--output-http <https://host:port/path>` — top-level global option to POST output to the helper API over HTTPS
 - `--insecure` — top-level global option to disable TLS certificate and hostname verification for HTTPS output
 
 ## Notes

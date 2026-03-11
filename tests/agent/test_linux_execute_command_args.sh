@@ -6,7 +6,7 @@ SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
 BIN="/tmp/embedded_linux_audit"
 
 TEST_OUTPUT_HTTP="${TEST_OUTPUT_HTTP:-}"
-TEST_OUTPUT_HTTPS="${TEST_OUTPUT_HTTPS:-}"
+TEST_OUTPUT_HTTP="${TEST_OUTPUT_HTTP:-}"
 
 while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -22,16 +22,16 @@ while [ "$#" -gt 0 ]; do
             TEST_OUTPUT_HTTP="${1#*=}"
             shift
             ;;
-        --output-https)
+        --output-http)
             if [ "$#" -lt 2 ]; then
-                echo "error: --output-https requires a value"
+                echo "error: --output-http requires a value"
                 exit 2
             fi
-            TEST_OUTPUT_HTTPS="$2"
+            TEST_OUTPUT_HTTP="$2"
             shift 2
             ;;
-        --output-https=*)
-            TEST_OUTPUT_HTTPS="${1#*=}"
+        --output-http=*)
+            TEST_OUTPUT_HTTP="${1#*=}"
             shift
             ;;
         *)
@@ -41,13 +41,13 @@ while [ "$#" -gt 0 ]; do
     esac
 done
 
-if [ -n "$TEST_OUTPUT_HTTP" ] && [ -n "$TEST_OUTPUT_HTTPS" ]; then
-    echo "error: set only one of --output-http or --output-https"
+if [ -n "$TEST_OUTPUT_HTTP" ] && [ -n "$TEST_OUTPUT_HTTP" ]; then
+    echo "error: set only one of --output-http or --output-http"
     exit 2
 fi
 
 export TEST_OUTPUT_HTTP
-export TEST_OUTPUT_HTTPS
+export TEST_OUTPUT_HTTP
 
 # shellcheck source=tests/agent/common.sh
 . "$SCRIPT_DIR/common.sh"
@@ -72,8 +72,8 @@ run_exact_case "top-level --script cannot be combined with direct command" 2 "$B
 run_exact_case "top-level --script missing file" 2 "$BIN" --script "$missing_script"
 run_accept_case "top-level --script local file" "$BIN" --script "$script_file"
 run_exact_case "linux execute-command invalid global --output-http" 2 "$BIN" --output-http ftp://127.0.0.1:1 linux execute-command "echo hello"
-run_exact_case "linux execute-command invalid global --output-https" 2 "$BIN" --output-https http://127.0.0.1:1 linux execute-command "echo hello"
-run_exact_case "linux execute-command both global http+https" 2 "$BIN" --output-http http://127.0.0.1:1 --output-https https://127.0.0.1:1 linux execute-command "echo hello"
+run_exact_case "linux execute-command invalid global --output-http" 2 "$BIN" --output-http http://127.0.0.1:1 linux execute-command "echo hello"
+run_exact_case "linux execute-command both global http+https" 2 "$BIN" --output-http http://127.0.0.1:1 --output-http https://127.0.0.1:1 linux execute-command "echo hello"
 run_exact_case "linux execute-command invalid global --output-tcp" 2 "$BIN" --output-tcp invalid-target linux execute-command "echo hello"
 run_accept_case "linux execute-command ELA_API_URL http" env ELA_API_URL=http://127.0.0.1:1 "$BIN" linux execute-command "echo hello"
 run_accept_case "linux execute-command ELA_API_URL https + ELA_API_INSECURE=true" env ELA_API_URL=https://127.0.0.1:1 ELA_API_INSECURE=true "$BIN" linux execute-command "echo hello"
@@ -83,8 +83,8 @@ run_accept_case "linux execute-command txt" "$BIN" --output-format txt linux exe
 run_accept_case "linux execute-command csv" "$BIN" --output-format csv linux execute-command "echo hello"
 run_accept_case "linux execute-command json" "$BIN" --output-format json linux execute-command "echo hello"
 run_accept_case "linux execute-command with --output-http" "$BIN" --output-http http://127.0.0.1:1 linux execute-command "echo hello"
-run_accept_case "linux execute-command with --output-https" "$BIN" --output-https https://127.0.0.1:1 linux execute-command "echo hello"
-run_accept_case "global --insecure linux execute-command" "$BIN" --insecure --output-https https://127.0.0.1:1 linux execute-command "echo hello"
+run_accept_case "linux execute-command with --output-http" "$BIN" --output-http https://127.0.0.1:1 linux execute-command "echo hello"
+run_accept_case "global --insecure linux execute-command" "$BIN" --insecure --output-http https://127.0.0.1:1 linux execute-command "echo hello"
 
 log="$(mktemp /tmp/test_execute_command_lifecycle.XXXXXX)"
 TEST_DISABLE_OUTPUT_OVERRIDE=1 run_with_output_override "$BIN" linux execute-command "echo hello" >"$log" 2>&1

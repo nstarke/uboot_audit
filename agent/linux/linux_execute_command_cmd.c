@@ -25,7 +25,7 @@ static void usage(const char *prog)
 		"Usage: %s <command-string>\n"
 		"  Execute a shell command string and emit/upload its formatted output\n"
 		"  Output honors --output-format as txt, csv, or json\n"
-		"  When global --output-http or --output-https is configured, POST output to /:mac/upload/cmd\n",
+		"  When global --output-http is configured, POST output to /:mac/upload/cmd\n",
 		prog);
 }
 
@@ -185,6 +185,8 @@ int linux_execute_command_scan_main(int argc, char **argv)
 	const char *output_tcp = getenv("FW_AUDIT_OUTPUT_TCP");
 	const char *output_http = getenv("FW_AUDIT_OUTPUT_HTTP");
 	const char *output_https = getenv("FW_AUDIT_OUTPUT_HTTPS");
+	const char *parsed_output_http = NULL;
+	const char *parsed_output_https = NULL;
 	const char *output_uri = NULL;
 	const char *command = NULL;
 	const char *content_type;
@@ -236,13 +238,13 @@ int linux_execute_command_scan_main(int argc, char **argv)
 		return 2;
 	}
 
-	if (output_http && strncmp(output_http, "http://", 7)) {
-		fprintf(stderr, "Invalid --output-http URI (expected http://host:port/...): %s\n", output_http);
-		return 2;
-	}
-
-	if (output_https && strncmp(output_https, "https://", 8)) {
-		fprintf(stderr, "Invalid --output-https URI (expected https://host:port/...): %s\n", output_https);
+	if (output_http && *output_http &&
+	    fw_audit_parse_http_output_uri(output_http,
+					    &parsed_output_http,
+					    &parsed_output_https,
+					    errbuf,
+					    sizeof(errbuf)) < 0) {
+		fprintf(stderr, "%s\n", errbuf);
 		return 2;
 	}
 
@@ -251,8 +253,10 @@ int linux_execute_command_scan_main(int argc, char **argv)
 		return 2;
 	}
 
-	if (output_http)
-		output_uri = output_http;
+	if (parsed_output_http)
+		output_uri = parsed_output_http;
+	if (parsed_output_https)
+		output_uri = parsed_output_https;
 	if (output_https)
 		output_uri = output_https;
 

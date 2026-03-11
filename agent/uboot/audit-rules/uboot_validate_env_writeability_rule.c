@@ -34,7 +34,7 @@ static int ensure_fw_env_config_exists(void)
 		argv[argc++] = (char *)output_http;
 	}
 	if (output_https && *output_https) {
-		argv[argc++] = "--output-https";
+		argv[argc++] = "--output-http";
 		argv[argc++] = (char *)output_https;
 	}
 	if (output_insecure && *output_insecure && strcmp(output_insecure, "0"))

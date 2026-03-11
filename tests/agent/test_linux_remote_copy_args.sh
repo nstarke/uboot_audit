@@ -6,7 +6,7 @@ SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
 BIN="/tmp/embedded_linux_audit"
 
 TEST_OUTPUT_HTTP="${TEST_OUTPUT_HTTP:-}"
-TEST_OUTPUT_HTTPS="${TEST_OUTPUT_HTTPS:-}"
+TEST_OUTPUT_HTTP="${TEST_OUTPUT_HTTP:-}"
 
 while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -22,16 +22,16 @@ while [ "$#" -gt 0 ]; do
             TEST_OUTPUT_HTTP="${1#*=}"
             shift
             ;;
-        --output-https)
+        --output-http)
             if [ "$#" -lt 2 ]; then
-                echo "error: --output-https requires a value"
+                echo "error: --output-http requires a value"
                 exit 2
             fi
-            TEST_OUTPUT_HTTPS="$2"
+            TEST_OUTPUT_HTTP="$2"
             shift 2
             ;;
-        --output-https=*)
-            TEST_OUTPUT_HTTPS="${1#*=}"
+        --output-http=*)
+            TEST_OUTPUT_HTTP="${1#*=}"
             shift
             ;;
         *)
@@ -41,13 +41,13 @@ while [ "$#" -gt 0 ]; do
     esac
 done
 
-if [ -n "$TEST_OUTPUT_HTTP" ] && [ -n "$TEST_OUTPUT_HTTPS" ]; then
-    echo "error: set only one of --output-http or --output-https"
+if [ -n "$TEST_OUTPUT_HTTP" ] && [ -n "$TEST_OUTPUT_HTTP" ]; then
+    echo "error: set only one of --output-http or --output-http"
     exit 2
 fi
 
 export TEST_OUTPUT_HTTP
-export TEST_OUTPUT_HTTPS
+export TEST_OUTPUT_HTTP
 
 # shellcheck source=tests/agent/common.sh
 . "$SCRIPT_DIR/common.sh"
@@ -64,9 +64,9 @@ run_exact_case "linux remote-copy no args" 2 "$BIN" linux remote-copy
 run_exact_case "linux remote-copy relative path" 2 "$BIN" --output-tcp 127.0.0.1:9 linux remote-copy ./relative.bin
 run_exact_case "linux remote-copy missing output target" 2 "$BIN" linux remote-copy "$TMP_FILE"
 run_exact_case "linux remote-copy subcommand --output-http rejected" 2 "$BIN" linux remote-copy "$TMP_FILE" --output-http ftp://127.0.0.1:1/file
-run_exact_case "linux remote-copy subcommand --output-https rejected" 2 "$BIN" linux remote-copy "$TMP_FILE" --output-https http://127.0.0.1:1/file
+run_exact_case "linux remote-copy subcommand --output-http rejected" 2 "$BIN" linux remote-copy "$TMP_FILE" --output-http http://127.0.0.1:1/file
 run_exact_case "linux remote-copy subcommand --output-tcp rejected" 2 "$BIN" linux remote-copy "$TMP_FILE" --output-tcp invalid-target
-run_exact_case "linux remote-copy both http+https" 2 "$BIN" --output-http http://127.0.0.1:1/file --output-https https://127.0.0.1:1/file linux remote-copy "$TMP_FILE"
+run_exact_case "linux remote-copy both http+https" 2 "$BIN" --output-http http://127.0.0.1:1/file --output-http https://127.0.0.1:1/file linux remote-copy "$TMP_FILE"
 run_exact_case "linux remote-copy multiple transport kinds" 2 "$BIN" --output-tcp 127.0.0.1:9 --output-http http://127.0.0.1:1/file linux remote-copy "$TMP_FILE"
 run_exact_case "linux remote-copy extra positional argument" 2 "$BIN" --output-tcp 127.0.0.1:9 linux remote-copy "$TMP_FILE" /tmp/extra
 run_exact_case "linux remote-copy /proc without allow flag" 2 "$BIN" --output-http http://127.0.0.1:1 linux remote-copy /proc/cmdline
@@ -112,12 +112,12 @@ run_accept_case "linux remote-copy directory http --allow-proc" "$BIN" --output-
 
 run_accept_case "linux remote-copy --output-tcp" "$BIN" --output-tcp 127.0.0.1:9 linux remote-copy "$TMP_FILE"
 run_accept_case "linux remote-copy --output-http" "$BIN" --output-http http://127.0.0.1:1 linux remote-copy "$TMP_FILE"
-run_accept_case "linux remote-copy --output-https" "$BIN" --output-https https://127.0.0.1:1 linux remote-copy "$TMP_FILE"
-run_accept_case "global --insecure linux remote-copy --output-https" "$BIN" --insecure --output-https https://127.0.0.1:1 linux remote-copy "$TMP_FILE"
+run_accept_case "linux remote-copy --output-http" "$BIN" --output-http https://127.0.0.1:1 linux remote-copy "$TMP_FILE"
+run_accept_case "global --insecure linux remote-copy --output-http" "$BIN" --insecure --output-http https://127.0.0.1:1 linux remote-copy "$TMP_FILE"
 run_accept_case "linux remote-copy --quiet" "$BIN" --quiet --output-http http://127.0.0.1:1 linux remote-copy "$TMP_FILE"
 run_accept_case "linux remote-copy directory http" "$BIN" --output-http http://127.0.0.1:1 linux remote-copy "$TMP_DIR"
 run_accept_case "linux remote-copy directory http --recursive" "$BIN" --output-http http://127.0.0.1:1 linux remote-copy "$TMP_DIR" --recursive
-run_accept_case "linux remote-copy directory https --recursive" "$BIN" --output-https https://127.0.0.1:1 linux remote-copy "$TMP_DIR" --recursive
+run_accept_case "linux remote-copy directory https --recursive" "$BIN" --output-http https://127.0.0.1:1 linux remote-copy "$TMP_DIR" --recursive
 run_accept_case "linux remote-copy symlink http --allow-symlinks" "$BIN" --output-http http://127.0.0.1:1 linux remote-copy "$TMP_DIR/sample.link" --allow-symlinks
 
 if [ -n "$DEV_REMOTE_COPY_DIR" ]; then

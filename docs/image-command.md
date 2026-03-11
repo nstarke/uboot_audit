@@ -14,11 +14,11 @@ Scans mtdblock/UBI and block devices (SD/eMMC such as `/dev/sd*` and `/dev/mmcbl
 - `--skip-sd` — skip `/dev/sd*` scan targets
 - `--skip-emmc` — skip `/dev/mmcblk*` scan targets
 - `--send-logs` — send tool logs over TCP using `--output-tcp <IPv4:port>`
-- `pull` subcommand — pull image bytes from `--dev` at `--offset` and send to one remote destination (`--output-tcp`, `--output-http`, or `--output-https`)
+- `pull` subcommand — pull image bytes from `--dev` at `--offset` and send to one remote destination (`--output-tcp`, `--output-http`, or `--output-http`)
 - `--offset <bytes>` — image offset used by `--pull` or `--find-address`
 - `--output-tcp <IPv4:port>` — TCP destination used by `pull`; preferred at the top level
 - `--output-http <http://host:port/path>` — HTTP destination used by `pull` (POST body contains image bytes), or for posting normal command output; preferred at the top level
-- `--output-https <https://host:port/path>` — HTTPS destination used by `pull` (POST body contains image bytes), or for posting normal command output; preferred at the top level
+- `--output-http <https://host:port/path>` — HTTPS destination used by `pull` (POST body contains image bytes), or for posting normal command output; preferred at the top level
 - `--insecure` — top-level global option to disable TLS certificate and hostname verification for HTTPS output
 - `find-address` subcommand — parse image at `--offset` and print load address (uImage/FIT)
 - `list-commands` subcommand — best-effort static extraction of likely U-Boot command names from image bytes at `--offset`; emits confidence labels (`high`/`medium`/`low`)
@@ -28,7 +28,7 @@ Scans mtdblock/UBI and block devices (SD/eMMC such as `/dev/sd*` and `/dev/mmcbl
 - `pull` **requires**:
   - `--dev`
   - `--offset`
-  - exactly one of `--output-tcp`, `--output-http`, or `--output-https`
+  - exactly one of `--output-tcp`, `--output-http`, or `--output-http`
 - `find-address` **requires**:
   - `--dev`
   - `--offset`
@@ -93,7 +93,7 @@ Pull image bytes to TCP listener:
 ```bash
 ./embedded_linux_audit --output-tcp 192.168.1.50:5000 uboot image pull --dev /dev/mtdblock4 --offset 0x200
 ./embedded_linux_audit --output-http http://192.168.1.50:5000/image uboot image pull --dev /dev/mtdblock4 --offset 0x200
-./embedded_linux_audit --output-https https://192.168.1.50:5443/image uboot image pull --dev /dev/mtdblock4 --offset 0x200
+./embedded_linux_audit --output-http https://192.168.1.50:5443/image uboot image pull --dev /dev/mtdblock4 --offset 0x200
 ./embedded_linux_audit --output-http http://192.168.1.50:5000/image uboot image
-./embedded_linux_audit --output-https https://192.168.1.50:5443/image uboot image
+./embedded_linux_audit --output-http https://192.168.1.50:5443/image uboot image
 ```

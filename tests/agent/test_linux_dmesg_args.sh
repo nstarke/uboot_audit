@@ -6,7 +6,7 @@ SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
 BIN="/tmp/embedded_linux_audit"
 
 TEST_OUTPUT_HTTP="${TEST_OUTPUT_HTTP:-}"
-TEST_OUTPUT_HTTPS="${TEST_OUTPUT_HTTPS:-}"
+TEST_OUTPUT_HTTP="${TEST_OUTPUT_HTTP:-}"
 
 while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -22,16 +22,16 @@ while [ "$#" -gt 0 ]; do
             TEST_OUTPUT_HTTP="${1#*=}"
             shift
             ;;
-        --output-https)
+        --output-http)
             if [ "$#" -lt 2 ]; then
-                echo "error: --output-https requires a value"
+                echo "error: --output-http requires a value"
                 exit 2
             fi
-            TEST_OUTPUT_HTTPS="$2"
+            TEST_OUTPUT_HTTP="$2"
             shift 2
             ;;
-        --output-https=*)
-            TEST_OUTPUT_HTTPS="${1#*=}"
+        --output-http=*)
+            TEST_OUTPUT_HTTP="${1#*=}"
             shift
             ;;
         *)
@@ -41,13 +41,13 @@ while [ "$#" -gt 0 ]; do
     esac
 done
 
-if [ -n "$TEST_OUTPUT_HTTP" ] && [ -n "$TEST_OUTPUT_HTTPS" ]; then
-    echo "error: set only one of --output-http or --output-https"
+if [ -n "$TEST_OUTPUT_HTTP" ] && [ -n "$TEST_OUTPUT_HTTP" ]; then
+    echo "error: set only one of --output-http or --output-http"
     exit 2
 fi
 
 export TEST_OUTPUT_HTTP
-export TEST_OUTPUT_HTTPS
+export TEST_OUTPUT_HTTP
 
 # shellcheck source=tests/agent/common.sh
 . "$SCRIPT_DIR/common.sh"
@@ -63,10 +63,10 @@ run_exact_case "linux dmesg extra positional arg" 2 "$BIN" linux dmesg extra
 run_exact_case "linux dmesg invalid global --output-tcp" 2 "$BIN" --output-tcp invalid-target linux dmesg
 run_exact_case "linux dmesg global --output-tcp + --help" 0 "$BIN" --output-tcp 127.0.0.1:9 linux dmesg --help
 run_accept_case "linux dmesg global --output-http" "$BIN" --output-http http://127.0.0.1:1/dmesg linux dmesg
-run_accept_case "linux dmesg global --output-https" "$BIN" --output-https https://127.0.0.1:1/dmesg linux dmesg
+run_accept_case "linux dmesg global --output-http" "$BIN" --output-http https://127.0.0.1:1/dmesg linux dmesg
 run_exact_case "linux dmesg invalid global --output-http" 2 "$BIN" --output-http ftp://127.0.0.1:1/dmesg linux dmesg
-run_exact_case "linux dmesg invalid global --output-https" 2 "$BIN" --output-https http://127.0.0.1:1/dmesg linux dmesg
-run_exact_case "linux dmesg both global http+https" 2 "$BIN" --output-http http://127.0.0.1:1/dmesg --output-https https://127.0.0.1:1/dmesg linux dmesg
+run_exact_case "linux dmesg invalid global --output-http" 2 "$BIN" --output-http http://127.0.0.1:1/dmesg linux dmesg
+run_exact_case "linux dmesg both global http+https" 2 "$BIN" --output-http http://127.0.0.1:1/dmesg --output-http https://127.0.0.1:1/dmesg linux dmesg
 run_accept_case "global --insecure linux dmesg" "$BIN" --insecure linux dmesg
 
 run_accept_case "linux dmesg with --output-format txt" "$BIN" --output-format txt linux dmesg

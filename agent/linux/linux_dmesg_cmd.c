@@ -163,7 +163,7 @@ static int flush_output_http_buffer(void)
 static void usage(const char *prog)
 {
 	err_printf("Usage: %s\n"
-		   "  Remote output is configured via global --output-tcp, --output-http, or --output-https\n",
+		   "  Remote output is configured via global --output-tcp or --output-http\n",
 		prog);
 }
 
@@ -172,6 +172,8 @@ int linux_dmesg_scan_main(int argc, char **argv)
 	const char *output_tcp_target = getenv("FW_AUDIT_OUTPUT_TCP");
 	const char *output_http_target = getenv("FW_AUDIT_OUTPUT_HTTP");
 	const char *output_https_target = getenv("FW_AUDIT_OUTPUT_HTTPS");
+	const char *parsed_output_http = NULL;
+	const char *parsed_output_https = NULL;
 	FILE *fp = NULL;
 	char line[4096];
 	int ret = 0;
@@ -216,12 +218,16 @@ int linux_dmesg_scan_main(int argc, char **argv)
 	}
 
 	if (output_http_target && *output_http_target) {
-		if (strncmp(output_http_target, "http://", 7)) {
-			err_printf("Invalid --output-http URI (expected http://host:port/...): %s\n", output_http_target);
+		if (fw_audit_parse_http_output_uri(output_http_target,
+						  &parsed_output_http,
+						  &parsed_output_https,
+						  line,
+						  sizeof(line)) < 0) {
+			err_printf("%s\n", line);
 			ret = 2;
 			goto out;
 		}
-		g_output_http_uri = output_http_target;
+		g_output_http_uri = parsed_output_http ? parsed_output_http : parsed_output_https;
 	}
 
 	if (output_https_target && *output_https_target) {

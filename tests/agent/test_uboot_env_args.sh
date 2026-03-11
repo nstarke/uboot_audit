@@ -6,7 +6,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 BIN="/tmp/embedded_linux_audit"
 
 TEST_OUTPUT_HTTP="${TEST_OUTPUT_HTTP:-}"
-TEST_OUTPUT_HTTPS="${TEST_OUTPUT_HTTPS:-}"
+TEST_OUTPUT_HTTP="${TEST_OUTPUT_HTTP:-}"
 
 while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -22,16 +22,16 @@ while [ "$#" -gt 0 ]; do
             TEST_OUTPUT_HTTP="${1#*=}"
             shift
             ;;
-        --output-https)
+        --output-http)
             if [ "$#" -lt 2 ]; then
-                echo "error: --output-https requires a value"
+                echo "error: --output-http requires a value"
                 exit 2
             fi
-            TEST_OUTPUT_HTTPS="$2"
+            TEST_OUTPUT_HTTP="$2"
             shift 2
             ;;
-        --output-https=*)
-            TEST_OUTPUT_HTTPS="${1#*=}"
+        --output-http=*)
+            TEST_OUTPUT_HTTP="${1#*=}"
             shift
             ;;
         *)
@@ -41,13 +41,13 @@ while [ "$#" -gt 0 ]; do
     esac
 done
 
-if [ -n "$TEST_OUTPUT_HTTP" ] && [ -n "$TEST_OUTPUT_HTTPS" ]; then
-    echo "error: set only one of --output-http or --output-https"
+if [ -n "$TEST_OUTPUT_HTTP" ] && [ -n "$TEST_OUTPUT_HTTP" ]; then
+    echo "error: set only one of --output-http or --output-http"
     exit 2
 fi
 
 export TEST_OUTPUT_HTTP
-export TEST_OUTPUT_HTTPS
+export TEST_OUTPUT_HTTP
 
 # shellcheck source=tests/agent/common.sh
 . "$SCRIPT_DIR/common.sh"
@@ -74,12 +74,12 @@ run_accept_case "uboot env --output-config (implicit path) --size $TEST_SIZE" "$
 run_accept_case "uboot env --output-config=path --size $TEST_SIZE" "$BIN" uboot env --output-config="$REPO_ROOT/tests/.tmp_fw_env.config" --size "$TEST_SIZE"
 run_accept_case "uboot env global --output-tcp --size $TEST_SIZE" "$BIN" --output-tcp 127.0.0.1:9 uboot env --size "$TEST_SIZE"
 run_accept_case "uboot env global --output-http --size $TEST_SIZE" "$BIN" --output-http http://127.0.0.1:1/env uboot env --size "$TEST_SIZE"
-run_accept_case "uboot env global --output-https --size $TEST_SIZE" "$BIN" --output-https https://127.0.0.1:1/env uboot env --size "$TEST_SIZE"
+run_accept_case "uboot env global --output-http --size $TEST_SIZE" "$BIN" --output-http https://127.0.0.1:1/env uboot env --size "$TEST_SIZE"
 run_accept_case "--insecure uboot env --size $TEST_SIZE" "$BIN" --insecure uboot env --size "$TEST_SIZE"
 run_exact_case "uboot env invalid --size" 2 "$BIN" uboot env --size nope
 run_exact_case "uboot env invalid global --output-http" 2 "$BIN" --output-http ftp://127.0.0.1:1/env uboot env --size "$TEST_SIZE"
-run_exact_case "uboot env invalid global --output-https" 2 "$BIN" --output-https http://127.0.0.1:1/env uboot env --size "$TEST_SIZE"
-run_exact_case "uboot env both global http+https" 2 "$BIN" --output-http http://127.0.0.1:1/env --output-https https://127.0.0.1:1/env uboot env --size "$TEST_SIZE"
+run_exact_case "uboot env invalid global --output-http" 2 "$BIN" --output-http http://127.0.0.1:1/env uboot env --size "$TEST_SIZE"
+run_exact_case "uboot env both global http+https" 2 "$BIN" --output-http http://127.0.0.1:1/env --output-http https://127.0.0.1:1/env uboot env --size "$TEST_SIZE"
 run_accept_case "uboot env rejects raw mtd char device after root check path" "$BIN" uboot env --dev /dev/mtd0 --size "$TEST_SIZE"
 
 if [ "$(current_uid)" -ne 0 ]; then

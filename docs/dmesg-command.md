@@ -7,7 +7,7 @@ Runs `dmesg` and emits kernel ring buffer output.
 - verbose logging is enabled by default; use top-level `--quiet` to disable command execution and remote HTTP(S) POST verbosity
 - `--output-tcp <IPv4:port>` — preferred as a top-level option; duplicate dmesg output to TCP destination
 - `--output-http <http://host:port/path>` — preferred as a top-level option; duplicate dmesg output to HTTP endpoint via POST
-- `--output-https <https://host:port/path>` — preferred as a top-level option; duplicate dmesg output to HTTPS endpoint via POST
+- `--output-http <https://host:port/path>` — preferred as a top-level option; duplicate dmesg output to HTTPS endpoint via POST
 - `--insecure` — top-level global option to disable TLS certificate and hostname verification for HTTPS output
 
 ## Notes
@@ -23,7 +23,7 @@ Runs `dmesg` and emits kernel ring buffer output.
 ./embedded_linux_audit --quiet linux dmesg
 ./embedded_linux_audit --output-tcp 192.168.1.50:5001 linux dmesg
 ./embedded_linux_audit --output-http http://192.168.1.50:5000/dmesg linux dmesg
-./embedded_linux_audit --output-https https://192.168.1.50:5443/dmesg linux dmesg
-./embedded_linux_audit --insecure --output-https https://192.168.1.50:5443/dmesg linux dmesg
+./embedded_linux_audit --output-http https://192.168.1.50:5443/dmesg linux dmesg
+./embedded_linux_audit --insecure --output-http https://192.168.1.50:5443/dmesg linux dmesg
 ./embedded_linux_audit --output-format json linux dmesg
 ```

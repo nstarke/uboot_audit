@@ -6,7 +6,7 @@ SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
 BIN="/tmp/embedded_linux_audit"
 
 TEST_OUTPUT_HTTP="${TEST_OUTPUT_HTTP:-}"
-TEST_OUTPUT_HTTPS="${TEST_OUTPUT_HTTPS:-}"
+TEST_OUTPUT_HTTP="${TEST_OUTPUT_HTTP:-}"
 
 while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -22,16 +22,16 @@ while [ "$#" -gt 0 ]; do
             TEST_OUTPUT_HTTP="${1#*=}"
             shift
             ;;
-        --output-https)
+        --output-http)
             if [ "$#" -lt 2 ]; then
-                echo "error: --output-https requires a value"
+                echo "error: --output-http requires a value"
                 exit 2
             fi
-            TEST_OUTPUT_HTTPS="$2"
+            TEST_OUTPUT_HTTP="$2"
             shift 2
             ;;
-        --output-https=*)
-            TEST_OUTPUT_HTTPS="${1#*=}"
+        --output-http=*)
+            TEST_OUTPUT_HTTP="${1#*=}"
             shift
             ;;
         *)
@@ -41,13 +41,13 @@ while [ "$#" -gt 0 ]; do
     esac
 done
 
-if [ -n "$TEST_OUTPUT_HTTP" ] && [ -n "$TEST_OUTPUT_HTTPS" ]; then
-    echo "error: set only one of --output-http or --output-https"
+if [ -n "$TEST_OUTPUT_HTTP" ] && [ -n "$TEST_OUTPUT_HTTP" ]; then
+    echo "error: set only one of --output-http or --output-http"
     exit 2
 fi
 
 export TEST_OUTPUT_HTTP
-export TEST_OUTPUT_HTTPS
+export TEST_OUTPUT_HTTP
 
 # shellcheck source=tests/agent/common.sh
 . "$SCRIPT_DIR/common.sh"
@@ -71,8 +71,8 @@ run_exact_case "linux list-symlinks --help" 0 "$BIN" linux list-symlinks --help
 run_exact_case "linux list-symlinks relative path" 2 "$BIN" linux list-symlinks ./relative
 run_exact_case "linux list-symlinks file path" 2 "$BIN" linux list-symlinks "$TMP_FILE"
 run_exact_case "linux list-symlinks invalid global --output-http" 2 "$BIN" --output-http ftp://127.0.0.1:1/symlink-list linux list-symlinks "$TMP_DIR"
-run_exact_case "linux list-symlinks invalid global --output-https" 2 "$BIN" --output-https http://127.0.0.1:1/symlink-list linux list-symlinks "$TMP_DIR"
-run_exact_case "linux list-symlinks both global http+https" 2 "$BIN" --output-http http://127.0.0.1:1/symlink-list --output-https https://127.0.0.1:1/symlink-list linux list-symlinks "$TMP_DIR"
+run_exact_case "linux list-symlinks invalid global --output-http" 2 "$BIN" --output-http http://127.0.0.1:1/symlink-list linux list-symlinks "$TMP_DIR"
+run_exact_case "linux list-symlinks both global http+https" 2 "$BIN" --output-http http://127.0.0.1:1/symlink-list --output-http https://127.0.0.1:1/symlink-list linux list-symlinks "$TMP_DIR"
 run_exact_case "linux list-symlinks invalid global --output-tcp" 2 "$BIN" --output-tcp invalid-target linux list-symlinks "$TMP_DIR"
 run_exact_case "linux list-symlinks extra positional argument" 2 "$BIN" linux list-symlinks "$TMP_DIR" /tmp/extra
 
@@ -80,7 +80,7 @@ run_exact_case "linux list-symlinks no directory argument defaults to /" 0 "$BIN
 run_exact_case "linux list-symlinks default directory" 0 "$BIN" linux list-symlinks "$TMP_DIR"
 run_exact_case "linux list-symlinks --recursive" 0 "$BIN" linux list-symlinks "$TMP_DIR" --recursive
 run_accept_case "linux list-symlinks global --output-http" "$BIN" --output-http http://127.0.0.1:1/symlink-list linux list-symlinks "$TMP_DIR"
-run_accept_case "linux list-symlinks global --output-https" "$BIN" --output-https https://127.0.0.1:1/symlink-list linux list-symlinks "$TMP_DIR"
+run_accept_case "linux list-symlinks global --output-http" "$BIN" --output-http https://127.0.0.1:1/symlink-list linux list-symlinks "$TMP_DIR"
 
 python_bin="$(find_python_bin || true)"
 
@@ -190,7 +190,7 @@ else
     FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
 fi
 rm -f "$tcp_log"
-run_accept_case "--insecure linux list-symlinks global --output-https" "$BIN" --insecure --output-https https://127.0.0.1:1/symlink-list linux list-symlinks "$TMP_DIR"
+run_accept_case "--insecure linux list-symlinks global --output-http" "$BIN" --insecure --output-http https://127.0.0.1:1/symlink-list linux list-symlinks "$TMP_DIR"
 run_exact_case "linux list-symlinks with --output-format txt" 0 "$BIN" --output-format txt linux list-symlinks "$TMP_DIR"
 run_exact_case "linux list-symlinks with --output-format csv" 0 "$BIN" --output-format csv linux list-symlinks "$TMP_DIR"
 run_exact_case "linux list-symlinks with --output-format json" 0 "$BIN" --output-format json linux list-symlinks "$TMP_DIR"

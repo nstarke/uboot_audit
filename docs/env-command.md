@@ -18,7 +18,7 @@ Scans MTD/UBI plus block devices (SD/eMMC such as `/dev/sd*` and `/dev/mmcblk*`)
 - `--output-config[=<path>]` — write discovered `fw_env.config` lines to file (default `fw_env.config`)
 - `--output-tcp <IPv4:port>` — duplicate output to TCP destination; preferred at the top level
 - `--output-http <http://host:port/path>` — duplicate output to HTTP endpoint via POST; preferred at the top level
-- `--output-https <https://host:port/path>` — duplicate output to HTTPS endpoint via POST; preferred at the top level
+- `--output-http <https://host:port/path>` — duplicate output to HTTPS endpoint via POST; preferred at the top level
 - `--insecure` — top-level global option to disable TLS certificate and hostname verification for HTTPS output
 - `write-vars <path|http(s)://...>` — subcommand to apply env updates from a local text file or fetch the script from HTTP(S)
 
@@ -56,8 +56,8 @@ Scans MTD/UBI plus block devices (SD/eMMC such as `/dev/sd*` and `/dev/mmcblk*`)
 ./embedded_linux_audit uboot env --size 0x10000 /dev/mtd0:0x10000 /dev/mtd1:0x20000
 ./embedded_linux_audit --output-tcp 192.168.1.50:5000 uboot env
 ./embedded_linux_audit --output-http http://192.168.1.50:5000/env uboot env
-./embedded_linux_audit --output-https https://192.168.1.50:5443/env uboot env
-./embedded_linux_audit --insecure --output-https https://192.168.1.50:5443/env uboot env
+./embedded_linux_audit --output-http https://192.168.1.50:5443/env uboot env
+./embedded_linux_audit --insecure --output-http https://192.168.1.50:5443/env uboot env
 ./embedded_linux_audit uboot env read-vars --size 0x10000
 ./embedded_linux_audit uboot env write-vars ./new_env.txt
 ```

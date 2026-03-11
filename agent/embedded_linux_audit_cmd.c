@@ -1718,6 +1718,42 @@ char *uboot_http_uri_normalize_default_port(const char *uri, uint16_t default_po
 	return out;
 }
 
+int fw_audit_parse_http_output_uri(const char *uri,
+				  const char **output_http,
+				  const char **output_https,
+				  char *errbuf,
+				  size_t errbuf_len)
+{
+	if (output_http)
+		*output_http = NULL;
+	if (output_https)
+		*output_https = NULL;
+	if (errbuf && errbuf_len)
+		errbuf[0] = '\0';
+
+	if (!uri || !*uri)
+		return 0;
+
+	if (!strncmp(uri, "http://", 7)) {
+		if (output_http)
+			*output_http = uri;
+		return 0;
+	}
+
+	if (!strncmp(uri, "https://", 8)) {
+		if (output_https)
+			*output_https = uri;
+		return 0;
+	}
+
+	if (errbuf && errbuf_len)
+		snprintf(errbuf,
+			 errbuf_len,
+			 "Invalid --output-http URI (expected http://host:port/... or https://host:port/...): %s",
+			 uri);
+	return -1;
+}
+
 static int parse_http_uri_host(const char *uri, char *host_buf, size_t host_buf_len)
 {
 	const char *scheme_end;

@@ -11,7 +11,7 @@ By default the search is non-recursive. With `--recursive`, nested directories a
 - `--recursive` — recurse into subdirectories
 - `--output-tcp <IPv4:port>` — top-level global option to duplicate match output to TCP
 - `--output-http <http://host:port/path>` — top-level global option to POST match output to the helper API
-- `--output-https <https://host:port/path>` — top-level global option to POST match output to the helper API over HTTPS
+- `--output-http <https://host:port/path>` — top-level global option to POST match output to the helper API over HTTPS
 - `--insecure` — top-level global option to disable TLS certificate and hostname verification for HTTPS output
 
 ## Notes
@@ -29,6 +29,6 @@ By default the search is non-recursive. With `--recursive`, nested directories a
 ./embedded_linux_audit linux grep --search bootcmd --path /etc
 ./embedded_linux_audit linux grep --search needle --path /var/log --recursive
 ./embedded_linux_audit --output-http http://192.168.1.50:5000 linux grep --search root --path /etc --recursive
-./embedded_linux_audit --insecure --output-https https://192.168.1.50:5443 linux grep --search password --path /config
+./embedded_linux_audit --insecure --output-http https://192.168.1.50:5443 linux grep --search password --path /config
 ./embedded_linux_audit --output-format json linux grep --search console --path /boot
 ```

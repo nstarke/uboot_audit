@@ -539,7 +539,7 @@ int linux_remote_copy_scan_main(int argc, char **argv)
 		output_uri = output_https;
 
 	if ((!output_tcp || !*output_tcp) && (!output_uri || !*output_uri)) {
-		fprintf(stderr, "remote-copy requires one of --output-tcp, --output-http, or --output-https\n");
+		fprintf(stderr, "remote-copy requires one of --output-tcp or --output-http\n");
 		return 2;
 	}
 
@@ -560,11 +560,11 @@ int linux_remote_copy_scan_main(int argc, char **argv)
 
 	if (output_tcp) {
 		if (S_ISDIR(st.st_mode)) {
-			fprintf(stderr, "Directory uploads require --output-http or --output-https\n");
+			fprintf(stderr, "Directory uploads require --output-http\n");
 			return 2;
 		}
 		if (S_ISLNK(st.st_mode)) {
-			fprintf(stderr, "Symlink uploads require --output-http or --output-https\n");
+			fprintf(stderr, "Symlink uploads require --output-http\n");
 			return 2;
 		}
 		if (!stat_is_copyable_file(&st)) {

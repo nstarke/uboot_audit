@@ -841,7 +841,7 @@ static int interactive_loop(const char *prog)
 static void usage(const char *prog)
 {
 	fprintf(stderr,
-		"Usage: %s [--output-format <csv|json|txt>] [--quiet] [--insecure] [--output-tcp <IPv4:port>] [--output-http <http://host:port/path>] [--output-https <https://host:port/path>] [--script <path|http(s)://...>] <group> <subcommand> [options]\n"
+		"Usage: %s [--output-format <csv|json|txt>] [--quiet] [--insecure] [--output-tcp <IPv4:port>] [--output-http <http(s)://host:port/path>] [--script <path|http(s)://...>] <group> <subcommand> [options]\n"
 		"\n"
 		"Run without arguments to enter interactive mode.\n"
 		"\n"
@@ -850,8 +850,7 @@ static void usage(const char *prog)
 		"  --quiet                         Disable verbose mode for commands/subcommands\n"
 		"  --insecure                      Disable TLS certificate/hostname verification for HTTPS\n"
 		"  --output-tcp <IPv4:port>         Configure TCP remote output for commands/subcommands\n"
-		"  --output-http <http://...>       Configure HTTP remote output for commands/subcommands\n"
-		"  --output-https <https://...>     Configure HTTPS remote output for commands/subcommands\n"
+		"  --output-http <http(s)://...>    Configure HTTP or HTTPS remote output for commands/subcommands\n"
 		"  --script <path|http(s)://...>    Execute commands from a local or remote script file\n"
 		"\n"
 		"Groups and subcommands:\n"
@@ -883,7 +882,7 @@ static void usage(const char *prog)
 		"  %s --output-http http://127.0.0.1:5000 linux grep --search root --path /etc --recursive\n"
 		"  %s --output-http http://127.0.0.1:5000 linux list-files /etc\n"
 		"  %s --output-format json --output-http http://127.0.0.1:5000 linux list-symlinks /etc --recursive\n"
-		"  %s --output-https https://127.0.0.1:5443 linux remote-copy /tmp/fw.bin\n"
+		"  %s --output-http https://127.0.0.1:5443 linux remote-copy /tmp/fw.bin\n"
 		"  %s --quiet --output-http http://127.0.0.1:5000/orom efi orom pull\n"
 		"  %s --output-format json --output-http http://127.0.0.1:5000 efi dump-vars\n"
 		"  %s --quiet --output-tcp 127.0.0.1:5001 bios orom list\n"
@@ -1106,6 +1105,8 @@ static int embedded_linux_audit_dispatch(int argc, char **argv)
 	const char *output_tcp = getenv("FW_AUDIT_OUTPUT_TCP");
 	const char *output_http = getenv("FW_AUDIT_OUTPUT_HTTP");
 	const char *output_https = getenv("FW_AUDIT_OUTPUT_HTTPS");
+	const char *parsed_output_http;
+	const char *parsed_output_https;
 	const char *script_path = NULL;
 	const char *ela_api_url = NULL;
 	const char *ela_api_insecure = NULL;
@@ -1117,6 +1118,7 @@ static int embedded_linux_audit_dispatch(int argc, char **argv)
 	char *command_summary;
 	const char *isa;
 	bool emit_lifecycle_events;
+	char errbuf[256];
 
 	if (getenv("FW_AUDIT_OUTPUT_FORMAT") && *getenv("FW_AUDIT_OUTPUT_FORMAT"))
 		output_format = getenv("FW_AUDIT_OUTPUT_FORMAT");
@@ -1177,29 +1179,32 @@ static int embedded_linux_audit_dispatch(int argc, char **argv)
 				usage(argv[0]);
 				return 2;
 			}
-			output_http = argv[cmd_idx++];
+			if (fw_audit_parse_http_output_uri(argv[cmd_idx++],
+						  &parsed_output_http,
+						  &parsed_output_https,
+						  errbuf,
+						  sizeof(errbuf)) < 0) {
+				fprintf(stderr, "%s\n\n", errbuf);
+				usage(argv[0]);
+				return 2;
+			}
+			output_http = parsed_output_http;
+			output_https = parsed_output_https;
 			continue;
 		}
 
 		if (!strncmp(argv[cmd_idx], "--output-http=", 14)) {
-			output_http = argv[cmd_idx] + 14;
-			cmd_idx++;
-			continue;
-		}
-
-		if (!strcmp(argv[cmd_idx], "--output-https")) {
-			cmd_idx++;
-			if (cmd_idx >= argc) {
-				fprintf(stderr, "Missing value for --output-https\n\n");
+			if (fw_audit_parse_http_output_uri(argv[cmd_idx] + 14,
+						  &parsed_output_http,
+						  &parsed_output_https,
+						  errbuf,
+						  sizeof(errbuf)) < 0) {
+				fprintf(stderr, "%s\n\n", errbuf);
 				usage(argv[0]);
 				return 2;
 			}
-			output_https = argv[cmd_idx++];
-			continue;
-		}
-
-		if (!strncmp(argv[cmd_idx], "--output-https=", 15)) {
-			output_https = argv[cmd_idx] + 15;
+			output_http = parsed_output_http;
+			output_https = parsed_output_https;
 			cmd_idx++;
 			continue;
 		}
@@ -1238,17 +1243,19 @@ static int embedded_linux_audit_dispatch(int argc, char **argv)
 	ela_api_url = getenv("ELA_API_URL");
 	if ((!output_http || !*output_http) && (!output_https || !*output_https) &&
 	    ela_api_url && *ela_api_url) {
-		if (!strncmp(ela_api_url, "http://", 7)) {
-			output_http = ela_api_url;
-		} else if (!strncmp(ela_api_url, "https://", 8)) {
-			output_https = ela_api_url;
-		} else {
+		if (fw_audit_parse_http_output_uri(ela_api_url,
+						  &parsed_output_http,
+						  &parsed_output_https,
+						  errbuf,
+						  sizeof(errbuf)) < 0) {
 			fprintf(stderr,
-				"Invalid ELA_API_URL (expected http://host:port/... or https://host:port/...): %s\n\n",
-				ela_api_url);
+				"%s\n\n",
+				errbuf);
 			usage(argv[0]);
 			return 2;
 		}
+		output_http = parsed_output_http;
+		output_https = parsed_output_https;
 	}
 
 	ela_api_insecure = getenv("ELA_API_INSECURE");
@@ -1256,13 +1263,13 @@ static int embedded_linux_audit_dispatch(int argc, char **argv)
 		insecure = true;
 
 	if (output_http && strncmp(output_http, "http://", 7)) {
-		fprintf(stderr, "Invalid --output-http URI (expected http://host:port/...): %s\n\n", output_http);
+		fprintf(stderr, "Invalid internal HTTP output URI: %s\n\n", output_http);
 		usage(argv[0]);
 		return 2;
 	}
 
 	if (output_https && strncmp(output_https, "https://", 8)) {
-		fprintf(stderr, "Invalid --output-https URI (expected https://host:port/...): %s\n\n", output_https);
+		fprintf(stderr, "Invalid internal HTTPS output URI: %s\n\n", output_https);
 		usage(argv[0]);
 		return 2;
 	}

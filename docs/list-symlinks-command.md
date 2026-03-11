@@ -11,7 +11,7 @@ By default only the top-level directory is scanned. With `--recursive`, nested d
 - `--output-format <txt|csv|json>` — top-level global option controlling local and remote formatting
 - `--output-tcp <IPv4:port>` — top-level global option to duplicate output to TCP
 - `--output-http <http://host:port/path>` — top-level global option to POST output to the helper API
-- `--output-https <https://host:port/path>` — top-level global option to POST output to the helper API over HTTPS
+- `--output-http <https://host:port/path>` — top-level global option to POST output to the helper API over HTTPS
 - `--insecure` — top-level global option to disable TLS certificate and hostname verification for HTTPS output
 
 ## Output formats
@@ -29,7 +29,7 @@ When HTTP(S) output is configured, the client POSTs to `/{mac_address}/upload/sy
 ## Notes
 
 - The directory path must be absolute when provided.
-- Only one of `--output-http` or `--output-https` may be used at a time.
+- Only one of `--output-http` or `--output-http` may be used at a time.
 - Errors reading directories or symlink targets are reported to stderr and may also be sent as helper log messages when HTTP(S) output is enabled.
 
 ## Examples
@@ -41,5 +41,5 @@ When HTTP(S) output is configured, the client POSTs to `/{mac_address}/upload/sy
 ./embedded_linux_audit --output-format csv linux list-symlinks /lib
 ./embedded_linux_audit --output-format json linux list-symlinks /usr --recursive
 ./embedded_linux_audit --output-http http://192.168.1.50:5000 linux list-symlinks /etc
-./embedded_linux_audit --insecure --output-https https://192.168.1.50:5443 linux list-symlinks /etc --recursive
+./embedded_linux_audit --insecure --output-http https://192.168.1.50:5443 linux list-symlinks /etc --recursive
 ```

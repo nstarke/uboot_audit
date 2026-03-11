@@ -372,7 +372,7 @@ if [ "$AUTO_START" -eq 1 ]; then
 
     case "$WEB_SERVER" in
         https://*)
-            AUTO_OUTPUT_FLAG="--output-https"
+            AUTO_OUTPUT_FLAG="--output-http"
             ;;
         http://*)
             AUTO_OUTPUT_FLAG="--output-http"

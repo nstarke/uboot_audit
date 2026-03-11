@@ -141,17 +141,9 @@ run_with_output_override() {
     override_flag=""
     override_value=""
 
-    if [ -n "${TEST_OUTPUT_HTTP:-}" ] && [ -n "${TEST_OUTPUT_HTTPS:-}" ]; then
-        echo "error: set only one of TEST_OUTPUT_HTTP or TEST_OUTPUT_HTTPS"
-        return 2
-    fi
-
     if [ -n "${TEST_OUTPUT_HTTP:-}" ]; then
         override_flag="--output-http"
         override_value="$TEST_OUTPUT_HTTP"
-    elif [ -n "${TEST_OUTPUT_HTTPS:-}" ]; then
-        override_flag="--output-https"
-        override_value="$TEST_OUTPUT_HTTPS"
     fi
 
     if [ -z "$override_flag" ]; then
@@ -168,12 +160,12 @@ run_with_output_override() {
     set --
     while IFS= read -r arg; do
         case "$arg" in
-            --output-http|--output-https|--output-tcp)
+            --output-http|--output-http|--output-tcp)
                 set -- "$@" "$override_flag" "$override_value"
                 IFS= read -r next_arg || true
                 replaced=1
                 ;;
-            --output-http=*|--output-https=*|--output-tcp=*)
+            --output-http=*|--output-http=*|--output-tcp=*)
                 set -- "$@" "$override_flag" "$override_value"
                 replaced=1
                 ;;

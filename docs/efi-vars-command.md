@@ -10,7 +10,7 @@ This command supports local stdout output plus optional TCP or HTTP(S) upload of
 - `--output-format <txt|csv|json>` — top-level global option controlling output formatting
 - `--output-tcp <IPv4:port>` — top-level global option to stream formatted records to TCP
 - `--output-http <http://host:port/path>` — top-level global option to POST formatted records to the helper API
-- `--output-https <https://host:port/path>` — top-level global option to POST formatted records to the helper API over HTTPS
+- `--output-http <https://host:port/path>` — top-level global option to POST formatted records to the helper API over HTTPS
 - `--insecure` — top-level global option to disable TLS certificate and hostname verification for HTTPS output
 
 ## Emitted record fields
@@ -37,7 +37,7 @@ When HTTP(S) output is configured, the client POSTs to `/{mac_address}/upload/ef
 
 ## Notes
 
-- Only one of `--output-http` or `--output-https` may be used at a time.
+- Only one of `--output-http` or `--output-http` may be used at a time.
 - If `--output-tcp` is set, formatted records are streamed as they are emitted.
 - The command fails when EFI variables are not supported on the current system.
 - The command also fails if no EFI variables are found or enumeration/read operations fail.
@@ -50,6 +50,6 @@ When HTTP(S) output is configured, the client POSTs to `/{mac_address}/upload/ef
 ./embedded_linux_audit --output-format csv efi dump-vars
 ./embedded_linux_audit --output-format json efi dump-vars
 ./embedded_linux_audit --output-http http://192.168.1.50:5000 efi dump-vars
-./embedded_linux_audit --insecure --output-https https://192.168.1.50:5443 efi dump-vars
+./embedded_linux_audit --insecure --output-http https://192.168.1.50:5443 efi dump-vars
 ./embedded_linux_audit --output-tcp 192.168.1.50:5001 efi dump-vars
 ```

@@ -7,7 +7,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 BIN="/tmp/embedded_linux_audit"
 
 TEST_OUTPUT_HTTP="${TEST_OUTPUT_HTTP:-}"
-TEST_OUTPUT_HTTPS="${TEST_OUTPUT_HTTPS:-}"
+TEST_OUTPUT_HTTP="${TEST_OUTPUT_HTTP:-}"
 
 while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -23,16 +23,16 @@ while [ "$#" -gt 0 ]; do
             TEST_OUTPUT_HTTP="${1#*=}"
             shift
             ;;
-        --output-https)
+        --output-http)
             if [ "$#" -lt 2 ]; then
-                echo "error: --output-https requires a value"
+                echo "error: --output-http requires a value"
                 exit 2
             fi
-            TEST_OUTPUT_HTTPS="$2"
+            TEST_OUTPUT_HTTP="$2"
             shift 2
             ;;
-        --output-https=*)
-            TEST_OUTPUT_HTTPS="${1#*=}"
+        --output-http=*)
+            TEST_OUTPUT_HTTP="${1#*=}"
             shift
             ;;
         *)
@@ -42,13 +42,13 @@ while [ "$#" -gt 0 ]; do
     esac
 done
 
-if [ -n "$TEST_OUTPUT_HTTP" ] && [ -n "$TEST_OUTPUT_HTTPS" ]; then
-    echo "error: set only one of --output-http or --output-https"
+if [ -n "$TEST_OUTPUT_HTTP" ] && [ -n "$TEST_OUTPUT_HTTP" ]; then
+    echo "error: set only one of --output-http or --output-http"
     exit 2
 fi
 
 export TEST_OUTPUT_HTTP
-export TEST_OUTPUT_HTTPS
+export TEST_OUTPUT_HTTP
 
 # shellcheck source=tests/agent/common.sh
 . "$SCRIPT_DIR/common.sh"
@@ -158,8 +158,8 @@ run_accept_case "uboot audit --output-tcp" \
 run_accept_case "uboot audit --output-http" \
     "$BIN" uboot audit --dev /dev/null --size "$TEST_SIZE" --output-http http://127.0.0.1:1/audit
 
-run_accept_case "uboot audit --output-https" \
-    "$BIN" uboot audit --dev /dev/null --size "$TEST_SIZE" --output-https https://127.0.0.1:1/audit
+run_accept_case "uboot audit --output-http" \
+    "$BIN" uboot audit --dev /dev/null --size "$TEST_SIZE" --output-http https://127.0.0.1:1/audit
 
 run_accept_case "--insecure uboot audit" \
     "$BIN" --insecure uboot audit --dev /dev/null --size "$TEST_SIZE"
@@ -173,11 +173,11 @@ run_exact_case "uboot audit invalid --offset" 2 \
 run_exact_case "uboot audit invalid --output-http" 2 \
     "$BIN" uboot audit --dev /dev/null --size "$TEST_SIZE" --output-http ftp://127.0.0.1:1/audit
 
-run_exact_case "uboot audit invalid --output-https" 2 \
-    "$BIN" uboot audit --dev /dev/null --size "$TEST_SIZE" --output-https http://127.0.0.1:1/audit
+run_exact_case "uboot audit invalid --output-http" 2 \
+    "$BIN" uboot audit --dev /dev/null --size "$TEST_SIZE" --output-http http://127.0.0.1:1/audit
 
 run_exact_case "uboot audit both http+https" 2 \
-    "$BIN" uboot audit --dev /dev/null --size "$TEST_SIZE" --output-http http://127.0.0.1:1/audit --output-https https://127.0.0.1:1/audit
+    "$BIN" uboot audit --dev /dev/null --size "$TEST_SIZE" --output-http http://127.0.0.1:1/audit --output-http https://127.0.0.1:1/audit
 
 run_accept_case "uboot audit unknown rule reaches no-match/root-prep path" \
     "$BIN" uboot audit --dev /dev/null --size "$TEST_SIZE" --rule not_a_real_rule

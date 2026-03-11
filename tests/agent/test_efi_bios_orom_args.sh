@@ -6,7 +6,7 @@ SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
 BIN="/tmp/embedded_linux_audit"
 
 TEST_OUTPUT_HTTP="${TEST_OUTPUT_HTTP:-}"
-TEST_OUTPUT_HTTPS="${TEST_OUTPUT_HTTPS:-}"
+TEST_OUTPUT_HTTP="${TEST_OUTPUT_HTTP:-}"
 
 while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -22,16 +22,16 @@ while [ "$#" -gt 0 ]; do
             TEST_OUTPUT_HTTP="${1#*=}"
             shift
             ;;
-        --output-https)
+        --output-http)
             if [ "$#" -lt 2 ]; then
-                echo "error: --output-https requires a value"
+                echo "error: --output-http requires a value"
                 exit 2
             fi
-            TEST_OUTPUT_HTTPS="$2"
+            TEST_OUTPUT_HTTP="$2"
             shift 2
             ;;
-        --output-https=*)
-            TEST_OUTPUT_HTTPS="${1#*=}"
+        --output-http=*)
+            TEST_OUTPUT_HTTP="${1#*=}"
             shift
             ;;
         *)
@@ -41,13 +41,13 @@ while [ "$#" -gt 0 ]; do
     esac
 done
 
-if [ -n "$TEST_OUTPUT_HTTP" ] && [ -n "$TEST_OUTPUT_HTTPS" ]; then
-    echo "error: set only one of --output-http or --output-https"
+if [ -n "$TEST_OUTPUT_HTTP" ] && [ -n "$TEST_OUTPUT_HTTP" ]; then
+    echo "error: set only one of --output-http or --output-http"
     exit 2
 fi
 
 export TEST_OUTPUT_HTTP
-export TEST_OUTPUT_HTTPS
+export TEST_OUTPUT_HTTP
 
 # shellcheck source=tests/agent/common.sh
 . "$SCRIPT_DIR/common.sh"
@@ -63,7 +63,7 @@ run_exact_case "efi dump-vars extra positional arg" 2 "$BIN" efi dump-vars extra
 run_accept_case "efi dump-vars default output" "$BIN" efi dump-vars
 run_accept_case "efi dump-vars --output-tcp" "$BIN" --output-tcp 127.0.0.1:9 efi dump-vars
 run_accept_case "efi dump-vars --output-http" "$BIN" --output-http http://127.0.0.1:1 efi dump-vars
-run_accept_case "efi dump-vars --output-https" "$BIN" --output-https https://127.0.0.1:1 efi dump-vars
+run_accept_case "efi dump-vars --output-http" "$BIN" --output-http https://127.0.0.1:1 efi dump-vars
 run_accept_case "efi dump-vars --output-format txt" "$BIN" --output-format txt efi dump-vars
 run_accept_case "efi dump-vars --output-format csv" "$BIN" --output-format csv efi dump-vars
 run_accept_case "efi dump-vars --output-format json" "$BIN" --output-format json efi dump-vars
@@ -72,9 +72,9 @@ run_exact_case "efi orom pull missing output target" 2 "$BIN" efi orom pull
 run_exact_case "bios orom pull missing output target" 2 "$BIN" bios orom pull
 
 run_exact_case "efi orom pull invalid --output-http" 2 "$BIN" efi orom pull --output-http ftp://127.0.0.1:1/orom
-run_exact_case "bios orom pull invalid --output-https" 2 "$BIN" bios orom pull --output-https http://127.0.0.1:1/orom
-run_exact_case "efi orom pull both http+https" 2 "$BIN" efi orom pull --output-http http://127.0.0.1:1/orom --output-https https://127.0.0.1:1/orom
-run_exact_case "bios orom pull both http+https" 2 "$BIN" bios orom pull --output-http http://127.0.0.1:1/orom --output-https https://127.0.0.1:1/orom
+run_exact_case "bios orom pull invalid --output-http" 2 "$BIN" bios orom pull --output-http http://127.0.0.1:1/orom
+run_exact_case "efi orom pull both http+https" 2 "$BIN" efi orom pull --output-http http://127.0.0.1:1/orom --output-http https://127.0.0.1:1/orom
+run_exact_case "bios orom pull both http+https" 2 "$BIN" bios orom pull --output-http http://127.0.0.1:1/orom --output-http https://127.0.0.1:1/orom
 run_exact_case "efi orom pull extra positional arg" 2 "$BIN" efi orom pull extra
 run_exact_case "bios orom list extra positional arg" 2 "$BIN" bios orom list extra
 
@@ -83,20 +83,20 @@ run_exact_case "bios orom invalid action" 2 "$BIN" bios orom invalid
 
 run_accept_case "efi orom pull --output-tcp" "$BIN" efi orom pull --output-tcp 127.0.0.1:9
 run_accept_case "efi orom pull --output-http" "$BIN" efi orom pull --output-http http://127.0.0.1:1/orom
-run_accept_case "efi orom pull --output-https" "$BIN" efi orom pull --output-https https://127.0.0.1:1/orom
+run_accept_case "efi orom pull --output-http" "$BIN" efi orom pull --output-http https://127.0.0.1:1/orom
 run_accept_case "efi orom pull default verbose" "$BIN" efi orom pull --output-http http://127.0.0.1:1/orom
 
 run_accept_case "bios orom pull --output-tcp" "$BIN" bios orom pull --output-tcp 127.0.0.1:9
 run_accept_case "bios orom pull --output-http" "$BIN" bios orom pull --output-http http://127.0.0.1:1/orom
-run_accept_case "bios orom pull --output-https" "$BIN" bios orom pull --output-https https://127.0.0.1:1/orom
+run_accept_case "bios orom pull --output-http" "$BIN" bios orom pull --output-http https://127.0.0.1:1/orom
 run_accept_case "bios orom pull default verbose" "$BIN" bios orom pull --output-http http://127.0.0.1:1/orom
 
 run_accept_case "efi orom list --output-tcp" "$BIN" efi orom list --output-tcp 127.0.0.1:9
 run_accept_case "efi orom list --output-http" "$BIN" efi orom list --output-http http://127.0.0.1:1/orom
-run_accept_case "bios orom list --output-https" "$BIN" bios orom list --output-https https://127.0.0.1:1/orom
+run_accept_case "bios orom list --output-http" "$BIN" bios orom list --output-http https://127.0.0.1:1/orom
 run_accept_case "bios orom list default verbose" "$BIN" bios orom list --output-http http://127.0.0.1:1/orom
 run_accept_case "efi orom list --output-http" "$BIN" efi orom list --output-http http://127.0.0.1:1/orom
-run_accept_case "bios orom pull --insecure" "$BIN" --insecure bios orom pull --output-https https://127.0.0.1:1/orom
+run_accept_case "bios orom pull --insecure" "$BIN" --insecure bios orom pull --output-http https://127.0.0.1:1/orom
 
 run_accept_case "efi orom list with --output-format csv" "$BIN" --output-format csv efi orom list --output-http http://127.0.0.1:1/orom
 run_accept_case "bios orom list with --output-format json" "$BIN" --output-format json bios orom list --output-http http://127.0.0.1:1/orom

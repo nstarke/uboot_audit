@@ -374,7 +374,7 @@ static int orom_execute_pull(struct orom_ctx *ctx)
 
 	if ((!ctx->output_tcp || !*ctx->output_tcp) && (!ctx->output_uri || !*ctx->output_uri)) {
 		log_line(ctx, false,
-			"pull requires one of --output-tcp, --output-http, or --output-https\n");
+			"pull requires one of --output-tcp or --output-http\n");
 		return 2;
 	}
 
@@ -497,7 +497,6 @@ int orom_group_main(const char *fw_mode, int argc, char **argv)
 		{ "help", no_argument, NULL, 'h' },
 		{ "output-tcp", required_argument, NULL, 't' },
 		{ "output-http", required_argument, NULL, 'O' },
-		{ "output-https", required_argument, NULL, 'T' },
 		{ 0, 0, 0, 0 }
 	};
 
@@ -518,7 +517,7 @@ int orom_group_main(const char *fw_mode, int argc, char **argv)
 
 	optind = 2;
 
-	while ((opt = getopt_long(argc, argv, "ht:O:T:", long_opts, NULL)) != -1) {
+	while ((opt = getopt_long(argc, argv, "ht:O:", long_opts, NULL)) != -1) {
 		switch (opt) {
 		case 'h':
 			usage(argv[0], fw_mode);
@@ -527,10 +526,12 @@ int orom_group_main(const char *fw_mode, int argc, char **argv)
 			ctx.output_tcp = optarg;
 			break;
 		case 'O':
-			ctx.output_http = optarg;
-			break;
-		case 'T':
-			ctx.output_https = optarg;
+			if (fw_audit_parse_http_output_uri(optarg,
+						  &ctx.output_http,
+						  &ctx.output_https,
+						  NULL,
+						  0) < 0)
+				ctx.output_http = optarg;
 			break;
 		default:
 			usage(argv[0], fw_mode);
@@ -543,13 +544,10 @@ int orom_group_main(const char *fw_mode, int argc, char **argv)
 		return 2;
 	}
 
-	if (ctx.output_http && strncmp(ctx.output_http, "http://", 7)) {
-		fprintf(stderr, "Invalid --output-http URI (expected http://host:port/...): %s\n", ctx.output_http);
-		return 2;
-	}
-
-	if (ctx.output_https && strncmp(ctx.output_https, "https://", 8)) {
-		fprintf(stderr, "Invalid --output-https URI (expected https://host:port/...): %s\n", ctx.output_https);
+	if (ctx.output_http &&
+	    !ctx.output_https &&
+	    strncmp(ctx.output_http, "http://", 7)) {
+		fprintf(stderr, "Invalid --output-http URI (expected http://host:port/... or https://host:port/...): %s\n", ctx.output_http);
 		return 2;
 	}
 
