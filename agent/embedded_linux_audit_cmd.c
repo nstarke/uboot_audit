@@ -1829,6 +1829,11 @@ static bool is_valid_mac_address_string(const char *value)
 	return value[17] == '\0';
 }
 
+static bool is_zero_mac_address_string(const char *value)
+{
+	return value && !strcmp(value, "00:00:00:00:00:00");
+}
+
 static int __attribute__((unused)) resolve_uri_ipv4(const char *base_uri, struct in_addr *addr_out)
 {
 	char host[256];
@@ -1980,7 +1985,9 @@ static int first_non_loopback_mac(char *mac_buf, size_t mac_buf_len)
 		fclose(fp);
 
 		addr[strcspn(addr, "\r\n")] = '\0';
-		if (!strcmp(addr, "00:00:00:00:00:00"))
+		if (is_zero_mac_address_string(addr))
+			continue;
+		if (!is_valid_mac_address_string(addr))
 			continue;
 
 		snprintf(mac_buf, mac_buf_len, "%s", addr);
@@ -1995,15 +2002,33 @@ static int first_non_loopback_mac(char *mac_buf, size_t mac_buf_len)
 int uboot_http_get_upload_mac(const char *base_uri, char *mac_buf, size_t mac_buf_len)
 {
 	const char *override_mac;
+	struct in_addr dest_addr;
+	char ifname[IF_NAMESIZE];
+	char routed_mac[18];
 
 	if (!mac_buf || mac_buf_len < 18)
 		return -1;
 	mac_buf[0] = '\0';
-	(void)base_uri;
 
 	override_mac = getenv("FW_AUDIT_UPLOAD_MAC");
 	if (override_mac && is_valid_mac_address_string(override_mac)) {
 		snprintf(mac_buf, mac_buf_len, "%s", override_mac);
+		return 0;
+	}
+
+	/*
+	 * Prefer the MAC address from the routed egress interface for the upload
+	 * destination when we can resolve it. This handles systems with multiple
+	 * interfaces, including VLAN subinterfaces such as eth1.70, more reliably
+	 * than a simple first-entry scan of /sys/class/net.
+	 */
+	if (base_uri && *base_uri &&
+	    resolve_uri_ipv4(base_uri, &dest_addr) == 0 &&
+	    route_iface_for_ipv4(dest_addr, ifname, sizeof(ifname)) == 0 &&
+	    mac_for_interface(ifname, routed_mac, sizeof(routed_mac)) == 0 &&
+	    is_valid_mac_address_string(routed_mac) &&
+	    !is_zero_mac_address_string(routed_mac)) {
+		snprintf(mac_buf, mac_buf_len, "%s", routed_mac);
 		return 0;
 	}
 
