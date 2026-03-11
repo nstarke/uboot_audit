@@ -48,6 +48,7 @@ static const char *const interactive_group_uboot[] = {
 
 static const char *const interactive_group_linux[] = {
 	"dmesg",
+	"download-file",
 	"execute-command",
 	"grep",
 	"list-files",
@@ -131,6 +132,7 @@ static void interactive_usage(const char *prog)
 	       "  uboot image\n"
 	       "  uboot audit\n"
 	       "  linux dmesg\n"
+	       "  linux download-file\n"
 	       "  linux execute-command\n"
 	       "  linux grep\n"
 	       "  linux list-files\n"
@@ -856,6 +858,7 @@ static void usage(const char *prog)
 		"  uboot image        Scan or extract U-Boot images\n"
 		"  uboot audit        Run U-Boot audit rules\n"
 		"  linux dmesg        Dump kernel ring buffer output\n"
+		"  linux download-file Download a file from HTTP(S) to a local path\n"
 		"  linux execute-command Execute a shell command and capture/upload its output\n"
 		"  linux grep         Search files in a directory for a string\n"
 		"  linux list-files   List files under a directory (use --recursive to recurse)\n"
@@ -874,6 +877,7 @@ static void usage(const char *prog)
 		"  %s uboot image --dev /dev/mtdblock4 --step 0x1000\n"
 		"  %s uboot audit --dev /dev/mtdblock4 --offset 0x0 --size 0x10000\n"
 		"  %s --output-http http://127.0.0.1:5000/dmesg linux dmesg\n"
+		"  %s linux download-file https://example.com/fw.bin /tmp/fw.bin\n"
 		"  %s --output-format json --output-http http://127.0.0.1:5000 linux execute-command \"uname -a\"\n"
 		"  %s --output-http http://127.0.0.1:5000 linux grep --search root --path /etc --recursive\n"
 		"  %s --output-http http://127.0.0.1:5000 linux list-files /etc\n"
@@ -883,7 +887,7 @@ static void usage(const char *prog)
 		"  %s --output-format json --output-http http://127.0.0.1:5000 efi dump-vars\n"
 		"  %s --quiet --output-tcp 127.0.0.1:5001 bios orom list\n"
 		"  %s --output-format json --script ./commands.txt\n",
-		prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog);
+		prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog);
 }
 
 static bool is_http_script_source(const char *value)
@@ -1372,7 +1376,13 @@ static int embedded_linux_audit_dispatch(int argc, char **argv)
 			goto done;
 		}
 
-		if (!strcmp(argv[sub_idx], "execute-command"))
+		if (!strcmp(argv[sub_idx], "download-file")) {
+			if (output_format_explicit)
+				fprintf(stderr,
+					"Warning: --output-format has no effect for download-file; downloaded data is written to a local file\n");
+			ret = linux_download_file_scan_main(argc - sub_idx, argv + sub_idx);
+		}
+		else if (!strcmp(argv[sub_idx], "execute-command"))
 			ret = linux_execute_command_scan_main(argc - sub_idx, argv + sub_idx);
 		else if (!strcmp(argv[sub_idx], "grep")) {
 			if (output_format_explicit)
