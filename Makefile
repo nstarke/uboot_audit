@@ -72,7 +72,8 @@ endif
 empty :=
 space := $(empty) $(empty)
 compat_tag = $(if $(strip $(COMPAT_CPU)),$(COMPAT_CPU),default)
-CC_TAG := $(subst $(space),_,$(CC))-$(compat_tag)
+sanitize_tag = $(subst :,_,$(subst /,_,$(subst $(space),_,$(1))))
+CC_TAG := $(call sanitize_tag,$(CC))-$(compat_tag)
 
 CMAKE_C_COMPILER ?= $(CC)
 CMAKE_C_COMPILER_ARG1 ?=

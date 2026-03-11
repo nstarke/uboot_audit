@@ -3,11 +3,31 @@ set -uo pipefail
 
 ZIG_VERSION="${ZIG_VERSION:-0.14.0}"
 JOBS="${JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)}"
+CLEAN_ONLY=0
 
 usage() {
-  echo "Usage: $0 [-j jobs] [target_name ...]" >&2
+  echo "Usage: $0 [--clean] [-j jobs] [target_name ...]" >&2
   exit 1
 }
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --clean)
+      CLEAN_ONLY=1
+      shift
+      ;;
+    --)
+      shift
+      break
+      ;;
+    -*)
+      break
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
 
 while getopts ":j:" opt; do
   case "$opt" in
@@ -45,14 +65,17 @@ riscv32|riscv32-linux-musl,riscv32-linux-gnu|riscv32|riscv32-linux-musl,riscv32-
 riscv64|riscv64-linux-musl,riscv64-linux-gnu|riscv64|riscv64-linux-musl,riscv64-linux-gnu
 '
 
-mkdir -p "${DIST_DIR}" "${WORK_DIR}" "${LOG_DIR}" "${STATUS_DIR}"
-
 require_file() {
   local f="$1"
   [[ -f "$f" ]] || {
     echo "Missing required file: $f" >&2
     exit 1
   }
+}
+
+clean_outputs() {
+  echo "Removing build output directories..."
+  rm -rf "${WORK_DIR}" "${DIST_DIR}"
 }
 
 install_zig() {
@@ -328,6 +351,11 @@ print_summary() {
 }
 
 main() {
+  if [[ "${CLEAN_ONLY}" -eq 1 ]]; then
+    clean_outputs
+    return 0
+  fi
+
   require_file "${ROOT_DIR}/agent/embedded_linux_audit.c"
   require_file "${ROOT_DIR}/agent/embedded_linux_audit_cmd.h"
   require_file "${ROOT_DIR}/third_party/libefivar/src/include/efivar/efivar.h"
@@ -338,6 +366,8 @@ main() {
     echo "Invalid JOBS value: ${JOBS}" >&2
     exit 1
   fi
+
+  mkdir -p "${DIST_DIR}" "${WORK_DIR}" "${LOG_DIR}" "${STATUS_DIR}"
 
   install_zig
   run_parallel
