@@ -16,9 +16,9 @@ including files under:
 - `agent/`
 - `compat/` (except where a file states otherwise)
 - `tests/agent/`
+- `tests/compile_release_binaries_locally.sh`
 - `Makefile`
 - `.github/workflows/release-cross-static.yml`
-- `tools/compile_release_binaries_locally.sh`
 - documentation describing the agent CLI under `docs/`
 
 See `COPYING` for the full GPL-3.0-or-later license text.

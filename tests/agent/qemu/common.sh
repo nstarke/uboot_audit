@@ -81,10 +81,10 @@ ensure_release_binaries() {
         require_file "$RELEASE_BUILD_SCRIPT"
         build_jobs="$(cpu_jobs_for_build)"
         if [ -n "$requested_isa" ]; then
-            echo "Release binary missing for $requested_isa; building via tests/compile_release_binaries_locally.sh -j$build_jobs $requested_isa"
+            echo "Release binary missing for $requested_isa; compiling via tests/compile_release_binaries_locally.sh -j$build_jobs $requested_isa"
             /bin/sh "$RELEASE_BUILD_SCRIPT" -j"$build_jobs" "$requested_isa"
         else
-            echo "Release binaries missing; building all ISAs via tests/compile_release_binaries_locally.sh -j$build_jobs"
+            echo "Release binaries missing; compiling all ISAs via tests/compile_release_binaries_locally.sh -j$build_jobs"
             /bin/sh "$RELEASE_BUILD_SCRIPT" -j"$build_jobs"
         fi
     fi

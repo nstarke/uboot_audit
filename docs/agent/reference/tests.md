@@ -84,7 +84,7 @@ Set only one of them at a time.
 
 `tests/agent/shell/download_tests.sh` can download test scripts and a selected release binary from a api server.
 
-List supported ISAs (derived from `tools/release_binaries/embedded_linux_audit-*`):
+List supported ISAs (compiled by `tests/compile_release_binaries_locally.sh`):
 
 ```bash
 sh tests/agent/shell/download_tests.sh --list-isa
