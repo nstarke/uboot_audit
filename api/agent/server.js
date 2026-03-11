@@ -329,9 +329,11 @@ function ensureSelfSignedCert(certPath, keyPath) {
 }
 
 function parseArgs(argv) {
+  const npmBoolean = (name) => String(process.env[name] || '').toLowerCase() === 'true';
   const npmLogLevel = String(process.env.npm_config_loglevel || '').toLowerCase();
   const defaultVerbose = ['verbose', 'silly'].includes(npmLogLevel);
-  const defaultClean = String(process.env.npm_config_clean || '').toLowerCase() === 'true';
+  const defaultClean = npmBoolean('npm_config_clean');
+  const defaultForceDownload = npmBoolean('npm_config_force_download');
   const defaults = {
     host: '0.0.0.0',
     port: 5000,
@@ -341,7 +343,7 @@ function parseArgs(argv) {
     assetsDir: null,
     testsDir: 'tests',
     githubToken: process.env.GITHUB_TOKEN || '',
-    forceDownload: false,
+    forceDownload: defaultForceDownload,
     clean: defaultClean,
     https: false,
     verbose: defaultVerbose,
