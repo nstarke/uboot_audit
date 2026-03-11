@@ -5,7 +5,12 @@ set -eu
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
+# shellcheck source=tests/system_package_helpers.sh
+. "$SCRIPT_DIR/system_package_helpers.sh"
+
 DEST_RELEASE_DIR="$REPO_ROOT/api/data/release_binaries"
+TOOLS_CACHE_DIR="$REPO_ROOT/.cache/tools"
+ZIG_VERSION="0.13.0"
 SUPPORTED_ISAS="arm32-le arm32-be aarch64-le aarch64-be mips-le mips-be mips64-le mips64-be powerpc-le powerpc-be x86 x86_64 riscv32 riscv64"
 
 usage() {
@@ -18,10 +23,97 @@ clean_outputs() {
 }
 
 require_command() {
-    if ! command -v "$1" >/dev/null 2>&1; then
+    if ! ela_ensure_command "$1"; then
         echo "error: missing required command: $1" >&2
         exit 1
     fi
+}
+
+download_file() {
+    url="$1"
+    output_path="$2"
+
+    ela_ensure_any_command curl wget >/dev/null 2>&1 || {
+        echo "error: need curl or wget to download $url" >&2
+        exit 1
+    }
+
+    if command -v curl >/dev/null 2>&1; then
+        curl -fL "$url" -o "$output_path"
+        return 0
+    fi
+
+    if command -v wget >/dev/null 2>&1; then
+        wget -O "$output_path" "$url"
+        return 0
+    fi
+
+    echo "error: need curl or wget to download $url" >&2
+    exit 1
+}
+
+ensure_zig() {
+    if command -v zig >/dev/null 2>&1; then
+        return 0
+    fi
+
+    host_os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+    host_arch="$(uname -m)"
+
+    case "$host_os" in
+        linux)
+            ;;
+        *)
+            echo "error: zig not found on PATH and automatic Zig download is unsupported on host OS: $host_os" >&2
+            exit 1
+            ;;
+    esac
+
+    case "$host_arch" in
+        x86_64|amd64)
+            zig_host="x86_64-linux"
+            ;;
+        aarch64|arm64)
+            zig_host="aarch64-linux"
+            ;;
+        *)
+            echo "error: zig not found on PATH and automatic Zig download is unsupported on host arch: $host_arch" >&2
+            exit 1
+            ;;
+    esac
+
+    zig_dir="$TOOLS_CACHE_DIR/zig/$ZIG_VERSION/$zig_host"
+    zig_bin="$zig_dir/zig"
+
+    if [ ! -x "$zig_bin" ]; then
+        archive_name="zig-$zig_host-$ZIG_VERSION.tar.xz"
+        archive_url="https://ziglang.org/download/$ZIG_VERSION/$archive_name"
+        tmp_dir="$TOOLS_CACHE_DIR/zig/tmp"
+        archive_path="$tmp_dir/$archive_name"
+        extract_dir="$tmp_dir/extract-$zig_host-$ZIG_VERSION"
+        extracted_root="$extract_dir/zig-$zig_host-$ZIG_VERSION"
+
+        echo "zig not found on PATH; downloading Zig $ZIG_VERSION for $zig_host"
+        mkdir -p "$tmp_dir"
+        rm -rf "$extract_dir"
+        download_file "$archive_url" "$archive_path"
+        mkdir -p "$extract_dir"
+        tar -xJf "$archive_path" -C "$extract_dir"
+
+        if [ ! -x "$extracted_root/zig" ]; then
+            echo "error: downloaded Zig archive did not contain expected binary: $extracted_root/zig" >&2
+            exit 1
+        fi
+
+        mkdir -p "$(dirname "$zig_dir")"
+        rm -rf "$zig_dir"
+        mv "$extracted_root" "$zig_dir"
+        rm -rf "$extract_dir"
+        rm -f "$archive_path"
+    fi
+
+    PATH="$zig_dir:$PATH"
+    export PATH
 }
 
 set_isa_config() {
@@ -238,7 +330,15 @@ if [ "$clean_only" -eq 1 ]; then
     clean_outputs
 fi
 
-require_command zig
+ensure_zig
+require_command cmake
+require_command tar
+require_command cc
+require_command ar
+require_command ranlib
+require_command perl
+require_command python3
+require_command bash
 require_command make
 
 if [ "$#" -gt 0 ]; then

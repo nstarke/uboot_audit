@@ -4,6 +4,10 @@ set -u
 
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
 SCRIPT_NAME="$(basename "$0")"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+
+# shellcheck source=tests/system_package_helpers.sh
+. "$REPO_ROOT/tests/system_package_helpers.sh"
 
 WEB_SERVER=""
 OUTPUT_DIRECTORY=""
@@ -182,6 +186,11 @@ if [ "$SKIP_REMOVE" -ne 1 ]; then
 fi
 
 BASE_URL="${WEB_SERVER%/}"
+
+ela_ensure_any_command curl wget >/dev/null 2>&1 || {
+    echo "error: neither curl nor wget is installed"
+    exit 1
+}
 
 if cmd_exists curl; then
     downloader="curl"

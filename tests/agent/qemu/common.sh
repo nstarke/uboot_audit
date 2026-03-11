@@ -4,6 +4,10 @@ set -u
 
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+
+# shellcheck source=tests/system_package_helpers.sh
+. "$REPO_ROOT/tests/system_package_helpers.sh"
+
 RELEASE_BINARIES_DIR="${RELEASE_BINARIES_DIR:-$REPO_ROOT/api/data/release_binaries}"
 TEST_SCRIPTS_DIR="$REPO_ROOT/tests/agent/scripts"
 RELEASE_BUILD_SCRIPT="$REPO_ROOT/tests/compile_release_binaries_locally.sh"
@@ -14,7 +18,7 @@ command_exists() {
 }
 
 require_command() {
-    if ! command_exists "$1"; then
+    if ! ela_ensure_command "$1"; then
         echo "error: missing required command: $1"
         exit 1
     fi
@@ -45,6 +49,10 @@ cpu_jobs_for_build() {
 resolve_qemu_mode() {
     qemu_static_cmd="$1"
     qemu_binfmt_cmd="$2"
+
+    if ! command_exists "$qemu_static_cmd" && ! command_exists "$qemu_binfmt_cmd"; then
+        ela_ensure_command "$qemu_static_cmd" >/dev/null 2>&1 || ela_ensure_command "$qemu_binfmt_cmd" >/dev/null 2>&1 || true
+    fi
 
     if command_exists "$qemu_static_cmd"; then
         echo "static:$(command -v "$qemu_static_cmd")"

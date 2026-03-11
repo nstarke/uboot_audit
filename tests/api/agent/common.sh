@@ -2,6 +2,12 @@
 
 set -u
 
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+
+# shellcheck source=tests/system_package_helpers.sh
+. "$REPO_ROOT/tests/system_package_helpers.sh"
+
 PASS_COUNT=0
 FAIL_COUNT=0
 
@@ -37,11 +43,11 @@ fail_case() {
 }
 
 require_web_test_tools() {
-    if ! has_curl; then
+    if ! ela_ensure_command curl; then
         echo "error: curl is required"
         exit 1
     fi
-    if ! has_node; then
+    if ! ela_ensure_command node; then
         echo "error: node is required"
         exit 1
     fi

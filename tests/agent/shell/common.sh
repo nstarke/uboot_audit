@@ -2,6 +2,12 @@
 
 set -u
 
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+
+# shellcheck source=tests/system_package_helpers.sh
+. "$REPO_ROOT/tests/system_package_helpers.sh"
+
 PASS_COUNT=0
 FAIL_COUNT=0
 
@@ -13,6 +19,8 @@ has_printf() {
 }
 
 find_python_bin() {
+    ela_ensure_command python3 >/dev/null 2>&1 || true
+
     if command_exists python3; then
         echo python3
         return 0
@@ -246,6 +254,8 @@ require_binary() {
         echo "hint: build first with: make"
         exit 1
     fi
+
+    ela_ensure_command python3 >/dev/null 2>&1 || true
 }
 
 run_exact_case() {
