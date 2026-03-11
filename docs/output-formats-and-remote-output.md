@@ -6,6 +6,7 @@ Global options:
 - `--quiet` — disable verbose logging; commands/subcommands are verbose by default
 - `--output-tcp <ip:port>` — configure a TCP remote output destination at the `embedded_linux_audit` wrapper level
 - `--output-http <http(s)://host:port/path>` — configure an HTTP or HTTPS remote output destination at the `embedded_linux_audit` wrapper level
+- `--script <path|http(s)://...>` — execute commands from a local or remote script file at the wrapper level
   - `txt`: existing human-readable output
   - `csv`: comma-separated records (header + rows)
   - `json`: newline-delimited JSON objects (one JSON object per line)
@@ -16,6 +17,16 @@ These wrapper-level options apply to all commands and subcommands. Pass them bef
 - `./embedded_linux_audit uboot env`
 - `./embedded_linux_audit --output-http http://127.0.0.1:5000/dmesg linux dmesg`
 - `./embedded_linux_audit --output-tcp 127.0.0.1:5001 bios orom list`
+- `./embedded_linux_audit --output-format json --script ./commands.txt`
+
+Script execution notes:
+
+- `--script` is a wrapper-level feature, so it can be combined with `--output-format`, `--quiet`, `--output-http`, `--output-tcp`, and `--insecure`.
+- The script source may be a local file or an `http://` / `https://` URL.
+- Remote script downloads over HTTPS use the embedded CA bundle by default.
+- `--insecure` also applies to HTTPS script downloads.
+- Use either `--script` or a direct command, not both.
+- See [`embedded_linux_audit --script` Feature](script-feature.md) for the full script file format and examples.
 
 Remote output notes:
 

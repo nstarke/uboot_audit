@@ -2,6 +2,7 @@
 
 - [Build and Release Notes](build.md)
 - [Output Formats and Remote Output](output-formats-and-remote-output.md)
+- [`embedded_linux_audit --script` Feature](script-feature.md)
 - [`embedded_linux_audit uboot env` Command](env-command.md)
 - [`embedded_linux_audit uboot image` Command](image-command.md)
 - [`embedded_linux_audit uboot audit` Command](audit-command.md)
