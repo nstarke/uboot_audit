@@ -81,6 +81,7 @@ static int embedded_linux_audit_dispatch(int argc, char **argv);
 static int execute_script_commands(const char *prog, const char *script_source);
 static bool is_http_script_source(const char *value);
 static char *script_trim(char *s);
+static bool command_should_emit_lifecycle_events(int argc, char **argv, int cmd_idx, const char *script_path);
 
 #if defined(ELA_HAS_READLINE)
 static char *interactive_completion_generator(const char *text, int state);
@@ -1083,6 +1084,22 @@ fail:
 	return NULL;
 }
 
+static bool command_should_emit_lifecycle_events(int argc, char **argv, int cmd_idx, const char *script_path)
+{
+	if (script_path && *script_path)
+		return true;
+
+	if (!argv || cmd_idx < 0 || cmd_idx >= argc)
+		return true;
+
+	if (!strcmp(argv[cmd_idx], "linux") &&
+	    cmd_idx + 1 < argc &&
+	    !strcmp(argv[cmd_idx + 1], "download-file"))
+		return false;
+
+	return true;
+}
+
 static int embedded_linux_audit_dispatch(int argc, char **argv)
 {
 	const char *output_format = "txt";
@@ -1099,6 +1116,7 @@ static int embedded_linux_audit_dispatch(int argc, char **argv)
 	int ret;
 	char *command_summary;
 	const char *isa;
+	bool emit_lifecycle_events;
 
 	if (getenv("FW_AUDIT_OUTPUT_FORMAT") && *getenv("FW_AUDIT_OUTPUT_FORMAT"))
 		output_format = getenv("FW_AUDIT_OUTPUT_FORMAT");
@@ -1316,9 +1334,10 @@ static int embedded_linux_audit_dispatch(int argc, char **argv)
 	command_summary = script_path
 		? build_command_summary(argc, argv, 1)
 		: build_command_summary(argc, argv, cmd_idx);
+	emit_lifecycle_events = command_should_emit_lifecycle_events(argc, argv, cmd_idx, script_path);
 	if (!command_summary)
 		command_summary = strdup("unknown");
-	if (command_summary)
+	if (command_summary && emit_lifecycle_events)
 		(void)fw_audit_emit_lifecycle_event(output_format,
 			output_tcp,
 			output_http,
@@ -1478,7 +1497,7 @@ static int embedded_linux_audit_dispatch(int argc, char **argv)
 	ret = 2;
 
 done:
-	if (command_summary) {
+	if (command_summary && emit_lifecycle_events) {
 		(void)fw_audit_emit_lifecycle_event(output_format,
 			output_tcp,
 			output_http,
@@ -1487,8 +1506,8 @@ done:
 			command_summary,
 			"complete",
 			ret);
-		free(command_summary);
 	}
+	free(command_summary);
 	return ret;
 }
 
