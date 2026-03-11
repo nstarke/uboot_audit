@@ -121,13 +121,49 @@ job_status_file() {
   echo "${STATUS_DIR}/$1.status"
 }
 
+count_selected_targets() {
+  local count=0
+  local line name zig_targets cpu_compat cpu_compat_zig_targets
+
+  while IFS='|' read -r name zig_targets cpu_compat cpu_compat_zig_targets; do
+    [[ -n "${name}" ]] || continue
+    should_build "${name}" || continue
+    count=$((count + 1))
+  done <<< "${TARGETS_TABLE}"
+
+  echo "${count}"
+}
+
+jobs_for_build_slot() {
+  local slot_index="$1"
+  local total_slots="$2"
+  local jobs_for_slot
+
+  if [[ "${total_slots}" -le 0 ]]; then
+    echo "${JOBS}"
+    return
+  fi
+
+  jobs_for_slot=$((JOBS / total_slots))
+  if [[ "${slot_index}" -lt $((JOBS % total_slots)) ]]; then
+    jobs_for_slot=$((jobs_for_slot + 1))
+  fi
+
+  if [[ "${jobs_for_slot}" -lt 1 ]]; then
+    jobs_for_slot=1
+  fi
+
+  echo "${jobs_for_slot}"
+}
+
 build_one_variant() {
   local build_kind="$1"
   local name="$2"
   local zig_targets_csv="$3"
   local compat_cpu="${4:-}"
-  local output_path="$5"
-  local repo_copy="$6"
+  local make_jobs="$5"
+  local output_path="$6"
+  local repo_copy="$7"
 
   mkdir -p "$(dirname "$output_path")"
   IFS=',' read -r -a targets <<< "${zig_targets_csv}"
@@ -136,9 +172,9 @@ build_one_variant() {
   local t
   for t in "${targets[@]}"; do
     if [[ "$build_kind" == "compat" ]]; then
-      echo "Trying CPU_COMPAT target: ${t} (COMPAT_CPU=${compat_cpu})"
+      echo "Trying CPU_COMPAT target: ${t} (COMPAT_CPU=${compat_cpu}, MAKE_JOBS=${make_jobs})"
     else
-      echo "Trying default target: ${t}"
+      echo "Trying default target: ${t} (MAKE_JOBS=${make_jobs})"
     fi
 
     if (
@@ -149,7 +185,7 @@ build_one_variant() {
         CPPFLAGS= \
         CXXFLAGS= \
         LDFLAGS= \
-        make static \
+        make -j "${make_jobs}" static \
           ELA_USE_READLINE=0 \
           ${compat_cpu:+COMPAT_CPU=${compat_cpu}} \
           CMAKE_C_COMPILER="${ZIG_BIN}" \
@@ -212,6 +248,8 @@ build_target() {
   local zig_targets="$2"
   local cpu_compat="$3"
   local cpu_compat_zig_targets="$4"
+  local default_jobs="$5"
+  local compat_jobs="$6"
 
   local log_file status_file repo_copy
   log_file="$(job_log "$name")"
@@ -224,6 +262,8 @@ build_target() {
     echo "zig_targets=${zig_targets}"
     echo "cpu_compat=${cpu_compat}"
     echo "cpu_compat_zig_targets=${cpu_compat_zig_targets}"
+    echo "default_make_jobs=${default_jobs}"
+    echo "compat_make_jobs=${compat_jobs}"
     echo "repo_copy=${repo_copy}"
     echo "============================================================"
 
@@ -237,6 +277,7 @@ build_target() {
       "${name}" \
       "${zig_targets}" \
       "" \
+      "${default_jobs}" \
       "${DIST_DIR}/${name}/embedded_linux_audit-${name}" \
       "${repo_copy}"
     then
@@ -250,6 +291,7 @@ build_target() {
       "${name}" \
       "${cpu_compat_zig_targets}" \
       "${cpu_compat}" \
+      "${compat_jobs}" \
       "${DIST_DIR}/${name}/embedded_linux_audit-${name}-compat" \
       "${repo_copy}"
     then
@@ -267,14 +309,20 @@ run_parallel() {
   local -a pids=()
   local -a names=()
   local running=0
+  local selected_target_count total_build_slots build_slot=0
+
+  selected_target_count="$(count_selected_targets)"
+  total_build_slots=$((selected_target_count * 2))
 
   enqueue() {
     local name="$1"
     local zig_targets="$2"
     local cpu_compat="$3"
     local cpu_compat_zig_targets="$4"
+    local default_jobs="$5"
+    local compat_jobs="$6"
 
-    build_target "${name}" "${zig_targets}" "${cpu_compat}" "${cpu_compat_zig_targets}" &
+    build_target "${name}" "${zig_targets}" "${cpu_compat}" "${cpu_compat_zig_targets}" "${default_jobs}" "${compat_jobs}" &
     pids+=("$!")
     names+=("${name}")
     running=$((running + 1))
@@ -305,8 +353,13 @@ run_parallel() {
     [[ -n "${name}" ]] || continue
     should_build "${name}" || continue
 
+    local default_jobs compat_jobs
+    default_jobs="$(jobs_for_build_slot "${build_slot}" "${total_build_slots}")"
+    compat_jobs="$(jobs_for_build_slot "$((build_slot + 1))" "${total_build_slots}")"
+    build_slot=$((build_slot + 2))
+
     maybe_wait
-    enqueue "${name}" "${zig_targets}" "${cpu_compat}" "${cpu_compat_zig_targets}"
+    enqueue "${name}" "${zig_targets}" "${cpu_compat}" "${cpu_compat_zig_targets}" "${default_jobs}" "${compat_jobs}"
   done <<< "${TARGETS_TABLE}"
 
   while [[ "${#pids[@]}" -gt 0 ]]; do
