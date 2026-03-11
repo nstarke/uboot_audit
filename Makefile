@@ -84,6 +84,7 @@ CMAKE_TRY_COMPILE_TARGET_TYPE ?= STATIC_LIBRARY
 
 OPENSSL_TARGET_TRIPLE ?= $(strip $(CMAKE_C_COMPILER_TARGET))
 OPENSSL_CONFIGURE_TARGET ?=
+OPENSSL_EXTRA_CONFIGURE_FLAGS ?=
 
 ifeq ($(strip $(OPENSSL_CONFIGURE_TARGET)),)
 ifneq ($(strip $(OPENSSL_TARGET_TRIPLE)),)
@@ -141,6 +142,20 @@ ifneq ($(filter $(COMPAT_CPU),arm32 armeb powerpc powerpchf),)
 # the target. Force the non-atomic fallback paths for these compat builds.
 CURL_CMAKE_ARGS += -DHAVE_ATOMIC=0 -DHAVE_STDATOMIC_H=0
 ZLIB_EXTRA_CFLAGS += -D__STDC_NO_ATOMICS__=1
+endif
+
+ifneq ($(filter $(COMPAT_CPU),powerpc powerpchf),)
+# Make libcurl as small and conservative as possible for 32-bit PowerPC compat
+# builds. These targets have been hitting runtime illegal-instruction faults on
+# HTTP output paths, so disable optional subsystems and cache/IPC helpers that
+# are not required by this project's simple HTTP use case.
+CURL_CMAKE_ARGS += -DCURL_DISABLE_ALTSVC=ON -DCURL_DISABLE_HSTS=ON -DCURL_DISABLE_WEBSOCKETS=ON -DCURL_DISABLE_NTLM=ON -DCURL_DISABLE_PROXY=ON -DCURL_DISABLE_SOCKETPAIR=ON -DCURL_DISABLE_SHUFFLE_DNS=ON -DENABLE_UNIX_SOCKETS=OFF
+
+# Also make libcrypto/libssl as conservative as possible. These flags keep the
+# build focused on the minimal static TLS functionality curl needs while
+# avoiding extra provider/config/error/DSO code paths that may still exercise
+# problematic CPU-detection or runtime-init behavior on older PowerPC systems.
+OPENSSL_EXTRA_CONFIGURE_FLAGS += no-autoerrinit no-autoload-config no-atexit no-dso no-legacy no-stdio
 endif
 
 JSONC_CMAKE_ARGS := $(CMAKE_CC_ARGS)
@@ -276,7 +291,7 @@ $(OPENSSL_LIB):
 	mkdir -p $(OPENSSL_BUILD)
 	cd $(OPENSSL_DIR) && $(MAKE) distclean >/dev/null 2>&1 || true
 	# Use no-asm so cross builds (e.g. zig cc -target arm-*) don't pick host x86 asm paths.
-	cd $(OPENSSL_DIR) && CC="$(CC)" CFLAGS="$(COMPAT_CFLAGS)" ./Configure $(OPENSSL_CONFIGURE_TARGET) no-asm no-shared no-module no-threads no-tests no-docs --prefix="$(abspath $(OPENSSL_INSTALL))" --openssldir="$(abspath $(OPENSSL_INSTALL))/ssl" --libdir=lib
+	cd $(OPENSSL_DIR) && CC="$(CC)" CFLAGS="$(COMPAT_CFLAGS)" ./Configure $(OPENSSL_CONFIGURE_TARGET) no-asm no-shared no-module no-threads no-tests no-docs $(OPENSSL_EXTRA_CONFIGURE_FLAGS) --prefix="$(abspath $(OPENSSL_INSTALL))" --openssldir="$(abspath $(OPENSSL_INSTALL))/ssl" --libdir=lib
 	$(MAKE) -C $(OPENSSL_DIR) -j$(JOBS) build_generated
 	$(MAKE) -C $(OPENSSL_DIR) -j$(JOBS) build_libs
 	mkdir -p "$(OPENSSL_INSTALL)/include" "$(OPENSSL_INSTALL)/lib"
