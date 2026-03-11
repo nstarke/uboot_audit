@@ -122,6 +122,31 @@ ifneq ($(strip $(CMAKE_C_COMPILER_TARGET)),)
 WOLFSSL_CONFIGURE_HOST_ARG := --host=$(CMAKE_C_COMPILER_TARGET)
 endif
 
+ELA_ENABLE_WOLFSSL ?=
+ifeq ($(strip $(ELA_ENABLE_WOLFSSL)),)
+ifneq ($(filter $(COMPAT_CPU),powerpc powerpchf powerpc64 powerpc64le),)
+ELA_ENABLE_WOLFSSL := 1
+else ifneq ($(strip $(CMAKE_C_COMPILER_TARGET)),)
+ifneq (,$(or $(findstring powerpc,$(CMAKE_C_COMPILER_TARGET)),$(findstring ppc,$(CMAKE_C_COMPILER_TARGET))))
+ELA_ENABLE_WOLFSSL := 1
+else
+ELA_ENABLE_WOLFSSL := 0
+endif
+else
+ELA_ENABLE_WOLFSSL := 0
+endif
+endif
+
+WOLFSSL_EXTRA_CONFIGURE_FLAGS :=
+ifneq ($(strip $(CMAKE_C_COMPILER_TARGET)),)
+ifneq (,$(findstring mips64,$(CMAKE_C_COMPILER_TARGET)))
+# wolfSSL's MIPS64 SP asm currently emits inline asm clobbers ($lo/$hi) that
+# clang-as-zig rejects for these cross builds. Keep SP math enabled but force
+# the portable C implementation for MIPS64 targets.
+WOLFSSL_EXTRA_CONFIGURE_FLAGS += --disable-sp-asm
+endif
+endif
+
 CURL_CMAKE_ARGS := $(CMAKE_CC_ARGS)
 ifneq ($(strip $(CMAKE_C_COMPILER_TARGET)),)
 # curl's CMake feature probes are fragile for older cross targets under zig cc.
@@ -207,6 +232,7 @@ WOLFSSL_CFLAGS := -I$(WOLFSSL_DIR) -I$(WOLFSSL_BUILD)
 OPENSSL_DIR   := third_party/openssl
 OPENSSL_BUILD := $(OPENSSL_DIR)/build-$(CC_TAG)
 OPENSSL_INSTALL := $(OPENSSL_BUILD)/install
+OPENSSL_CMAKE_DIR := $(OPENSSL_INSTALL)/lib/cmake/OpenSSL
 OPENSSL_SSL_LIB := $(OPENSSL_INSTALL)/lib/libssl.a
 OPENSSL_LIB   := $(OPENSSL_INSTALL)/lib/libcrypto.a
 OPENSSL_CFLAGS := -I$(OPENSSL_INSTALL)/include
@@ -240,7 +266,10 @@ CFLAGS += $(LIBEFIVAR_CFLAGS)
 CFLAGS += $(ZLIB_CFLAGS)
 CFLAGS += $(JSONC_CFLAGS)
 CFLAGS += $(CURL_CFLAGS)
+ifeq ($(ELA_ENABLE_WOLFSSL),1)
 CFLAGS += $(WOLFSSL_CFLAGS)
+CFLAGS += -DELA_HAS_WOLFSSL=1
+endif
 CFLAGS += $(OPENSSL_CFLAGS)
 CFLAGS += $(COMPAT_CFLAGS)
 CFLAGS += -I.
@@ -305,6 +334,7 @@ $(WOLFSSL_LIB):
 	cd $(WOLFSSL_BUILD) && $(abspath $(WOLFSSL_DIR))/configure \
 		CC="$(CC)" CFLAGS="$(COMPAT_CFLAGS)" \
 		$(WOLFSSL_CONFIGURE_HOST_ARG) \
+		$(WOLFSSL_EXTRA_CONFIGURE_FLAGS) \
 		--enable-static --disable-shared --disable-benchmark --disable-examples \
 		--disable-crypttests --disable-dtls --disable-oldtls --disable-tls13 \
 		--disable-tls13 --enable-sni --prefix="$(abspath $(WOLFSSL_BUILD))/install"
@@ -317,11 +347,13 @@ $(OPENSSL_SSL_LIB):
 	cd $(OPENSSL_DIR) && CC="$(CC)" CFLAGS="$(COMPAT_CFLAGS)" ./Configure $(OPENSSL_CONFIGURE_TARGET) no-asm no-shared no-module no-threads no-tests no-docs $(OPENSSL_EXTRA_CONFIGURE_FLAGS) --prefix="$(abspath $(OPENSSL_INSTALL))" --openssldir="$(abspath $(OPENSSL_INSTALL))/ssl" --libdir=lib
 	$(MAKE) -C $(OPENSSL_DIR) -j$(JOBS) build_generated
 	$(MAKE) -C $(OPENSSL_DIR) -j$(JOBS) build_libs
-	mkdir -p "$(OPENSSL_INSTALL)/include" "$(OPENSSL_INSTALL)/lib"
+	mkdir -p "$(OPENSSL_INSTALL)/include" "$(OPENSSL_INSTALL)/lib" "$(OPENSSL_CMAKE_DIR)"
 	rm -rf "$(OPENSSL_INSTALL)/include/openssl"
 	cp -a "$(OPENSSL_DIR)/include/openssl" "$(OPENSSL_INSTALL)/include/"
 	cp "$(OPENSSL_DIR)/libssl.a" "$(OPENSSL_SSL_LIB)"
 	cp "$(OPENSSL_DIR)/libcrypto.a" "$(OPENSSL_LIB)"
+	cp "$(OPENSSL_DIR)/exporters/OpenSSLConfig.cmake" "$(OPENSSL_CMAKE_DIR)/OpenSSLConfig.cmake"
+	cp "$(OPENSSL_DIR)/exporters/OpenSSLConfigVersion.cmake" "$(OPENSSL_CMAKE_DIR)/OpenSSLConfigVersion.cmake"
 
 $(GENERATED_DIR):
 	mkdir -p $(GENERATED_DIR)
@@ -346,8 +378,15 @@ $(READLINE_BUILD_STAMP):
 	$(MAKE) -C $(READLINE_DIR) -j$(JOBS) libreadline.a libhistory.a
 	touch $@
 
-$(TARGET): $(SRC) $(ZLIB_LIB) $(LIBUBOOTENV_LIB) $(LIBEFIVAR_BUILD_STAMP) $(JSONC_LIB) $(CURL_LIB) $(WOLFSSL_LIB) $(OPENSSL_SSL_LIB) $(OPENSSL_LIB) $(READLINE_DEPS)
-	$(CC) $(CFLAGS) -o $@ $(SRC) $(LIBUBOOTENV_LIB) $(LIBEFIVAR_LIB) $(ZLIB_LIB) $(JSONC_LIB) $(CURL_LIB) $(WOLFSSL_LIB) $(OPENSSL_SSL_LIB) $(OPENSSL_LIB) $(LDFLAGS) $(LDLIBS)
+TARGET_DEPS := $(SRC) $(ZLIB_LIB) $(LIBUBOOTENV_LIB) $(LIBEFIVAR_BUILD_STAMP) $(JSONC_LIB) $(CURL_LIB) $(OPENSSL_SSL_LIB) $(OPENSSL_LIB) $(READLINE_DEPS)
+TARGET_LIBS := $(LIBUBOOTENV_LIB) $(LIBEFIVAR_LIB) $(ZLIB_LIB) $(JSONC_LIB) $(CURL_LIB) $(OPENSSL_SSL_LIB) $(OPENSSL_LIB)
+ifeq ($(ELA_ENABLE_WOLFSSL),1)
+TARGET_DEPS += $(WOLFSSL_LIB)
+TARGET_LIBS += $(WOLFSSL_LIB)
+endif
+
+$(TARGET): $(TARGET_DEPS)
+	$(CC) $(CFLAGS) -o $@ $(SRC) $(TARGET_LIBS) $(LDFLAGS) $(LDLIBS)
 
 static: LDFLAGS += -static
 static: all

@@ -21,8 +21,11 @@
 #include <sys/utsname.h>
 #include <unistd.h>
 #include <curl/curl.h>
+
+#ifdef ELA_HAS_WOLFSSL
 #include <wolfssl/options.h>
 #include <wolfssl/ssl.h>
+#endif
 #ifdef SHA256
 #undef SHA256
 #endif
@@ -719,6 +722,7 @@ static void fw_audit_force_conservative_powerpc_crypto_caps(void)
 		setenv("OPENSSL_ppccap", "0", 0);
 }
 
+#ifdef ELA_HAS_WOLFSSL
 static int wolfssl_read_headers(WOLFSSL *ssl, char **headers_out)
 {
 	char *headers = NULL;
@@ -905,6 +909,7 @@ cleanup:
 		close(sock);
 	return -1;
 }
+#endif
 
 const char *fw_audit_detect_isa(void)
 {
@@ -1556,11 +1561,13 @@ static int simple_https_get_to_file(const char *uri,
 		return -1;
 	}
 
+	#ifdef ELA_HAS_WOLFSSL
 	if (isa_is_powerpc_family(fw_audit_detect_isa())) {
 		fw_audit_set_sigill_stage("https:wolfssl_fallback");
 		return simple_wolfssl_https_get_to_file(&parsed, uri, output_path, insecure,
 			verbose, errbuf, errbuf_len);
 	}
+	#endif
 
 	fw_audit_install_sigill_debug_handler();
 	fw_audit_set_sigill_stage("https:get:start");
