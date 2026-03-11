@@ -59,6 +59,28 @@ run_exact_case "linux execute-command invalid global --output-tcp" 2 "$BIN" --ou
 run_accept_case "linux execute-command ELA_API_URL http" env ELA_API_URL=http://127.0.0.1:1 "$BIN" linux execute-command "echo hello"
 run_accept_case "linux execute-command ELA_API_URL https + ELA_API_INSECURE=true" env ELA_API_URL=https://127.0.0.1:1 ELA_API_INSECURE=true "$BIN" linux execute-command "echo hello"
 run_exact_case "linux execute-command invalid ELA_API_URL" 2 env ELA_API_URL=ftp://127.0.0.1:1 "$BIN" linux execute-command "echo hello"
+run_accept_case "linux execute-command ELA_OUTPUT_FORMAT json" env ELA_OUTPUT_FORMAT=json "$BIN" linux execute-command "echo hello"
+run_exact_case "linux execute-command invalid ELA_OUTPUT_FORMAT" 2 env ELA_OUTPUT_FORMAT=xml "$BIN" linux execute-command "echo hello"
+run_accept_case "linux execute-command ELA_QUIET true" env ELA_QUIET=true "$BIN" linux execute-command "echo hello"
+run_exact_case "linux execute-command invalid ELA_OUTPUT_TCP" 2 env ELA_OUTPUT_TCP=invalid-target "$BIN" linux execute-command "echo hello"
+run_accept_case "top-level ELA_SCRIPT local file" env ELA_SCRIPT="$script_file" "$BIN"
+
+interactive_set_log="$(mktemp /tmp/test_interactive_set_env.XXXXXX)"
+printf 'set ELA_OUTPUT_FORMAT json\nset ELA_QUIET true\nset ELA_OUTPUT_TCP 127.0.0.1:9\nset ELA_SCRIPT %s\nquit\n' "$script_file" | "$BIN" >"$interactive_set_log" 2>&1
+rc=$?
+if [ "$rc" -eq 0 ] && \
+   grep -q "ELA_OUTPUT_FORMAT=json" "$interactive_set_log" && \
+   grep -q "ELA_QUIET=true" "$interactive_set_log" && \
+   grep -q "ELA_OUTPUT_TCP=127.0.0.1:9" "$interactive_set_log" && \
+   grep -q "ELA_SCRIPT=$script_file" "$interactive_set_log"; then
+    echo "[PASS] interactive set updates global argument environment variables"
+    PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
+else
+    echo "[FAIL] interactive set updates global argument environment variables (rc=$rc)"
+    sed -n '1,120p' "$interactive_set_log"
+    FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
+fi
+rm -f "$interactive_set_log"
 
 run_accept_case "linux execute-command txt" "$BIN" --output-format txt linux execute-command "echo hello"
 run_accept_case "linux execute-command csv" "$BIN" --output-format csv linux execute-command "echo hello"
