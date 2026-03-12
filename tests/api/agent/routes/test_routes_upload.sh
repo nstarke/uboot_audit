@@ -3,10 +3,10 @@
 set -u
 
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 
 # shellcheck source=tests/api/agent/common.sh
-. "$SCRIPT_DIR/common.sh"
+. "$SCRIPT_DIR/../common.sh"
 
 setup_web_test_env "$REPO_ROOT" 5311
 

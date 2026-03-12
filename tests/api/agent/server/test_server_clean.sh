@@ -3,9 +3,10 @@
 set -u
 
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
-REPO_ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/../../.." && pwd)"
+REPO_ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/../../../.." && pwd)"
 
-. "$SCRIPT_DIR/common.sh"
+# shellcheck source=tests/api/agent/common.sh
+. "$SCRIPT_DIR/../common.sh"
 
 print_section "api clean behavior"
 
