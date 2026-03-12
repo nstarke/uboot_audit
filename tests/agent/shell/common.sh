@@ -140,6 +140,33 @@ EOF_APPEND_LINE
     fi
 }
 
+scrub_sensitive_stream() {
+    while IFS= read -r line || [ -n "$line" ]; do
+        lower_line="$(printf '%s' "$line" | tr '[:upper:]' '[:lower:]')"
+        case "$lower_line" in
+            *efi-var*|*efi_vars*|*efivars*)
+                printf '[REDACTED EFI VARS]\n'
+                continue
+                ;;
+        esac
+
+        printf '%s\n' "$line" | sed -E \
+            -e 's/(([Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]|[Pp][Aa][Ss][Ss][Ww][Dd]|[Cc][Rr][Ee][Dd][Ee][Nn][Tt][Ii][Aa][Ll][Ss]?|[Aa][Pp][Ii][_-]?[Kk][Ee][Yy]|[Ss][Ee][Cc][Rr][Ee][Tt]|[Tt][Oo][Kk][Ee][Nn])[[:space:]]*[:=][[:space:]]*)[^[:space:],;"}]+/\1<REDACTED>/g' \
+            -e 's/(([?&]([Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]|[Pp][Aa][Ss][Ss][Ww][Dd]|[Cc][Rr][Ee][Dd][Ee][Nn][Tt][Ii][Aa][Ll][Ss]?|[Aa][Pp][Ii][_-]?[Kk][Ee][Yy]|[Ss][Ee][Cc][Rr][Ee][Tt]|[Tt][Oo][Kk][Ee][Nn]))=)[^&[:space:]]+/\1<REDACTED>/g' \
+            -e 's/(("([Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]|[Pp][Aa][Ss][Ss][Ww][Dd]|[Cc][Rr][Ee][Dd][Ee][Nn][Tt][Ii][Aa][Ll][Ss]?|[Aa][Pp][Ii][_-]?[Kk][Ee][Yy]|[Ss][Ee][Cc][Rr][Ee][Tt]|[Tt][Oo][Kk][Ee][Nn])"[[:space:]]*:[[:space:]]*")[^"]+/
+\1<REDACTED>/g'
+    done
+}
+
+print_file_head_scrubbed() {
+    path="$1"
+    lines="${2:-80}"
+
+    if [ -f "$path" ]; then
+        sed -n "1,${lines}p" "$path" 2>/dev/null | scrub_sensitive_stream
+    fi
+}
+
 run_with_output_override() {
     if [ "${TEST_DISABLE_OUTPUT_OVERRIDE:-0}" = "1" ]; then
         "$@"
@@ -276,7 +303,7 @@ run_exact_case() {
         PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
     else
         echo "[FAIL] $name (rc=$rc, expected=$expected_rc)"
-        sed -n '1,80p' "$log"
+        print_file_head_scrubbed "$log" 80
         FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
     fi
 
@@ -296,7 +323,7 @@ run_accept_case() {
         PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
     else
         echo "[FAIL] $name (rc=$rc, parser/usage failure)"
-        sed -n '1,80p' "$log"
+        print_file_head_scrubbed "$log" 80
         FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
     fi
 

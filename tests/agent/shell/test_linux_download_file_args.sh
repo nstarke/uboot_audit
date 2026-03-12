@@ -75,14 +75,14 @@ if [ -n "$download_port" ]; then
         PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
     else
         echo "[FAIL] linux download-file downloads file and logs byte count (rc=$rc)"
-        sed -n '1,120p' "$download_log"
+        print_file_head_scrubbed "$download_log" 120
         echo "--- server log ---"
-        sed -n '1,80p' "$download_server_log" 2>/dev/null || true
+        print_file_head_scrubbed "$download_server_log" 80
         FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
     fi
 else
     echo "[FAIL] linux download-file downloads file and logs byte count (server did not start)"
-    sed -n '1,80p' "$download_server_log" 2>/dev/null || true
+    print_file_head_scrubbed "$download_server_log" 80
     FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
 fi
 
@@ -102,7 +102,7 @@ if [ "$rc" -ne 0 ] && grep -q "download-file downloaded 0 bytes success=false" "
     PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
 else
     echo "[FAIL] linux download-file logs failed download result (rc=$rc)"
-    sed -n '1,120p' "$failure_log"
+    print_file_head_scrubbed "$failure_log" 120
     FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
 fi
 rm -f "$failure_log" "$missing_dst"

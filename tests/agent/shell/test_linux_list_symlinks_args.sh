@@ -139,18 +139,18 @@ PY
             PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
         else
             echo "[FAIL] linux list-symlinks global --output-http performs HTTP POST upload (rc=$rc)"
-            sed -n '1,80p' "$http_post_log"
+            print_file_head_scrubbed "$http_post_log" 80
             echo "--- request path ---"
-            sed -n '1,20p' "$http_req_path" 2>/dev/null || true
+            print_file_head_scrubbed "$http_req_path" 20
             echo "--- request content-type ---"
-            sed -n '1,20p' "$http_req_type" 2>/dev/null || true
+            print_file_head_scrubbed "$http_req_type" 20
             echo "--- request body ---"
-            sed -n '1,20p' "$http_req_body" 2>/dev/null || true
+            print_file_head_scrubbed "$http_req_body" 20
             FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
         fi
     else
         echo "[FAIL] linux list-symlinks global --output-http performs HTTP POST upload (server did not start)"
-        sed -n '1,80p' "$http_server_log" 2>/dev/null || true
+        print_file_head_scrubbed "$http_server_log" 80
         FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
         kill "$http_server_pid" 2>/dev/null || true
         wait "$http_server_pid" 2>/dev/null || true
@@ -167,7 +167,7 @@ if [ "$rc" -eq 2 ] && grep -q "Invalid/failed output target (expected IPv4:port)
     PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
 else
     echo "[FAIL] linux list-symlinks global --output-tcp reaches TCP output validation path (rc=$rc)"
-    sed -n '1,80p' "$tcp_log"
+    print_file_head_scrubbed "$tcp_log" 80
     FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
 fi
 rm -f "$tcp_log"
@@ -184,7 +184,7 @@ if [ "$rc" -eq 0 ] && file_has_exact_line "$TMP_LINK_TOP -> /tmp/target-top" "$t
     PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
 else
     echo "[FAIL] linux list-symlinks default listing stays non-recursive (rc=$rc)"
-    sed -n '1,80p' "$txt_log"
+    print_file_head_scrubbed "$txt_log" 80
     FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
 fi
 rm -f "$txt_log"
@@ -197,7 +197,7 @@ if [ "$rc" -eq 0 ] && file_has_exact_line "$TMP_LINK_TOP -> /tmp/target-top" "$r
     PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
 else
     echo "[FAIL] linux list-symlinks --recursive includes nested symlinks (rc=$rc)"
-    sed -n '1,80p' "$recursive_log"
+    print_file_head_scrubbed "$recursive_log" 80
     FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
 fi
 rm -f "$recursive_log"
@@ -210,7 +210,7 @@ if [ "$rc" -eq 0 ] && file_has_exact_line "\"$TMP_LINK_TOP\",\"/tmp/target-top\"
     PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
 else
     echo "[FAIL] linux list-symlinks csv output matches expected format (rc=$rc)"
-    sed -n '1,80p' "$csv_log"
+    print_file_head_scrubbed "$csv_log" 80
     FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
 fi
 rm -f "$csv_log"
@@ -223,7 +223,7 @@ if [ "$rc" -eq 0 ] && file_has_exact_line "{\"link_path\":\"$TMP_LINK_TOP\",\"lo
     PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
 else
     echo "[FAIL] linux list-symlinks json output matches expected format (rc=$rc)"
-    sed -n '1,80p' "$json_log"
+    print_file_head_scrubbed "$json_log" 80
     FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
 fi
 rm -f "$json_log"

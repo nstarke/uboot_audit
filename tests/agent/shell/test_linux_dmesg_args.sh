@@ -62,7 +62,7 @@ if [ "$rc" -eq 0 ] && grep -q "Warning: --output-format has no effect for dmesg"
     PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
 else
     echo "[FAIL] linux dmesg warns when --output-format is set (rc=$rc)"
-    sed -n '1,80p' "$log"
+    print_file_head_scrubbed "$log" 80
     FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
 fi
 rm -f "$log"
@@ -75,7 +75,7 @@ if [ "$rc" -eq 0 ] && grep -q 'Warning: --output-format has no effect for dmesg'
     PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
 else
     echo "[FAIL] linux dmesg retains warning behavior with output-format set (rc=$rc)"
-    sed -n '1,80p' "$json_log"
+    print_file_head_scrubbed "$json_log" 80
     FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
 fi
 rm -f "$json_log"

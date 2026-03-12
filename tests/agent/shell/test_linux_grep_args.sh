@@ -61,7 +61,7 @@ if [ "$rc" -eq 0 ] && grep -F "$TOP_MATCH:2:needle here" "$local_log" >/dev/null
     PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
 else
     echo "[FAIL] linux grep default search stays non-recursive (rc=$rc)"
-    sed -n '1,80p' "$local_log"
+    print_file_head_scrubbed "$local_log" 80
     FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
 fi
 rm -f "$local_log"
@@ -74,7 +74,7 @@ if [ "$rc" -eq 0 ] && grep -F "$TOP_MATCH:2:needle here" "$recursive_log" >/dev/
     PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
 else
     echo "[FAIL] linux grep --recursive includes nested files (rc=$rc)"
-    sed -n '1,80p' "$recursive_log"
+    print_file_head_scrubbed "$recursive_log" 80
     FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
 fi
 rm -f "$recursive_log"
@@ -87,7 +87,7 @@ if [ "$rc" -eq 0 ] && grep -q "Warning: --output-format has no effect for grep" 
     PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
 else
     echo "[FAIL] linux grep warns when --output-format is set (rc=$rc)"
-    sed -n '1,80p' "$warn_log"
+    print_file_head_scrubbed "$warn_log" 80
     FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
 fi
 rm -f "$warn_log"

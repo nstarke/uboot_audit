@@ -187,7 +187,7 @@ do
 
     if [ "$rc" -eq 2 ] || ! grep -q "$begin_pattern" "$verbose_log" || ! grep -q "$end_pattern" "$verbose_log"; then
         echo "[FAIL] uboot audit verbose begin/end emits in ${output_format} output stream"
-        sed -n '1,120p' "$verbose_log"
+        print_file_head_scrubbed "$verbose_log" 120
         FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
     else
         echo "[PASS] uboot audit verbose begin/end emits in ${output_format} output stream"

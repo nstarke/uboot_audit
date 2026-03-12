@@ -90,7 +90,7 @@ if [ "$rc" -eq 1 ] && grep -F "Unsupported ISA for efi group: riscv64" "$isa_gat
     PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
 else
     echo "[FAIL] efi group rejects unsupported ISA with error log (rc=$rc)"
-    sed -n '1,80p' "$isa_gate_log"
+    print_file_head_scrubbed "$isa_gate_log" 80
     FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
 fi
 
@@ -101,7 +101,7 @@ if [ "$rc" -eq 1 ] && grep -F "Unsupported ISA for bios group: riscv64" "$isa_ga
     PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
 else
     echo "[FAIL] bios group rejects unsupported ISA with error log (rc=$rc)"
-    sed -n '1,80p' "$isa_gate_log"
+    print_file_head_scrubbed "$isa_gate_log" 80
     FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
 fi
 rm -f "$isa_gate_log"
@@ -183,18 +183,18 @@ PY
             PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
         else
             echo "[FAIL] efi dump-vars performs HTTP POST upload honoring --output-format json (rc=$rc)"
-            sed -n '1,120p' "$efi_vars_http_post_log"
+            print_file_head_scrubbed "$efi_vars_http_post_log" 120
             echo "--- request path ---"
-            sed -n '1,20p' "$efi_vars_http_path" 2>/dev/null || true
+            print_file_head_scrubbed "$efi_vars_http_path" 20
             echo "--- request content-type ---"
-            sed -n '1,20p' "$efi_vars_http_type" 2>/dev/null || true
+            print_file_head_scrubbed "$efi_vars_http_type" 20
             echo "--- request body ---"
-            sed -n '1,20p' "$efi_vars_http_body" 2>/dev/null || true
+            print_file_head_scrubbed "$efi_vars_http_body" 20
             FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
         fi
     else
         echo "[FAIL] efi dump-vars performs HTTP POST upload honoring --output-format json (server did not start)"
-        sed -n '1,80p' "$efi_vars_http_server_log" 2>/dev/null || true
+        print_file_head_scrubbed "$efi_vars_http_server_log" 80
         FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
         kill "$efi_vars_http_server_pid" 2>/dev/null || true
         wait "$efi_vars_http_server_pid" 2>/dev/null || true
@@ -297,18 +297,18 @@ PY
                 PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
             else
                 echo "[FAIL] $no_result_mode orom list no-result log is sent over HTTP upload/log (rc=$rc)"
-                sed -n '1,80p' "$http_post_log"
+                print_file_head_scrubbed "$http_post_log" 80
                 echo "--- request path ---"
-                sed -n '1,20p' "$http_req_path" 2>/dev/null || true
+                print_file_head_scrubbed "$http_req_path" 20
                 echo "--- request content-type ---"
-                sed -n '1,20p' "$http_req_type" 2>/dev/null || true
+                print_file_head_scrubbed "$http_req_type" 20
                 echo "--- request body ---"
-                sed -n '1,20p' "$http_req_body" 2>/dev/null || true
+                print_file_head_scrubbed "$http_req_body" 20
                 FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
             fi
         else
             echo "[FAIL] $no_result_mode orom list no-result log is sent over HTTP upload/log (server did not start)"
-            sed -n '1,80p' "$http_server_log" 2>/dev/null || true
+            print_file_head_scrubbed "$http_server_log" 80
             FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
             kill "$http_server_pid" 2>/dev/null || true
             wait "$http_server_pid" 2>/dev/null || true

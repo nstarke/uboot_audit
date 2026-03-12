@@ -60,7 +60,7 @@ start_remote_http_server() {
     while [ "$i" -lt 50 ]; do
         if ! kill -0 "$REMOTE_HTTP_SERVER_PID" 2>/dev/null; then
             echo "error: remote HTTP test server exited unexpectedly"
-            sed -n '1,120p' "$REMOTE_HTTP_SERVER_LOG" 2>/dev/null || true
+            print_file_head_scrubbed "$REMOTE_HTTP_SERVER_LOG" 120
             exit 1
         fi
 
@@ -73,7 +73,7 @@ start_remote_http_server() {
     done
 
     echo "error: timed out waiting for remote HTTP test server"
-    sed -n '1,120p' "$REMOTE_HTTP_SERVER_LOG" 2>/dev/null || true
+    print_file_head_scrubbed "$REMOTE_HTTP_SERVER_LOG" 120
     exit 1
 }
 
@@ -95,7 +95,7 @@ start_remote_api_server() {
     while [ "$i" -lt 50 ]; do
         if ! kill -0 "$REMOTE_API_SERVER_PID" 2>/dev/null; then
             echo "error: remote API fallback test server exited unexpectedly"
-            sed -n '1,120p' "$REMOTE_API_SERVER_LOG" 2>/dev/null || true
+            print_file_head_scrubbed "$REMOTE_API_SERVER_LOG" 120
             exit 1
         fi
 
@@ -108,7 +108,7 @@ start_remote_api_server() {
     done
 
     echo "error: timed out waiting for remote API fallback test server"
-    sed -n '1,120p' "$REMOTE_API_SERVER_LOG" 2>/dev/null || true
+    print_file_head_scrubbed "$REMOTE_API_SERVER_LOG" 120
     exit 1
 }
 

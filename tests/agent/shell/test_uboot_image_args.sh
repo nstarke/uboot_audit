@@ -144,7 +144,7 @@ if [ "$rc" -eq 2 ] && grep -q "Unable to connect to log output target 127.0.0.1:
     PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
 else
     echo "[FAIL] uboot image find-address accepts --send-logs with --output-tcp and reaches log connection path (rc=$rc)"
-    sed -n '1,80p' "$log"
+    print_file_head_scrubbed "$log" 80
     FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
 fi
 rm -f "$log"
@@ -184,7 +184,7 @@ if [ "$rc" -eq 2 ] && grep -q "Unable to connect to log output target 127.0.0.1:
     PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
 else
     echo "[FAIL] uboot image list-commands accepts --send-logs with --output-tcp and reaches log connection path (rc=$rc)"
-    sed -n '1,80p' "$log"
+    print_file_head_scrubbed "$log" 80
     FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
 fi
 rm -f "$log"
@@ -205,7 +205,7 @@ help_log="$(mktemp /tmp/test_image_help.XXXXXX)"
 run_with_output_override "$BIN" uboot image --help >"$help_log" 2>&1
 if grep -q "/dev/mtd\*" "$help_log"; then
     echo "[FAIL] uboot image --help should not advertise /dev/mtd* scan targets"
-    sed -n '1,80p' "$help_log"
+    print_file_head_scrubbed "$help_log" 80
     FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
 else
     echo "[PASS] uboot image --help only advertises /dev/mtdblock* for MTD scans"

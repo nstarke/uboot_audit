@@ -205,18 +205,18 @@ if [ "$remote_http_ready" -eq 1 ]; then
         PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
     else
         echo "[FAIL] linux remote-copy --output-http performs HTTP POST upload via /upload/file (rc=$rc)"
-        sed -n '1,120p' "$remote_http_post_log"
+        print_file_head_scrubbed "$remote_http_post_log" 120
         echo "--- request path ---"
-        sed -n '1,20p' "$remote_http_req_path" 2>/dev/null || true
+        print_file_head_scrubbed "$remote_http_req_path" 20
         echo "--- request content-type ---"
-        sed -n '1,20p' "$remote_http_req_type" 2>/dev/null || true
+        print_file_head_scrubbed "$remote_http_req_type" 20
         echo "--- request body (hex) ---"
         od -An -tx1 "$remote_http_req_body" 2>/dev/null || true
         FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
     fi
 else
     echo "[FAIL] linux remote-copy --output-http performs HTTP POST upload via /upload/file (server did not start)"
-    sed -n '1,80p' "$remote_http_server_log" 2>/dev/null || true
+    print_file_head_scrubbed "$remote_http_server_log" 80
     FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
     kill "$remote_http_server_pid" 2>/dev/null || true
     wait "$remote_http_server_pid" 2>/dev/null || true
@@ -233,7 +233,7 @@ if [ "$rc" -eq 0 ] && grep -q "Warning: --output-format has no effect for remote
     PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
 else
     echo "[FAIL] linux remote-copy warns when --output-format is set (rc=$rc)"
-    sed -n '1,80p' "$warn_log"
+    print_file_head_scrubbed "$warn_log" 80
     FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
 fi
 rm -f "$warn_log"
@@ -285,12 +285,12 @@ if [ -n "$verbose_port" ]; then
         PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
     else
         echo "[FAIL] linux remote-copy verbose output includes path and copied file count (rc=$rc)"
-        sed -n '1,120p' "$verbose_log"
+        print_file_head_scrubbed "$verbose_log" 120
         FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
     fi
 else
     echo "[FAIL] linux remote-copy verbose output test could not start local HTTP server"
-    sed -n '1,80p' "$verbose_server_log"
+    print_file_head_scrubbed "$verbose_server_log" 80
     FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
 fi
 

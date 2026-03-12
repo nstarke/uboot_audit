@@ -33,6 +33,68 @@ pass_case() {
     printf '[PASS] %s\n' "$1"
 }
 
+scrub_sensitive_stream() {
+    while IFS= read -r line || [ -n "$line" ]; do
+        lower_line="$(printf '%s' "$line" | tr '[:upper:]' '[:lower:]')"
+        case "$lower_line" in
+            *efi-var*|*efi_vars*|*efivars*)
+                printf '[REDACTED EFI VARS]\n'
+                continue
+                ;;
+        esac
+
+        printf '%s\n' "$line" | sed -E \
+            -e 's/(([Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]|[Pp][Aa][Ss][Ss][Ww][Dd]|[Cc][Rr][Ee][Dd][Ee][Nn][Tt][Ii][Aa][Ll][Ss]?|[Aa][Pp][Ii][_-]?[Kk][Ee][Yy]|[Ss][Ee][Cc][Rr][Ee][Tt]|[Tt][Oo][Kk][Ee][Nn])[[:space:]]*[:=][[:space:]]*)[^[:space:],;"}]+/\1<REDACTED>/g' \
+            -e 's/(([?&]([Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]|[Pp][Aa][Ss][Ss][Ww][Dd]|[Cc][Rr][Ee][Dd][Ee][Nn][Tt][Ii][Aa][Ll][Ss]?|[Aa][Pp][Ii][_-]?[Kk][Ee][Yy]|[Ss][Ee][Cc][Rr][Ee][Tt]|[Tt][Oo][Kk][Ee][Nn]))=)[^&[:space:]]+/\1<REDACTED>/g' \
+            -e 's/(("([Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]|[Pp][Aa][Ss][Ss][Ww][Dd]|[Cc][Rr][Ee][Dd][Ee][Nn][Tt][Ii][Aa][Ll][Ss]?|[Aa][Pp][Ii][_-]?[Kk][Ee][Yy]|[Ss][Ee][Cc][Rr][Ee][Tt]|[Tt][Oo][Kk][Ee][Nn])"[[:space:]]*:[[:space:]]*")[^"]+/
+\1<REDACTED>/g'
+    done
+}
+
+print_file_head_scrubbed() {
+    path="$1"
+    lines="${2:-80}"
+
+    if [ -f "$path" ]; then
+        sed -n "1,${lines}p" "$path" 2>/dev/null | scrub_sensitive_stream
+    fi
+}
+
+report_curl_case_failure() {
+    expected_status="$1"
+    actual_status="$2"
+    expected_body="$3"
+    actual_body="$4"
+    headers_file="$5"
+
+    printf 'expected status: %s\nactual status: %s\nexpected body: %s\nactual body: %s\n' \
+        "$expected_status" "$actual_status" "$expected_body" "$actual_body" | scrub_sensitive_stream
+    printf '\nheaders:\n'
+    print_file_head_scrubbed "$headers_file" 40
+}
+
+report_curl_body_contains_failure() {
+    expected_status="$1"
+    actual_status="$2"
+    expected_substring="$3"
+    body_file="$4"
+    headers_file="$5"
+
+    printf 'expected status: %s\nactual status: %s\nexpected body to contain: %s\n\nbody:\n' \
+        "$expected_status" "$actual_status" "$expected_substring" | scrub_sensitive_stream
+    print_file_head_scrubbed "$body_file" 120
+    printf '\nheaders:\n'
+    print_file_head_scrubbed "$headers_file" 40
+}
+
+report_assert_file_contains_failure() {
+    needle="$1"
+    path="$2"
+
+    printf 'expected file to contain: %s\npath: %s\n' "$needle" "$path" | scrub_sensitive_stream
+    print_file_head_scrubbed "$path" 120
+}
+
 fail_case() {
     FAIL_COUNT=$(expr "$FAIL_COUNT" + 1)
     printf '[FAIL] %s\n' "$1"
@@ -119,7 +181,7 @@ NODE
         fi
         if ! kill -0 "$TEST_WEB_SERVER_PID" 2>/dev/null; then
             echo "error: test server exited unexpectedly"
-            sed -n '1,120p' "$TEST_WEB_SERVER_LOG"
+            print_file_head_scrubbed "$TEST_WEB_SERVER_LOG" 120
             exit 1
         fi
         sleep 0.1
@@ -127,7 +189,7 @@ NODE
     done
 
     echo "error: timed out waiting for test server"
-    sed -n '1,120p' "$TEST_WEB_SERVER_LOG"
+    print_file_head_scrubbed "$TEST_WEB_SERVER_LOG" 120
     exit 1
 }
 
@@ -173,7 +235,7 @@ run_curl_case() {
     if [ "$rc" -eq 0 ] && [ "$status" = "$expected_status" ] && [ "$body" = "$expected_body" ]; then
         pass_case "$name"
     else
-        fail_case "$name" sh -c "printf 'expected status: %s\nactual status: %s\nexpected body: %s\nactual body: %s\n' \"$expected_status\" \"$status\" \"$expected_body\" \"$body\"; printf '\nheaders:\n'; sed -n '1,40p' \"$headers_file\""
+        fail_case "$name" report_curl_case_failure "$expected_status" "$status" "$expected_body" "$body" "$headers_file"
     fi
 
     rm -f "$body_file" "$headers_file"
@@ -196,7 +258,7 @@ run_curl_body_contains_case() {
     if [ "$rc" -eq 0 ] && [ "$status" = "$expected_status" ] && grep -F "$expected_substring" "$body_file" >/dev/null 2>&1; then
         pass_case "$name"
     else
-        fail_case "$name" sh -c "printf 'expected status: %s\nactual status: %s\nexpected body to contain: %s\n\nbody:\n' \"$expected_status\" \"$status\" \"$expected_substring\"; sed -n '1,120p' \"$body_file\"; printf '\nheaders:\n'; sed -n '1,40p' \"$headers_file\""
+        fail_case "$name" report_curl_body_contains_failure "$expected_status" "$status" "$expected_substring" "$body_file" "$headers_file"
     fi
 
     rm -f "$body_file" "$headers_file"
@@ -209,7 +271,7 @@ assert_file_contains() {
     if [ -f "$path" ] && grep -F "$needle" "$path" >/dev/null 2>&1; then
         pass_case "$name"
     else
-        fail_case "$name" sh -c "printf 'expected file to contain: %s\npath: %s\n' \"$needle\" \"$path\"; [ -f \"$path\" ] && sed -n '1,120p' \"$path\" || true"
+        fail_case "$name" report_assert_file_contains_failure "$needle" "$path"
     fi
 }
 

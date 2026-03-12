@@ -123,18 +123,18 @@ PY
             PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
         else
             echo "[FAIL] efi dump-vars performs HTTP POST upload honoring --output-format json (rc=$rc)"
-            sed -n '1,120p' "$efi_vars_http_post_log"
+            print_file_head_scrubbed "$efi_vars_http_post_log" 120
             echo "--- request path ---"
-            sed -n '1,20p' "$efi_vars_http_path" 2>/dev/null || true
+            print_file_head_scrubbed "$efi_vars_http_path" 20
             echo "--- request content-type ---"
-            sed -n '1,20p' "$efi_vars_http_type" 2>/dev/null || true
+            print_file_head_scrubbed "$efi_vars_http_type" 20
             echo "--- request body ---"
-            sed -n '1,20p' "$efi_vars_http_body" 2>/dev/null || true
+            print_file_head_scrubbed "$efi_vars_http_body" 20
             FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
         fi
     else
         echo "[FAIL] efi dump-vars performs HTTP POST upload honoring --output-format json (server did not start)"
-        sed -n '1,80p' "$efi_vars_http_server_log" 2>/dev/null || true
+        print_file_head_scrubbed "$efi_vars_http_server_log" 80
         FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
         kill "$efi_vars_http_server_pid" 2>/dev/null || true
         wait "$efi_vars_http_server_pid" 2>/dev/null || true

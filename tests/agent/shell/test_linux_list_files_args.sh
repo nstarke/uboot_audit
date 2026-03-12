@@ -168,18 +168,18 @@ PY
             PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
         else
             echo "[FAIL] linux list-files global --output-http performs HTTP POST upload (rc=$rc)"
-            sed -n '1,80p' "$http_post_log"
+            print_file_head_scrubbed "$http_post_log" 80
             echo "--- request path ---"
-            sed -n '1,20p' "$http_req_path" 2>/dev/null || true
+            print_file_head_scrubbed "$http_req_path" 20
             echo "--- request content-type ---"
-            sed -n '1,20p' "$http_req_type" 2>/dev/null || true
+            print_file_head_scrubbed "$http_req_type" 20
             echo "--- request body ---"
-            sed -n '1,20p' "$http_req_body" 2>/dev/null || true
+            print_file_head_scrubbed "$http_req_body" 20
             FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
         fi
     else
         echo "[FAIL] linux list-files global --output-http performs HTTP POST upload (server did not start)"
-        sed -n '1,80p' "$http_server_log" 2>/dev/null || true
+        print_file_head_scrubbed "$http_server_log" 80
         FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
         kill "$http_server_pid" 2>/dev/null || true
         wait "$http_server_pid" 2>/dev/null || true
@@ -196,7 +196,7 @@ if [ "$rc" -eq 2 ] && grep -q "Invalid/failed output target (expected IPv4:port)
     PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
 else
     echo "[FAIL] linux list-files global --output-tcp reaches TCP output validation path (rc=$rc)"
-    sed -n '1,80p' "$tcp_log"
+    print_file_head_scrubbed "$tcp_log" 80
     FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
 fi
 rm -f "$tcp_log"
@@ -214,7 +214,7 @@ if [ "$rc" -eq 0 ] && file_has_exact_line "$TMP_TOP_FILE" "$local_log" && ! file
     PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
 else
     echo "[FAIL] linux list-files default listing stays non-recursive (rc=$rc)"
-    sed -n '1,80p' "$local_log"
+    print_file_head_scrubbed "$local_log" 80
     FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
 fi
 rm -f "$local_log"
@@ -227,7 +227,7 @@ if [ "$rc" -eq 0 ] && file_has_exact_line "$TMP_TOP_FILE" "$recursive_log" && fi
     PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
 else
     echo "[FAIL] linux list-files --recursive includes nested files (rc=$rc)"
-    sed -n '1,80p' "$recursive_log"
+    print_file_head_scrubbed "$recursive_log" 80
     FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
 fi
 rm -f "$recursive_log"
@@ -240,7 +240,7 @@ if [ "$rc" -eq 0 ] && file_has_exact_line "$TMP_TOP_SUID_FILE" "$suid_log" && ! 
     PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
 else
     echo "[FAIL] linux list-files --suid-only filters non-SUID files (rc=$rc)"
-    sed -n '1,80p' "$suid_log"
+    print_file_head_scrubbed "$suid_log" 80
     FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
 fi
 rm -f "$suid_log"
@@ -253,7 +253,7 @@ if [ "$rc" -eq 0 ] && file_has_exact_line "$TMP_TOP_SUID_FILE" "$recursive_suid_
     PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
 else
     echo "[FAIL] linux list-files --recursive --suid-only includes nested SUID files only (rc=$rc)"
-    sed -n '1,80p' "$recursive_suid_log"
+    print_file_head_scrubbed "$recursive_suid_log" 80
     FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
 fi
 rm -f "$recursive_suid_log"
@@ -266,7 +266,7 @@ if [ "$rc" -eq 0 ] && file_has_exact_line "$TMP_TOP_600_FILE" "$perm_octal_log" 
     PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
 else
     echo "[FAIL] linux list-files --permissions octal filters exact mode (rc=$rc)"
-    sed -n '1,80p' "$perm_octal_log"
+    print_file_head_scrubbed "$perm_octal_log" 80
     FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
 fi
 rm -f "$perm_octal_log"
@@ -279,7 +279,7 @@ if [ "$rc" -eq 0 ] && file_has_exact_line "$TMP_TOP_600_FILE" "$perm_symbolic_lo
     PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
 else
     echo "[FAIL] linux list-files --permissions symbolic filters matching permissions (rc=$rc)"
-    sed -n '1,80p' "$perm_symbolic_log"
+    print_file_head_scrubbed "$perm_symbolic_log" 80
     FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
 fi
 rm -f "$perm_symbolic_log"
@@ -292,7 +292,7 @@ if [ "$rc" -eq 0 ] && file_has_exact_line "$TMP_TOP_FILE" "$user_log" && file_ha
     PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
 else
     echo "[FAIL] linux list-files --user filters by owner (rc=$rc)"
-    sed -n '1,80p' "$user_log"
+    print_file_head_scrubbed "$user_log" 80
     FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
 fi
 rm -f "$user_log"
@@ -305,7 +305,7 @@ if [ "$rc" -eq 0 ] && file_has_exact_line "$TMP_TOP_FILE" "$group_log" && file_h
     PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
 else
     echo "[FAIL] linux list-files --group filters by group (rc=$rc)"
-    sed -n '1,80p' "$group_log"
+    print_file_head_scrubbed "$group_log" 80
     FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
 fi
 rm -f "$group_log"
@@ -318,7 +318,7 @@ if [ "$rc" -eq 0 ] && grep -q "Warning: --output-format has no effect for list-f
     PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
 else
     echo "[FAIL] linux list-files warns when --output-format is set (rc=$rc)"
-    sed -n '1,80p' "$warn_log"
+    print_file_head_scrubbed "$warn_log" 80
     FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
 fi
 rm -f "$warn_log"

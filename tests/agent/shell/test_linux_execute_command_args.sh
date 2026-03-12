@@ -83,7 +83,7 @@ if [ "$rc" -eq 0 ] && \
     PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
 else
     echo "[FAIL] interactive set updates global argument environment variables (rc=$rc)"
-    sed -n '1,120p' "$interactive_set_log"
+    print_file_head_scrubbed "$interactive_set_log" 120
     FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
 fi
 rm -f "$interactive_set_log"
@@ -105,7 +105,7 @@ if [ "$rc" -eq 0 ] && \
     PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
 else
     echo "[FAIL] linux execute-command emits lifecycle logs (rc=$rc)"
-    sed -n '1,120p' "$log"
+    print_file_head_scrubbed "$log" 120
     FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
 fi
 rm -f "$log"
