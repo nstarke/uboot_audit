@@ -271,29 +271,33 @@ build_with_targets() {
 
     for target in "$@"; do
         echo "Trying target: $target${compat_cpu:+ (COMPAT_CPU=$compat_cpu)}"
-        if make clean; then
-            if [ -n "$compat_cpu" ]; then
-                build_ok=1
-                make static \
-                    JOBS="$jobs_arg" \
-                    ELA_USE_READLINE=0 \
-                    COMPAT_CPU="$compat_cpu" \
-                    CMAKE_C_COMPILER="$(command -v zig)" \
-                    CMAKE_C_COMPILER_ARG1=cc \
-                    CMAKE_C_COMPILER_TARGET="$target" \
-                    CC="zig cc -target $target" || build_ok=0
-            else
-                build_ok=1
-                make static \
-                    JOBS="$jobs_arg" \
-                    ELA_USE_READLINE=0 \
-                    CMAKE_C_COMPILER="$(command -v zig)" \
-                    CMAKE_C_COMPILER_ARG1=cc \
-                    CMAKE_C_COMPILER_TARGET="$target" \
-                    CC="zig cc -target $target" || build_ok=0
+        if [ "$clean_before_build" -eq 1 ]; then
+            if ! make clean; then
+                build_ok=0
+                echo "Clean failed before target: $target${compat_cpu:+ (COMPAT_CPU=$compat_cpu)}"
+                continue
             fi
+        fi
+
+        if [ -n "$compat_cpu" ]; then
+            build_ok=1
+            make static \
+                JOBS="$jobs_arg" \
+                ELA_USE_READLINE=0 \
+                COMPAT_CPU="$compat_cpu" \
+                CMAKE_C_COMPILER="$(command -v zig)" \
+                CMAKE_C_COMPILER_ARG1=cc \
+                CMAKE_C_COMPILER_TARGET="$target" \
+                CC="zig cc -target $target" || build_ok=0
         else
-            build_ok=0
+            build_ok=1
+            make static \
+                JOBS="$jobs_arg" \
+                ELA_USE_READLINE=0 \
+                CMAKE_C_COMPILER="$(command -v zig)" \
+                CMAKE_C_COMPILER_ARG1=cc \
+                CMAKE_C_COMPILER_TARGET="$target" \
+                CC="zig cc -target $target" || build_ok=0
         fi
 
         if [ "$build_ok" -eq 1 ]; then
@@ -343,13 +347,13 @@ build_release_binary() {
     fi
 }
 
-clean_only=0
+clean_before_build=0
 jobs_arg="${JOBS:-4}"
 
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --clean)
-            clean_only=1
+            clean_before_build=1
             shift
             ;;
         --jobs)
@@ -385,7 +389,7 @@ while [ "$#" -gt 0 ]; do
     esac
 done
 
-if [ "$clean_only" -eq 1 ]; then
+if [ "$clean_before_build" -eq 1 ]; then
     clean_outputs
 fi
 
