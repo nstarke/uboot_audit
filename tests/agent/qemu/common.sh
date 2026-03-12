@@ -14,6 +14,8 @@ RELEASE_BINARIES_DIR="${RELEASE_BINARIES_DIR:-$REPO_ROOT/api/data/release_binari
 TEST_SCRIPTS_DIR="$REPO_ROOT/tests/agent/scripts"
 RELEASE_BUILD_SCRIPT="$REPO_ROOT/tests/compile_release_binaries_locally.sh"
 SUPPORTED_ISAS="arm32-le arm32-be aarch64-le aarch64-be mips-le mips-be mips64-le mips64-be powerpc-le powerpc-be x86 x86_64 riscv32 riscv64"
+PASS_COUNT=0
+FAIL_COUNT=0
 
 should_run_qemu_as_root() {
     if [ "$(id -u)" -eq 0 ]; then
@@ -368,10 +370,23 @@ run_qemu_binary_tests() {
             run_qemu_script_direct "$qemu_mode" "$qemu_runner" "$binary_path" "$script_path" >"$script_log" 2>&1
         fi
         script_rc=$?
-        print_file_scrubbed "$script_log"
+        if [ "$script_rc" -eq 0 ]; then
+            echo "[PASS] script ${script_path#"$TEST_SCRIPTS_DIR"/} ($binary_label, isa=$isa, rc=$script_rc)"
+            PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
+        else
+            if [ "$script_rc" -eq 2 ]; then
+                echo "[FAIL] script ${script_path#"$TEST_SCRIPTS_DIR"/} ($binary_label, isa=$isa, rc=$script_rc, parser/usage failure)"
+            else
+                echo "[FAIL] script ${script_path#"$TEST_SCRIPTS_DIR"/} ($binary_label, isa=$isa, rc=$script_rc)"
+            fi
+            print_file_scrubbed "$script_log"
+            FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
+        fi
         rm -f "$script_log"
         if [ "$script_rc" -eq 2 ]; then
             echo "error: script parser/usage failure for $script_path" >&2
+            rc=1
+        elif [ "$script_rc" -ne 0 ]; then
             rc=1
         fi
     done <"$script_list_file"
@@ -422,6 +437,10 @@ run_qemu_isa_tests() {
             rc=1
         fi
     fi
+
+    echo
+    echo "Passed: $PASS_COUNT"
+    echo "Failed: $FAIL_COUNT"
 
     return "$rc"
 }
