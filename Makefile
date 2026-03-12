@@ -254,12 +254,11 @@ LIBSSH_EXTRA_CFLAGS += -DOPENSSL_ENGINE_STUBS
 ifneq ($(strip $(LIBSSH_EXTRA_CFLAGS)),)
 LIBSSH_CMAKE_ARGS += -DCMAKE_C_FLAGS="$(LIBSSH_EXTRA_CFLAGS)"
 endif
-ifneq (,$(findstring musl,$(CMAKE_C_COMPILER_TARGET)))
-# libssh unconditionally adds -D_GNU_SOURCE to its targets. On Zig musl cross
-# builds that makes misc.c select GNU strerror_r semantics even though musl
-# provides the POSIX int-returning variant, which then fails to compile. Use a
-# compiler launcher to drop the incompatible define (and a few noisy/problematic
-# warning flags) only for libssh without modifying the submodule sources.
+ifneq ($(strip $(CMAKE_C_COMPILER_TARGET)),)
+# Use a compiler launcher for libssh cross-builds so we can sand off a few
+# probe/flag incompatibilities without patching bundled third_party sources.
+# This is also where we inject any per-file compatibility workarounds needed by
+# stricter cross compilers.
 LIBSSH_CMAKE_ARGS += -DCMAKE_C_COMPILER_LAUNCHER=python3\;$(abspath tools/libssh_cc_launcher.py)
 endif
 ifneq ($(strip $(CMAKE_C_COMPILER_TARGET)),)
@@ -277,7 +276,7 @@ ifneq ($(findstring zig cc,$(CC)),)
 LIBSSH_EXTRA_CFLAGS += -Wno-strict-prototypes
 LIBSSH_CMAKE_ARGS := $(CMAKE_CC_ARGS)
 LIBSSH_CMAKE_ARGS += -DCMAKE_C_FLAGS="$(LIBSSH_EXTRA_CFLAGS)"
-ifneq (,$(findstring musl,$(CMAKE_C_COMPILER_TARGET)))
+ifneq ($(strip $(CMAKE_C_COMPILER_TARGET)),)
 LIBSSH_CMAKE_ARGS += -DCMAKE_C_COMPILER_LAUNCHER=python3\;$(abspath tools/libssh_cc_launcher.py)
 endif
 ifneq ($(strip $(CMAKE_C_COMPILER_TARGET)),)
