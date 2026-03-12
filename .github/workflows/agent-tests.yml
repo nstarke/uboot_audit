@@ -61,6 +61,8 @@ jobs:
         run: |
           set -euo pipefail
           make
+          cp embedded_linux_audit /tmp/embedded_linux_audit
+          chmod +x /tmp/embedded_linux_audit
 
       - name: Run script coverage files
         run: |
@@ -69,7 +71,7 @@ jobs:
           while IFS= read -r script; do
             echo
             echo "===== Running ${script#tests/agent/scripts/} ====="
-            if ./embedded_linux_audit --script "$script"; then
+            if /tmp/embedded_linux_audit --script "$script"; then
               script_rc=0
             else
               script_rc=$?
