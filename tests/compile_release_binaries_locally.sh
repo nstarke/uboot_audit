@@ -397,6 +397,7 @@ require_command cc
 require_command ar
 require_command ranlib
 require_command perl
+require_command autoconf
 require_command python3
 require_command bash
 require_command make

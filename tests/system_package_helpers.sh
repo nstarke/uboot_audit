@@ -82,6 +82,7 @@ ela_command_package_name() {
             esac
             ;;
         perl) echo perl ;;
+        autoconf) echo autoconf ;;
         python3|python)
             case "$ela_manager" in
                 apt) echo python3 ;;
