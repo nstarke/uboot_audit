@@ -538,7 +538,9 @@ $(OPENSSL_LIB): $(OPENSSL_SSL_LIB)
 
 $(WOLFSSL_LIB): check-autoconf
 	mkdir -p $(WOLFSSL_BUILD)
-	cd $(WOLFSSL_DIR) && ./autogen.sh
+	if [ ! -x "$(WOLFSSL_DIR)/configure" ]; then \
+		cd $(WOLFSSL_DIR) && ./autogen.sh; \
+	fi
 	cd $(WOLFSSL_BUILD) && $(abspath $(WOLFSSL_DIR))/configure \
 		CC="$(CC)" CFLAGS="$(COMPAT_CFLAGS)" \
 		$(WOLFSSL_CONFIGURE_HOST_ARG) \
