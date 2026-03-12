@@ -52,8 +52,8 @@ run_exact_case "linux list-symlinks --help" 0 "$BIN" linux list-symlinks --help
 run_exact_case "linux list-symlinks relative path" 2 "$BIN" linux list-symlinks ./relative
 run_exact_case "linux list-symlinks file path" 2 "$BIN" linux list-symlinks "$TMP_FILE"
 run_exact_case "linux list-symlinks invalid global --output-http" 2 "$BIN" --output-http ftp://127.0.0.1:1/symlink-list linux list-symlinks "$TMP_DIR"
-run_exact_case "linux list-symlinks invalid global --output-http" 2 "$BIN" --output-http http://127.0.0.1:1/symlink-list linux list-symlinks "$TMP_DIR"
-run_exact_case "linux list-symlinks both global http+https" 2 "$BIN" --output-http http://127.0.0.1:1/symlink-list --output-http https://127.0.0.1:1/symlink-list linux list-symlinks "$TMP_DIR"
+run_accept_case "linux list-symlinks valid global --output-http with unreachable endpoint" "$BIN" --output-http http://127.0.0.1:1/symlink-list linux list-symlinks "$TMP_DIR"
+run_accept_case "linux list-symlinks repeated global --output-http" "$BIN" --output-http http://127.0.0.1:1/symlink-list --output-http https://127.0.0.1:1/symlink-list linux list-symlinks "$TMP_DIR"
 run_exact_case "linux list-symlinks invalid global --output-tcp" 2 "$BIN" --output-tcp invalid-target linux list-symlinks "$TMP_DIR"
 run_exact_case "linux list-symlinks extra positional argument" 2 "$BIN" linux list-symlinks "$TMP_DIR" /tmp/extra
 

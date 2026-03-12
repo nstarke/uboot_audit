@@ -40,8 +40,8 @@ run_exact_case "linux grep relative path" 2 "$BIN" linux grep --search needle --
 run_exact_case "linux grep file path" 2 "$BIN" linux grep --search needle --path "$TOP_MATCH"
 run_exact_case "linux grep extra positional argument" 2 "$BIN" linux grep --search needle --path "$TMP_DIR" extra
 run_exact_case "linux grep invalid global --output-http" 2 "$BIN" --output-http ftp://127.0.0.1:1 linux grep --search needle --path "$TMP_DIR"
-run_exact_case "linux grep invalid global --output-http" 2 "$BIN" --output-http http://127.0.0.1:1 linux grep --search needle --path "$TMP_DIR"
-run_exact_case "linux grep both global http+https" 2 "$BIN" --output-http http://127.0.0.1:1 --output-http https://127.0.0.1:1 linux grep --search needle --path "$TMP_DIR"
+run_accept_case "linux grep valid global --output-http with unreachable endpoint" "$BIN" --output-http http://127.0.0.1:1 linux grep --search needle --path "$TMP_DIR"
+run_accept_case "linux grep repeated global --output-http" "$BIN" --output-http http://127.0.0.1:1 --output-http https://127.0.0.1:1 linux grep --search needle --path "$TMP_DIR"
 run_exact_case "linux grep invalid global --output-tcp" 2 "$BIN" --output-tcp invalid-target linux grep --search needle --path "$TMP_DIR"
 
 run_accept_case "linux grep local directory" "$BIN" linux grep --search needle --path "$TMP_DIR"

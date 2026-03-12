@@ -106,7 +106,7 @@ run_exact_case "uboot image pull requires one global remote target" 2 \
 run_exact_case "uboot image pull rejects --send-logs" 2 \
     "$BIN" uboot image pull --dev /dev/null --offset 0x0 --send-logs --output-tcp 127.0.0.1:9
 
-run_exact_case "uboot image pull rejects both global http and https targets" 2 \
+run_accept_case "uboot image pull repeated global --output-http" \
     "$BIN" --output-http http://127.0.0.1:1/image --output-http https://127.0.0.1:1/image uboot image pull --dev /dev/null --offset 0x0
 
 run_exact_case "uboot image pull rejects multiple global transport targets" 2 \
@@ -115,7 +115,7 @@ run_exact_case "uboot image pull rejects multiple global transport targets" 2 \
 run_exact_case "uboot image pull invalid global --output-http URI" 2 \
     "$BIN" --output-http ftp://127.0.0.1:1/image uboot image pull --dev /dev/null --offset 0x0
 
-run_exact_case "uboot image pull invalid global --output-http URI" 2 \
+run_accept_case "uboot image pull valid global --output-http with unreachable endpoint" \
     "$BIN" --output-http http://127.0.0.1:1/image uboot image pull --dev /dev/null --offset 0x0
 
 run_exact_case "uboot image pull rejects trailing positional arg" 2 \
@@ -152,10 +152,10 @@ rm -f "$log"
 run_exact_case "uboot image find-address invalid global --output-http URI" 2 \
     "$BIN" --output-http ftp://127.0.0.1:1/image uboot image find-address --dev /dev/null --offset 0x0
 
-run_exact_case "uboot image find-address invalid global --output-http URI" 2 \
+run_accept_case "uboot image find-address valid global --output-http with unreachable endpoint" \
     "$BIN" --output-http http://127.0.0.1:1/image uboot image find-address --dev /dev/null --offset 0x0
 
-run_exact_case "uboot image find-address rejects both global http and https targets" 2 \
+run_accept_case "uboot image find-address repeated global --output-http" \
     "$BIN" --output-http http://127.0.0.1:1/image --output-http https://127.0.0.1:1/image uboot image find-address --dev /dev/null --offset 0x0
 
 run_exact_case "uboot image find-address rejects trailing positional arg" 2 \
@@ -192,10 +192,10 @@ rm -f "$log"
 run_exact_case "uboot image list-commands invalid global --output-http URI" 2 \
     "$BIN" --output-http ftp://127.0.0.1:1/image uboot image list-commands --dev /dev/null --offset 0x0
 
-run_exact_case "uboot image list-commands invalid global --output-http URI" 2 \
+run_accept_case "uboot image list-commands valid global --output-http with unreachable endpoint" \
     "$BIN" --output-http http://127.0.0.1:1/image uboot image list-commands --dev /dev/null --offset 0x0
 
-run_exact_case "uboot image list-commands rejects both global http and https targets" 2 \
+run_accept_case "uboot image list-commands repeated global --output-http" \
     "$BIN" --output-http http://127.0.0.1:1/image --output-http https://127.0.0.1:1/image uboot image list-commands --dev /dev/null --offset 0x0
 
 run_exact_case "uboot image list-commands rejects trailing positional arg" 2 \

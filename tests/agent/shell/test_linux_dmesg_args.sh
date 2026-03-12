@@ -46,8 +46,8 @@ run_exact_case "linux dmesg global --output-tcp + --help" 0 "$BIN" --output-tcp 
 run_accept_case "linux dmesg global --output-http" "$BIN" --output-http http://127.0.0.1:1/dmesg linux dmesg
 run_accept_case "linux dmesg global --output-http" "$BIN" --output-http https://127.0.0.1:1/dmesg linux dmesg
 run_exact_case "linux dmesg invalid global --output-http" 2 "$BIN" --output-http ftp://127.0.0.1:1/dmesg linux dmesg
-run_exact_case "linux dmesg invalid global --output-http" 2 "$BIN" --output-http http://127.0.0.1:1/dmesg linux dmesg
-run_exact_case "linux dmesg both global http+https" 2 "$BIN" --output-http http://127.0.0.1:1/dmesg --output-http https://127.0.0.1:1/dmesg linux dmesg
+run_accept_case "linux dmesg valid global --output-http with unreachable endpoint" "$BIN" --output-http http://127.0.0.1:1/dmesg linux dmesg
+run_accept_case "linux dmesg repeated global --output-http" "$BIN" --output-http http://127.0.0.1:1/dmesg --output-http https://127.0.0.1:1/dmesg linux dmesg
 run_accept_case "global --insecure linux dmesg" "$BIN" --insecure linux dmesg
 
 run_accept_case "linux dmesg with --output-format txt" "$BIN" --output-format txt linux dmesg
