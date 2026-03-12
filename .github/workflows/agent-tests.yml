@@ -25,12 +25,35 @@ jobs:
           ref: ${{ github.event_name == 'workflow_run' && (github.event.workflow_run.head_branch || github.event.workflow_run.head_sha) || github.sha }}
 
       - name: Install build dependencies
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         run: |
           set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y autoconf automake cmake libtool llvm
 
+      - name: Download x86_64 release artifact from triggering workflow
+        if: ${{ github.event_name == 'workflow_run' }}
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ github.event.workflow_run.id }}
+          pattern: ela-x86_64
+          path: downloaded-release-binaries
+
+      - name: Stage native agent binary from triggering workflow artifacts
+        if: ${{ github.event_name == 'workflow_run' }}
+        run: |
+          set -euo pipefail
+          binary_path="$(find downloaded-release-binaries -type f \( -name 'ela-x86_64' -o -name 'embedded_linux_audit-x86_64' \) | head -n 1)"
+          if [ -z "$binary_path" ]; then
+            echo "error: unable to locate x86_64 release artifact from triggering workflow" >&2
+            exit 1
+          fi
+
+          install -m 755 "$binary_path" /tmp/embedded_linux_audit
+
       - name: Build native agent binary
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         run: |
           set -euo pipefail
           make
@@ -57,12 +80,35 @@ jobs:
           ref: ${{ github.event_name == 'workflow_run' && (github.event.workflow_run.head_branch || github.event.workflow_run.head_sha) || github.sha }}
 
       - name: Install build dependencies
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         run: |
           set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y autoconf automake cmake libtool llvm
 
+      - name: Download x86_64 release artifact from triggering workflow
+        if: ${{ github.event_name == 'workflow_run' }}
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ github.event.workflow_run.id }}
+          pattern: ela-x86_64
+          path: downloaded-release-binaries
+
+      - name: Stage native agent binary from triggering workflow artifacts
+        if: ${{ github.event_name == 'workflow_run' }}
+        run: |
+          set -euo pipefail
+          binary_path="$(find downloaded-release-binaries -type f \( -name 'ela-x86_64' -o -name 'embedded_linux_audit-x86_64' \) | head -n 1)"
+          if [ -z "$binary_path" ]; then
+            echo "error: unable to locate x86_64 release artifact from triggering workflow" >&2
+            exit 1
+          fi
+
+          install -m 755 "$binary_path" /tmp/embedded_linux_audit
+
       - name: Build native agent binary
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         run: |
           set -euo pipefail
           make
@@ -101,19 +147,20 @@ jobs:
           submodules: recursive
           ref: ${{ github.event_name == 'workflow_run' && (github.event.workflow_run.head_branch || github.event.workflow_run.head_sha) || github.sha }}
 
-      - name: Install qemu/build dependencies
+      - name: Install qemu/runtime dependencies
         run: |
           set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y \
-            autoconf \
-            automake \
             bubblewrap \
-            cmake \
-            libtool \
-            llvm \
             qemu-user-static \
             xz-utils
+
+      - name: Install local release build dependencies
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        run: |
+          set -euo pipefail
+          sudo apt-get install -y autoconf automake cmake libtool llvm
 
       - name: Download cross-build artifacts from triggering workflow
         if: ${{ github.event_name == 'workflow_run' }}
