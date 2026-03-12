@@ -13,9 +13,9 @@ linux ssh client --port 2022 --help
 ela linux ssh copy --local-path /tmp/source.bin --remote-path /tmp/dest.bin --recursive --port 2022 --help
 embedded_linux_audit linux ssh tunnel --port 2022 --help
 
-uboot env parse-vars --size 0x10000
-ela uboot env --parse-vars --size 0x10000
-embedded_linux_audit uboot env --output-config=/tmp/fw_env.config --size 0x10000
+uboot env parse-vars --size 0x10000 --help
+ela uboot env --parse-vars --size 0x10000 --help
+embedded_linux_audit uboot env --output-config=/tmp/fw_env.config --size 0x10000 --help
 
 uboot image --allow-text BootROM --skip-remove --skip-mtd --skip-ubi --skip-sd --skip-emmc --help
 ela uboot image pull --dev /dev/null --offset 0x0 --help
