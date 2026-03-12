@@ -13,6 +13,19 @@ TOOLS_CACHE_DIR="$REPO_ROOT/.cache/tools"
 ZIG_VERSION="0.14.0"
 SUPPORTED_ISAS="arm32-le arm32-be aarch64-le aarch64-be mips-le mips-be mips64-le mips64-be powerpc-le powerpc-be x86 x86_64 riscv32 riscv64"
 
+REQUIRED_SUBMODULE_PATHS="
+third_party/libcsv/libcsv.c
+third_party/json-c/CMakeLists.txt
+third_party/curl/CMakeLists.txt
+third_party/openssl/Configure
+third_party/libubootenv/CMakeLists.txt
+third_party/zlib/CMakeLists.txt
+third_party/readline/readline.h
+third_party/ncurses/configure
+third_party/libefivar/src/include/efivar/efivar.h
+third_party/wolfssl/configure.ac
+"
+
 usage() {
     echo "Usage: $0 [--clean] [-j jobs] [isa ...]" >&2
     exit 1
@@ -27,6 +40,40 @@ require_command() {
         echo "error: missing required command: $1" >&2
         exit 1
     fi
+}
+
+ensure_required_submodules() {
+    missing_paths=""
+
+    for required_path in $REQUIRED_SUBMODULE_PATHS; do
+        if [ ! -e "$REPO_ROOT/$required_path" ]; then
+            missing_paths="$missing_paths $required_path"
+        fi
+    done
+
+    if [ -z "$missing_paths" ]; then
+        return 0
+    fi
+
+    if [ -d "$REPO_ROOT/.git" ] || [ -f "$REPO_ROOT/.git" ]; then
+        require_command git
+        echo "Required third_party sources are missing; initializing git submodules" >&2
+        if git -C "$REPO_ROOT" submodule update --init --recursive; then
+            missing_paths=""
+            for required_path in $REQUIRED_SUBMODULE_PATHS; do
+                if [ ! -e "$REPO_ROOT/$required_path" ]; then
+                    missing_paths="$missing_paths $required_path"
+                fi
+            done
+            if [ -z "$missing_paths" ]; then
+                return 0
+            fi
+        fi
+    fi
+
+    echo "error: required third_party sources are missing:$missing_paths" >&2
+    echo "hint: run 'git submodule update --init --recursive' from $REPO_ROOT" >&2
+    exit 1
 }
 
 download_file() {
@@ -332,6 +379,7 @@ if [ "$clean_only" -eq 1 ]; then
     clean_outputs
 fi
 
+ensure_required_submodules
 ensure_zig
 require_command cmake
 require_command tar

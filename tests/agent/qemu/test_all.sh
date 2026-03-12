@@ -7,8 +7,6 @@ SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
 # shellcheck source=tests/agent/qemu/common.sh
 . "$SCRIPT_DIR/common.sh"
 
-ensure_release_binaries
-
 rc=0
 
 for test_script in \
