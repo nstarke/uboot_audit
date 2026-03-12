@@ -1,0 +1,5 @@
+# Interactive/script coverage for linux tpm2
+linux tpm2 --help
+ela linux tpm2 --help
+embedded_linux_audit linux tpm2 list-commands
+linux tpm2 getcap --help # inline comment should be ignored

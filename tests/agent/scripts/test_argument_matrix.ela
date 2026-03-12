@@ -8,6 +8,8 @@ linux list-files --recursive --suid-only --permissions 0600 --user 0 --group 0 /
 ela linux list-files --permissions u+rw,go-rwx / --help
 embedded_linux_audit linux list-symlinks --recursive / --help
 linux remote-copy --recursive --allow-dev --allow-sysfs --allow-proc --allow-symlinks /tmp --help
+linux tpm2 list-commands
+ela linux tpm2 getcap --help
 
 linux ssh client --port 2022 --help
 ela linux ssh copy --local-path /tmp/source.bin --remote-path /tmp/dest.bin --recursive --port 2022 --help
