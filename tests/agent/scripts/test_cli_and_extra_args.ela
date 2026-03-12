@@ -18,7 +18,11 @@ ela linux download-file --help # inline comment should be ignored
 linux ssh client --help
 ela linux ssh copy --help
 embedded_linux_audit linux ssh tunnel --help
-linux ssh copy 127.0.0.1 --local-path /tmp/src --remote-path /tmp/dst --port 2022
+
+# Keep script coverage to parser/help-only SSH cases under QEMU. Real ssh/copy
+# attempts can block waiting on connection/authentication depending on the test
+# environment, which makes this broad script unsuitable for qemu sweeps.
+linux ssh copy --help --port 2022
 
 uboot env parse-vars --size 0x10000
 ela uboot env --parse-vars --size 0x10000
