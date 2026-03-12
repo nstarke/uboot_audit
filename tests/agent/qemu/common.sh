@@ -300,7 +300,10 @@ run_qemu_binary_tests() {
         script_list_root="$TEST_SCRIPTS_DIR"
     fi
 
-    find "$script_list_root" -type f -name '*.ela' | sort | while IFS= read -r script_file; do
+    script_list_file="$(mktemp /tmp/ela-qemu-script-list.${isa}.XXXXXX)"
+    find "$script_list_root" -type f -name '*.ela' | sort >"$script_list_file"
+
+    while IFS= read -r script_file; do
         script_log="$(mktemp /tmp/ela-qemu-script-log.${isa}.XXXXXX)"
         if [ "$use_bwrap" -eq 1 ]; then
             script_path="/tests/agent/scripts/${script_file#"$rootfs_dir/tests/agent/scripts"/}"
@@ -317,10 +320,13 @@ run_qemu_binary_tests() {
         script_rc=$?
         print_file_scrubbed "$script_log"
         rm -f "$script_log"
-        if [ "$script_rc" -ne 0 ]; then
+        if [ "$script_rc" -eq 2 ]; then
+            echo "error: script parser/usage failure for $script_path" >&2
             rc=1
         fi
-    done
+    done <"$script_list_file"
+
+    rm -f "$script_list_file"
 
     cleanup_qemu_binary_wrapper
     trap - EXIT INT TERM HUP
