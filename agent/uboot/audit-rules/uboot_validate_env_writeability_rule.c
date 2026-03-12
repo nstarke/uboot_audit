@@ -43,6 +43,8 @@ static int ensure_fw_env_config_exists(void)
 
 	if (access("uboot_env.config", F_OK) == 0)
 		return 0;
+	if (access("fw_env.config", F_OK) == 0)
+		return 0;
 
 	return uboot_env_scan_main(argc, argv);
 }

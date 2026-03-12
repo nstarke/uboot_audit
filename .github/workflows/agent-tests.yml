@@ -104,7 +104,28 @@ jobs:
           BIN: /tmp/embedded_linux_audit
         run: |
           set -euo pipefail
-          bash tests/agent/scripts/test_all.sh
+          if [ -f tests/agent/scripts/test_all.sh ]; then
+            bash tests/agent/scripts/test_all.sh
+            exit 0
+          fi
+
+          echo "warning: tests/agent/scripts/test_all.sh is not present at this ref; falling back to legacy inline script coverage loop"
+          rc=0
+          while IFS= read -r script; do
+            echo
+            echo "===== Running ${script#tests/agent/scripts/} ====="
+            if /tmp/embedded_linux_audit --script "$script"; then
+              script_rc=0
+            else
+              script_rc=$?
+            fi
+
+            if [ "$script_rc" -eq 2 ]; then
+              echo "error: script parser/usage failure for $script"
+              rc=1
+            fi
+          done < <(find tests/agent/scripts -type f -name '*.ela' | sort)
+          exit "$rc"
 
   qemu-tests:
     name: tests/agent/qemu
