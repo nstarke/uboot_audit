@@ -366,22 +366,7 @@ $(CURL_LIB): $(OPENSSL_SSL_LIB)
 
 $(LIBSSH_LIB): $(OPENSSL_SSL_LIB) $(ZLIB_LIB)
 	cmake -S $(LIBSSH_DIR) -B $(LIBSSH_BUILD) $(LIBSSH_CMAKE_ARGS) -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DBUILD_STATIC_LIB=ON -DWITH_EXAMPLES=OFF -DUNIT_TESTING=OFF -DCLIENT_TESTING=OFF -DSERVER_TESTING=OFF -DWITH_SERVER=OFF -DWITH_GSSAPI=OFF -DWITH_NACL=OFF -DWITH_ZLIB=ON -DZLIB_INCLUDE_DIR="$(abspath $(ZLIB_DIR))" -DZLIB_LIBRARY="$(abspath $(ZLIB_LIB))" -DOPENSSL_ROOT_DIR="$(abspath $(OPENSSL_INSTALL))" -DOPENSSL_INCLUDE_DIR="$(abspath $(OPENSSL_INSTALL))/include" -DOPENSSL_CRYPTO_LIBRARY="$(abspath $(OPENSSL_LIB))"
-	python3 - <<'PY'
-from pathlib import Path
-
-build = Path("$(LIBSSH_BUILD)")
-for rel in [
-    Path("src/CMakeFiles/ssh-static.dir/flags.make"),
-    Path("src/CMakeFiles/ssh.dir/flags.make"),
-]:
-    p = build / rel
-    if not p.exists():
-        continue
-    text = p.read_text()
-    text = text.replace("-Werror=strict-prototypes", "-Wno-error=strict-prototypes")
-    text = text.replace("-Wstrict-prototypes", "-Wno-strict-prototypes")
-    p.write_text(text)
-PY
+	python3 -c 'from pathlib import Path; build = Path("$(LIBSSH_BUILD)"); paths = [Path("src/CMakeFiles/ssh-static.dir/flags.make"), Path("src/CMakeFiles/ssh.dir/flags.make")]; [p.write_text(p.read_text().replace("-Werror=strict-prototypes", "-Wno-error=strict-prototypes").replace("-Wstrict-prototypes", "-Wno-strict-prototypes")) for p in (build / rel for rel in paths) if p.exists()]'
 	cmake --build $(LIBSSH_BUILD) --parallel $(JOBS) --target ssh-static
 
 $(OPENSSL_LIB): $(OPENSSL_SSL_LIB)
