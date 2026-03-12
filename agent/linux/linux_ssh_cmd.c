@@ -393,6 +393,11 @@ static int linux_ssh_tunnel_main(int argc, char **argv)
 
 int linux_ssh_scan_main(int argc, char **argv)
 {
+	if (argc >= 2 && (!strcmp(argv[1], "-h") || !strcmp(argv[1], "--help") || !strcmp(argv[1], "help"))) {
+		usage(argv[0]);
+		return 0;
+	}
+
 	if (argc < 2) {
 		usage(argv[0]);
 		return 2;

@@ -1401,15 +1401,23 @@ fail:
 
 static bool command_should_emit_lifecycle_events(int argc, char **argv, int cmd_idx, const char *script_path)
 {
+	const char *group;
+	const char *subcommand;
+
 	if (script_path && *script_path)
 		return true;
 
 	if (!argv || cmd_idx < 0 || cmd_idx >= argc)
 		return true;
 
-	if (!strcmp(argv[cmd_idx], "linux") &&
-	    cmd_idx + 1 < argc &&
-	    !strcmp(argv[cmd_idx + 1], "download-file"))
+	group = argv[cmd_idx];
+	subcommand = (cmd_idx + 1 < argc) ? argv[cmd_idx + 1] : NULL;
+
+	if (group && subcommand && !strcmp(group, "linux") &&
+	    (!strcmp(subcommand, "download-file") ||
+	     !strcmp(subcommand, "list-files") ||
+	     !strcmp(subcommand, "list-symlinks") ||
+	     !strcmp(subcommand, "remote-copy")))
 		return false;
 
 	return true;
@@ -1506,6 +1514,9 @@ static int embedded_linux_audit_dispatch(int argc, char **argv)
 		}
 
 		if (!strcmp(argv[cmd_idx], "--output-http")) {
+			const char *new_output_http;
+			const char *new_output_https;
+
 			cmd_idx++;
 			if (cmd_idx >= argc) {
 				fprintf(stderr, "Missing value for --output-http\n\n");
@@ -1513,31 +1524,48 @@ static int embedded_linux_audit_dispatch(int argc, char **argv)
 				return 2;
 			}
 			if (fw_audit_parse_http_output_uri(argv[cmd_idx++],
-						  &parsed_output_http,
-						  &parsed_output_https,
+						  &new_output_http,
+						  &new_output_https,
 						  errbuf,
 						  sizeof(errbuf)) < 0) {
 				fprintf(stderr, "%s\n\n", errbuf);
 				usage(argv[0]);
 				return 2;
 			}
-			output_http = parsed_output_http;
-			output_https = parsed_output_https;
+			if ((output_http && new_output_https) || (output_https && new_output_http)) {
+				fprintf(stderr, "Use only one of --output-http or --output-https\n\n");
+				usage(argv[0]);
+				return 2;
+			}
+			parsed_output_http = new_output_http;
+			parsed_output_https = new_output_https;
+			output_http = new_output_http;
+			output_https = new_output_https;
 			continue;
 		}
 
 		if (!strncmp(argv[cmd_idx], "--output-http=", 14)) {
+			const char *new_output_http;
+			const char *new_output_https;
+
 			if (fw_audit_parse_http_output_uri(argv[cmd_idx] + 14,
-						  &parsed_output_http,
-						  &parsed_output_https,
+						  &new_output_http,
+						  &new_output_https,
 						  errbuf,
 						  sizeof(errbuf)) < 0) {
 				fprintf(stderr, "%s\n\n", errbuf);
 				usage(argv[0]);
 				return 2;
 			}
-			output_http = parsed_output_http;
-			output_https = parsed_output_https;
+			if ((output_http && new_output_https) || (output_https && new_output_http)) {
+				fprintf(stderr, "Use only one of --output-http or --output-https\n\n");
+				usage(argv[0]);
+				return 2;
+			}
+			parsed_output_http = new_output_http;
+			parsed_output_https = new_output_https;
+			output_http = new_output_http;
+			output_https = new_output_https;
 			cmd_idx++;
 			continue;
 		}

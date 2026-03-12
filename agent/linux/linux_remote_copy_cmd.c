@@ -518,6 +518,11 @@ int linux_remote_copy_scan_main(int argc, char **argv)
 		return 2;
 	}
 
+	if (getenv("FW_AUDIT_OUTPUT_HTTP") && getenv("FW_AUDIT_OUTPUT_HTTPS")) {
+		fprintf(stderr, "Use only one of --output-http or --output-https\n");
+		return 2;
+	}
+
 	if (output_http && strncmp(output_http, "http://", 7)) {
 		fprintf(stderr, "Invalid --output-http URI (expected http://host:port/...): %s\n", output_http);
 		return 2;

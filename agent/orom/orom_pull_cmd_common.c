@@ -526,12 +526,24 @@ int orom_group_main(const char *fw_mode, int argc, char **argv)
 			ctx.output_tcp = optarg;
 			break;
 		case 'O':
-			if (fw_audit_parse_http_output_uri(optarg,
-						  &ctx.output_http,
-						  &ctx.output_https,
-						  NULL,
-						  0) < 0)
+			{
+				const char *new_output_http = NULL;
+				const char *new_output_https = NULL;
+				if (fw_audit_parse_http_output_uri(optarg,
+						      &new_output_http,
+						      &new_output_https,
+						      NULL,
+						      0) < 0)
 				ctx.output_http = optarg;
+				else {
+					if ((ctx.output_http && new_output_https) || (ctx.output_https && new_output_http)) {
+						fprintf(stderr, "Use only one of --output-http or --output-https\n");
+						return 2;
+					}
+					ctx.output_http = new_output_http;
+					ctx.output_https = new_output_https;
+				}
+			}
 			break;
 		default:
 			usage(argv[0], fw_mode);

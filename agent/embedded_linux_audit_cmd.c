@@ -2169,9 +2169,6 @@ int uboot_http_post(const char *uri, const uint8_t *data, size_t len,
 		return -1;
 	}
 
-	if (!strncmp(uri, "http://", 7))
-		return simple_http_post(uri, data, len, content_type ? content_type : "text/plain; charset=utf-8", verbose, errbuf, errbuf_len);
-
 	is_https = !strncmp(uri, "https://", 8);
 	if (!strncmp(uri, "http://", 7)) {
 		normalized_uri = uboot_http_uri_normalize_default_port(uri, 80);

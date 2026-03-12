@@ -286,7 +286,6 @@ static int ensure_fw_env_config_exists(bool force_scan, bool verbose)
 	const char *output_tcp = getenv("FW_AUDIT_OUTPUT_TCP");
 	const char *output_http = getenv("FW_AUDIT_OUTPUT_HTTP");
 	const char *output_https = getenv("FW_AUDIT_OUTPUT_HTTPS");
-	const char *output_insecure = getenv("FW_AUDIT_OUTPUT_INSECURE");
 	char *env_argv[9];
 	int env_argc = 0;
 
@@ -294,20 +293,9 @@ static int ensure_fw_env_config_exists(bool force_scan, bool verbose)
 
 	env_argv[env_argc++] = "env";
 	env_argv[env_argc++] = "--output-config=fw_env.config";
-	if (output_tcp && *output_tcp) {
-		env_argv[env_argc++] = "--output-tcp";
-		env_argv[env_argc++] = (char *)output_tcp;
-	}
-	if (output_http && *output_http) {
-		env_argv[env_argc++] = "--output-http";
-		env_argv[env_argc++] = (char *)output_http;
-	}
-	if (output_https && *output_https) {
-		env_argv[env_argc++] = "--output-http";
-		env_argv[env_argc++] = (char *)output_https;
-	}
-	if (output_insecure && *output_insecure && strcmp(output_insecure, "0"))
-		env_argv[env_argc++] = "--insecure";
+	(void)output_tcp;
+	(void)output_http;
+	(void)output_https;
 	env_argv[env_argc] = NULL;
 
 	if (!force_scan && access("fw_env.config", F_OK) == 0)
@@ -932,6 +920,11 @@ int embedded_linux_audit_scan_main(int argc, char **argv)
 			output_tcp_target = optarg;
 			break;
 		case 'O':
+			if ((output_https_target && !strncmp(optarg, "http://", 7)) ||
+			    (output_http_target && !strncmp(optarg, "https://", 8))) {
+				err_printf("Use only one of --output-http or --output-https\n");
+				return 2;
+			}
 			output_http_target = optarg;
 			break;
 		case 'T':

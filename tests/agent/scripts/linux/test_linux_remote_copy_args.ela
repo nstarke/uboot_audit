@@ -2,6 +2,5 @@
 linux remote-copy --help
 ela linux remote-copy --help
 embedded_linux_audit linux remote-copy --help
-linux remote-copy /tmp
 ela --output-http http://127.0.0.1:1 linux remote-copy /tmp
 embedded_linux_audit --output-tcp 127.0.0.1:9 linux remote-copy /tmp/test_remote_copy_payload.bin

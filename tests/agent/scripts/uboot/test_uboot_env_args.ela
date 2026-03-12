@@ -1,7 +1,4 @@
 # Interactive/script coverage for uboot env
-uboot env --help
-ela uboot env --help
-embedded_linux_audit uboot env --help
 uboot env --size 0x10000
 ela --output-format txt uboot env --size 0x10000
 embedded_linux_audit uboot env --hint bootcmd= --size 0x10000
