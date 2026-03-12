@@ -1,0 +1,5 @@
+# Interactive/script coverage for linux ssh
+linux ssh --help
+ela linux ssh client 127.0.0.1 --port 22
+embedded_linux_audit linux ssh copy 127.0.0.1 --local-path /tmp/source.bin --remote-path /tmp/dest.bin
+ela linux ssh tunnel 127.0.0.1 --port 22

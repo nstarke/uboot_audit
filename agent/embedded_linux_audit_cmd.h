@@ -93,6 +93,7 @@ int linux_download_file_scan_main(int argc, char **argv);
 int linux_list_files_scan_main(int argc, char **argv);
 int linux_list_symlinks_scan_main(int argc, char **argv);
 int linux_remote_copy_scan_main(int argc, char **argv);
+int linux_ssh_scan_main(int argc, char **argv);
 int efi_orom_main(int argc, char **argv);
 int efi_dump_vars_main(int argc, char **argv);
 int bios_orom_main(int argc, char **argv);

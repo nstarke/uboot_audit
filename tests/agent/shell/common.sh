@@ -2,7 +2,7 @@
 
 set -u
 
-SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="${SHELL_TEST_ROOT:-$(CDPATH= cd -- "$(dirname "$0")" && pwd)}"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 
 # shellcheck source=tests/system_package_helpers.sh

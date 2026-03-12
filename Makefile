@@ -226,6 +226,10 @@ CURL_DIR      := third_party/curl
 CURL_BUILD    := $(CURL_DIR)/build-$(CC_TAG)
 CURL_LIB      := $(CURL_BUILD)/lib/libcurl.a
 CURL_CFLAGS   := -I$(CURL_DIR)/include
+LIBSSH_DIR    := third_party/libssh
+LIBSSH_BUILD  := $(LIBSSH_DIR)/build-$(CC_TAG)
+LIBSSH_LIB    := $(LIBSSH_BUILD)/static/libssh.a
+LIBSSH_CFLAGS := -I$(LIBSSH_DIR)/include -I$(LIBSSH_BUILD)/include -I$(LIBSSH_BUILD)
 WOLFSSL_DIR   := third_party/wolfssl
 WOLFSSL_BUILD := $(WOLFSSL_DIR)/build-$(CC_TAG)
 WOLFSSL_LIB   := $(WOLFSSL_BUILD)/src/.libs/libwolfssl.a
@@ -267,6 +271,7 @@ CFLAGS += $(LIBEFIVAR_CFLAGS)
 CFLAGS += $(ZLIB_CFLAGS)
 CFLAGS += $(JSONC_CFLAGS)
 CFLAGS += $(CURL_CFLAGS)
+CFLAGS += $(LIBSSH_CFLAGS)
 ifeq ($(ELA_ENABLE_WOLFSSL),1)
 CFLAGS += $(WOLFSSL_CFLAGS)
 CFLAGS += -DELA_HAS_WOLFSSL=1
@@ -285,7 +290,7 @@ READLINE_DEPS :=
 endif
 
 TARGET := embedded_linux_audit
-SRC    := agent/embedded_linux_audit.c agent/uboot/env/uboot_env_cmd.c agent/uboot/env/uboot_env_read_vars_cmd.c agent/uboot/env/uboot_env_write_vars_cmd.c agent/uboot/uboot_image_cmd.c agent/uboot/image/uboot_image_pull_cmd.c agent/uboot/image/uboot_image_find_address_cmd.c agent/uboot/image/uboot_image_list_commands_cmd.c agent/uboot/uboot_security_audit_cmd.c agent/linux/linux_dmesg_cmd.c agent/linux/linux_download_file_cmd.c agent/linux/linux_execute_command_cmd.c agent/linux/linux_grep_cmd.c agent/linux/linux_list_files_cmd.c agent/linux/linux_list_symlinks_cmd.c agent/linux/linux_remote_copy_cmd.c agent/orom/orom_pull_cmd_common.c agent/efi/efi_pull_orom_cmd.c agent/efi/efi_dump_vars_cmd.c agent/bios/bios_pull_orom_cmd.c agent/embedded_linux_audit_cmd.c \
+SRC    := agent/embedded_linux_audit.c agent/uboot/env/uboot_env_cmd.c agent/uboot/env/uboot_env_read_vars_cmd.c agent/uboot/env/uboot_env_write_vars_cmd.c agent/uboot/uboot_image_cmd.c agent/uboot/image/uboot_image_pull_cmd.c agent/uboot/image/uboot_image_find_address_cmd.c agent/uboot/image/uboot_image_list_commands_cmd.c agent/uboot/uboot_security_audit_cmd.c agent/linux/linux_dmesg_cmd.c agent/linux/linux_download_file_cmd.c agent/linux/linux_execute_command_cmd.c agent/linux/linux_grep_cmd.c agent/linux/linux_list_files_cmd.c agent/linux/linux_list_symlinks_cmd.c agent/linux/linux_remote_copy_cmd.c agent/linux/linux_ssh_cmd.c agent/orom/orom_pull_cmd_common.c agent/efi/efi_pull_orom_cmd.c agent/efi/efi_dump_vars_cmd.c agent/bios/bios_pull_orom_cmd.c agent/embedded_linux_audit_cmd.c \
 	  agent/uboot/audit-rules/uboot_validate_crc32_rule.c \
 	  agent/uboot/audit-rules/uboot_validate_cmdline_init_writeability_rule.c \
 	  agent/uboot/audit-rules/uboot_validate_env_security_rule.c \
@@ -333,6 +338,10 @@ $(ZLIB_LIB):
 $(CURL_LIB): $(OPENSSL_SSL_LIB)
 	cmake -S $(CURL_DIR) -B $(CURL_BUILD) $(CURL_CMAKE_ARGS) -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DBUILD_CURL_EXE=OFF -DBUILD_LIBCURL_DOCS=OFF -DBUILD_MISC_DOCS=OFF -DBUILD_TESTING=OFF -DCURL_USE_OPENSSL=ON -DOPENSSL_ROOT_DIR="$(abspath $(OPENSSL_INSTALL))" -DOPENSSL_INCLUDE_DIR="$(abspath $(OPENSSL_INSTALL))/include" -DOPENSSL_SSL_LIBRARY="$(abspath $(OPENSSL_SSL_LIB))" -DOPENSSL_CRYPTO_LIBRARY="$(abspath $(OPENSSL_LIB))" -DCURL_ZLIB=OFF -DUSE_LIBIDN2=OFF -DUSE_NGHTTP2=OFF -DCURL_BROTLI=OFF -DCURL_ZSTD=OFF -DENABLE_ARES=OFF -DENABLE_THREADED_RESOLVER=OFF -DCURL_USE_LIBPSL=OFF -DCURL_USE_LIBSSH2=OFF -DUSE_ECH=OFF -DUSE_NTLM=OFF -DUSE_OPENLDAP=OFF -DUSE_LIBRTMP=OFF -DUSE_WEBSOCKETS=OFF -DCURL_DISABLE_NETRC=ON -DHTTP_ONLY=ON
 	cmake --build $(CURL_BUILD) --parallel $(JOBS) --target libcurl_static
+
+$(LIBSSH_LIB): $(OPENSSL_SSL_LIB) $(ZLIB_LIB)
+	cmake -S $(LIBSSH_DIR) -B $(LIBSSH_BUILD) $(CMAKE_CC_ARGS) -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DBUILD_STATIC_LIB=ON -DWITH_EXAMPLES=OFF -DUNIT_TESTING=OFF -DCLIENT_TESTING=OFF -DSERVER_TESTING=OFF -DWITH_SERVER=OFF -DWITH_GSSAPI=OFF -DWITH_NACL=OFF -DWITH_ZLIB=ON -DZLIB_INCLUDE_DIR="$(abspath $(ZLIB_DIR))" -DZLIB_LIBRARY="$(abspath $(ZLIB_LIB))" -DOPENSSL_ROOT_DIR="$(abspath $(OPENSSL_INSTALL))" -DOPENSSL_INCLUDE_DIR="$(abspath $(OPENSSL_INSTALL))/include" -DOPENSSL_CRYPTO_LIBRARY="$(abspath $(OPENSSL_LIB))"
+	cmake --build $(LIBSSH_BUILD) --parallel $(JOBS) --target ssh-static
 
 $(OPENSSL_LIB): $(OPENSSL_SSL_LIB)
 
@@ -386,8 +395,8 @@ $(READLINE_BUILD_STAMP):
 	$(MAKE) -C $(READLINE_DIR) -j$(JOBS) libreadline.a libhistory.a
 	touch $@
 
-TARGET_DEPS := $(SRC) $(ZLIB_LIB) $(LIBUBOOTENV_LIB) $(LIBEFIVAR_BUILD_STAMP) $(JSONC_LIB) $(CURL_LIB) $(OPENSSL_SSL_LIB) $(OPENSSL_LIB) $(READLINE_DEPS)
-TARGET_LIBS := $(LIBUBOOTENV_LIB) $(LIBEFIVAR_LIB) $(ZLIB_LIB) $(JSONC_LIB) $(CURL_LIB) $(OPENSSL_SSL_LIB) $(OPENSSL_LIB)
+TARGET_DEPS := $(SRC) $(ZLIB_LIB) $(LIBUBOOTENV_LIB) $(LIBEFIVAR_BUILD_STAMP) $(JSONC_LIB) $(CURL_LIB) $(LIBSSH_LIB) $(OPENSSL_SSL_LIB) $(OPENSSL_LIB) $(READLINE_DEPS)
+TARGET_LIBS := $(LIBUBOOTENV_LIB) $(LIBEFIVAR_LIB) $(ZLIB_LIB) $(JSONC_LIB) $(CURL_LIB) $(LIBSSH_LIB) $(OPENSSL_SSL_LIB) $(OPENSSL_LIB)
 ifeq ($(ELA_ENABLE_WOLFSSL),1)
 TARGET_DEPS += $(WOLFSSL_LIB)
 TARGET_LIBS += $(WOLFSSL_LIB)
@@ -411,6 +420,7 @@ clean:
 	rm -f $(LIBEFIVAR_BUILD_STAMP)
 	rm -rf $(ZLIB_DIR)/build*
 	rm -rf $(CURL_DIR)/build*
+	rm -rf $(LIBSSH_DIR)/build*
 	rm -rf $(WOLFSSL_DIR)/build*
 	-cd $(OPENSSL_DIR) && $(MAKE) distclean >/dev/null 2>&1 || true
 	rm -rf $(OPENSSL_BUILD)

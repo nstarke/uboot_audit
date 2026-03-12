@@ -41,6 +41,7 @@ for test_script in \
     "$SCRIPT_DIR/linux/test_linux_list_files_args.sh" \
     "$SCRIPT_DIR/linux/test_linux_list_symlinks_args.sh" \
     "$SCRIPT_DIR/linux/test_linux_remote_copy_args.sh" \
+    "$SCRIPT_DIR/linux/test_linux_ssh_args.sh" \
     "$SCRIPT_DIR/efi/test_efi_bios_orom_args.sh" \
     "$SCRIPT_DIR/uboot/test_uboot_audit_args.sh" \
     "$SCRIPT_DIR/uboot/test_uboot_image_args.sh" \

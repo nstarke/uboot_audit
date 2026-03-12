@@ -342,6 +342,7 @@ run_qemu_isa_tests() {
     ensure_release_binaries "$isa"
     require_file "$binary_path"
     require_file "$TEST_SCRIPTS_DIR/linux/test_linux_dmesg_args.ela"
+    require_file "$TEST_SCRIPTS_DIR/linux/test_linux_ssh_args.ela"
 
     qemu_resolution="$(resolve_qemu_mode "$qemu_static_cmd" "$qemu_binfmt_cmd")"
     qemu_mode="${qemu_resolution%%:*}"

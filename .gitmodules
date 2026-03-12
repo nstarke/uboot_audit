@@ -31,3 +31,6 @@
 [submodule "third_party/wolfssl"]
 	path = third_party/wolfssl
 	url = https://github.com/wolfSSL/wolfssl.git
+[submodule "third_party/libssh"]
+	path = third_party/libssh
+	url = https://github.com/libssh/libssh-mirror.git
