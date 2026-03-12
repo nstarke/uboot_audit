@@ -1532,11 +1532,6 @@ static int embedded_linux_audit_dispatch(int argc, char **argv)
 				usage(argv[0]);
 				return 2;
 			}
-			if ((output_http && new_output_https) || (output_https && new_output_http)) {
-				fprintf(stderr, "Use only one of --output-http or --output-https\n\n");
-				usage(argv[0]);
-				return 2;
-			}
 			parsed_output_http = new_output_http;
 			parsed_output_https = new_output_https;
 			output_http = new_output_http;
@@ -1554,11 +1549,6 @@ static int embedded_linux_audit_dispatch(int argc, char **argv)
 						  errbuf,
 						  sizeof(errbuf)) < 0) {
 				fprintf(stderr, "%s\n\n", errbuf);
-				usage(argv[0]);
-				return 2;
-			}
-			if ((output_http && new_output_https) || (output_https && new_output_http)) {
-				fprintf(stderr, "Use only one of --output-http or --output-https\n\n");
 				usage(argv[0]);
 				return 2;
 			}

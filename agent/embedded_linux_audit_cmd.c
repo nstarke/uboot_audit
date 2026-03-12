@@ -1109,6 +1109,13 @@ static const char *lifecycle_content_type(const char *output_format)
 	return "text/plain; charset=utf-8";
 }
 
+static bool fw_audit_lifecycle_logging_enabled(void)
+{
+	const char *ela_debug = getenv("ELA_DEBUG");
+
+	return ela_debug && !strcmp(ela_debug, "1");
+}
+
 int fw_audit_emit_lifecycle_event(const char *output_format,
 				  const char *output_tcp,
 				  const char *output_http,
@@ -1121,6 +1128,9 @@ int fw_audit_emit_lifecycle_event(const char *output_format,
 	char *payload = NULL;
 	const char *output_uri = output_http && *output_http ? output_http : output_https;
 	char errbuf[256];
+
+	if (!fw_audit_lifecycle_logging_enabled())
+		return 0;
 
 	if (build_lifecycle_payload(output_format, command, phase, rc, &payload) != 0)
 		return -1;

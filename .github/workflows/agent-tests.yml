@@ -24,13 +24,6 @@ jobs:
           submodules: recursive
           ref: ${{ github.event_name == 'workflow_run' && (github.event.workflow_run.head_branch || github.event.workflow_run.head_sha) || github.sha }}
 
-      - name: Install build dependencies
-        if: ${{ github.event_name == 'workflow_dispatch' }}
-        run: |
-          set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y autoconf automake cmake libtool llvm
-
       - name: Download x86_64 release artifact from triggering workflow
         if: ${{ github.event_name == 'workflow_run' }}
         uses: actions/download-artifact@v4
@@ -52,13 +45,12 @@ jobs:
 
           install -m 755 "$binary_path" /tmp/embedded_linux_audit
 
-      - name: Build native agent binary
-        if: ${{ github.event_name == 'workflow_dispatch' }}
+      - name: Require release artifact for shell tests
+        if: ${{ github.event_name != 'workflow_run' }}
         run: |
           set -euo pipefail
-          make
-          cp embedded_linux_audit /tmp/embedded_linux_audit
-          chmod +x /tmp/embedded_linux_audit
+          echo "error: shell tests require a triggering Release Cross Static Builds workflow run so the prebuilt x86_64 artifact can be downloaded" >&2
+          exit 1
 
       - name: Run shell tests
         env:
@@ -79,13 +71,6 @@ jobs:
           submodules: recursive
           ref: ${{ github.event_name == 'workflow_run' && (github.event.workflow_run.head_branch || github.event.workflow_run.head_sha) || github.sha }}
 
-      - name: Install build dependencies
-        if: ${{ github.event_name == 'workflow_dispatch' }}
-        run: |
-          set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y autoconf automake cmake libtool llvm
-
       - name: Download x86_64 release artifact from triggering workflow
         if: ${{ github.event_name == 'workflow_run' }}
         uses: actions/download-artifact@v4
@@ -107,22 +92,40 @@ jobs:
 
           install -m 755 "$binary_path" /tmp/embedded_linux_audit
 
-      - name: Build native agent binary
-        if: ${{ github.event_name == 'workflow_dispatch' }}
+      - name: Require release artifact for script tests
+        if: ${{ github.event_name != 'workflow_run' }}
         run: |
           set -euo pipefail
-          make
-          cp embedded_linux_audit /tmp/embedded_linux_audit
-          chmod +x /tmp/embedded_linux_audit
+          echo "error: script tests require a triggering Release Cross Static Builds workflow run so the prebuilt x86_64 artifact can be downloaded" >&2
+          exit 1
 
       - name: Run script coverage files
         run: |
           set -euo pipefail
+
+          scrub_sensitive_stream() {
+            while IFS= read -r line || [ -n "$line" ]; do
+              lower_line="$(printf '%s' "$line" | tr '[:upper:]' '[:lower:]')"
+              case "$lower_line" in
+                *efi-var*|*efi_vars*|*efivars*)
+                  printf '[REDACTED EFI VARS]\n'
+                  continue
+                  ;;
+              esac
+
+              printf '%s\n' "$line" | sed -E \
+                -e 's/(data_hex=)[0-9A-Fa-f]+/\1<REDACTED>/g' \
+                -e 's/(([Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]|[Pp][Aa][Ss][Ss][Ww][Dd]|[Cc][Rr][Ee][Dd][Ee][Nn][Tt][Ii][Aa][Ll][Ss]?|[Aa][Pp][Ii][_-]?[Kk][Ee][Yy]|[Ss][Ee][Cc][Rr][Ee][Tt]|[Tt][Oo][Kk][Ee][Nn])[[:space:]]*[:=][[:space:]]*)[^[:space:],;"}]+/\1<REDACTED>/g' \
+                -e 's/(([?&]([Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]|[Pp][Aa][Ss][Ss][Ww][Dd]|[Cc][Rr][Ee][Dd][Ee][Nn][Tt][Ii][Aa][Ll][Ss]?|[Aa][Pp][Ii][_-]?[Kk][Ee][Yy]|[Ss][Ee][Cc][Rr][Ee][Tt]|[Tt][Oo][Kk][Ee][Nn]))=)[^&[:space:]]+/\1<REDACTED>/g' \
+                -e 's/(("data_hex"[[:space:]]*:[[:space:]]*")[^"]+)/\1<REDACTED>/g'
+            done
+          }
+
           rc=0
           while IFS= read -r script; do
             echo
             echo "===== Running ${script#tests/agent/scripts/} ====="
-            if /tmp/embedded_linux_audit --script "$script"; then
+            if /tmp/embedded_linux_audit --script "$script" 2>&1 | scrub_sensitive_stream; then
               script_rc=0
             else
               script_rc=$?

@@ -99,13 +99,26 @@ run_accept_case "global --insecure linux execute-command" "$BIN" --insecure --ou
 log="$(mktemp /tmp/test_execute_command_lifecycle.XXXXXX)"
 TEST_DISABLE_OUTPUT_OVERRIDE=1 run_with_output_override "$BIN" linux execute-command "echo hello" >"$log" 2>&1
 rc=$?
+if [ "$rc" -eq 0 ] && ! grep -q 'log agent_timestamp=' "$log"; then
+    echo "[PASS] linux execute-command suppresses lifecycle logs by default"
+    PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
+else
+    echo "[FAIL] linux execute-command suppresses lifecycle logs by default (rc=$rc)"
+    print_file_head_scrubbed "$log" 120
+    FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
+fi
+rm -f "$log"
+
+log="$(mktemp /tmp/test_execute_command_lifecycle_debug.XXXXXX)"
+TEST_DISABLE_OUTPUT_OVERRIDE=1 env ELA_DEBUG=1 run_with_output_override "$BIN" linux execute-command "echo hello" >"$log" 2>&1
+rc=$?
 if [ "$rc" -eq 0 ] && \
    grep -Eq 'log agent_timestamp=[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[+-][0-9]{4} phase=start command=linux execute-command echo hello rc=0' "$log" && \
    grep -Eq 'log agent_timestamp=[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[+-][0-9]{4} phase=complete command=linux execute-command echo hello rc=0' "$log"; then
-    echo "[PASS] linux execute-command emits lifecycle logs"
+    echo "[PASS] linux execute-command emits lifecycle logs when ELA_DEBUG=1"
     PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
 else
-    echo "[FAIL] linux execute-command emits lifecycle logs (rc=$rc)"
+    echo "[FAIL] linux execute-command emits lifecycle logs when ELA_DEBUG=1 (rc=$rc)"
     print_file_head_scrubbed "$log" 120
     FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
 fi
