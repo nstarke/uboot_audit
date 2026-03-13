@@ -5,3 +5,4 @@ embedded_linux_audit linux ssh --help
 linux ssh client 127.0.0.1 --port 22
 ela linux ssh copy 127.0.0.1 --local-path /tmp/source.bin --remote-path /tmp/dest.bin
 embedded_linux_audit linux ssh tunnel 127.0.0.1 --port 22
+linux ssh socks 127.0.0.1 --remote-host 127.0.0.1 --remote-port 80 --local-port 1080

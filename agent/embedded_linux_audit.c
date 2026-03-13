@@ -987,7 +987,7 @@ static void usage(const char *prog)
 		"  linux list-symlinks List symlinks under a directory (use --recursive to recurse)\n"
 		"  linux remote-copy  Copy a local file to remote destination\n"
 		"  linux ssh          SSH client/copy/tunnel operations\n"
-		"  linux tpm2         Run tpm2-tools style TPM2 commands via `tpm2_<command>` wrappers\n"
+		"  linux tpm2         Run built-in TPM2 commands through the TPM2-TSS library\n"
 		"  efi orom           EFI option ROM utilities (pull/list)\n"
 		"  efi dump-vars      Dump EFI variables with txt/csv/json formatting\n"
 		"  bios orom          BIOS option ROM utilities (pull/list)\n"
@@ -1834,7 +1834,7 @@ static int embedded_linux_audit_dispatch(int argc, char **argv)
 		else if (!strcmp(argv[sub_idx], "tpm2")) {
 			if (output_format_explicit)
 				fprintf(stderr,
-					"Warning: --output-format has no effect for tpm2; output is controlled by the delegated tpm2 tool\n");
+					"Warning: --output-format has no effect for tpm2; output is command-specific plain text\n");
 			ret = linux_tpm2_scan_main(argc - sub_idx, argv + sub_idx);
 		}
 		else {

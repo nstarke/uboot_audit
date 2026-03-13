@@ -14,6 +14,7 @@ ela linux tpm2 getcap --help
 linux ssh client --port 2022 --help
 ela linux ssh copy --local-path /tmp/source.bin --remote-path /tmp/dest.bin --recursive --port 2022 --help
 embedded_linux_audit linux ssh tunnel --port 2022 --help
+linux ssh socks --remote-host 127.0.0.1 --remote-port 80 --local-port 1080 --help
 
 uboot env parse-vars --size 0x10000 --help
 ela uboot env --parse-vars --size 0x10000 --help

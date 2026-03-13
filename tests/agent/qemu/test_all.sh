@@ -3,13 +3,48 @@
 set -u
 
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+RELEASE_BUILD_SCRIPT="$REPO_ROOT/tests/compile_release_binaries_locally.sh"
 
 # shellcheck source=tests/agent/qemu/common.sh
 . "$SCRIPT_DIR/common.sh"
 
+usage() {
+    echo "Usage: $0 [--clean] [qemu-test-args...]" >&2
+    exit 1
+}
+
 rc=0
 pass_count=0
 fail_count=0
+clean_release_binaries=0
+forwarded_args=""
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --clean)
+            clean_release_binaries=1
+            shift
+            ;;
+        --help|-h)
+            usage
+            ;;
+        *)
+            forwarded_args="$*"
+            break
+            ;;
+    esac
+done
+
+if [ "$clean_release_binaries" -eq 1 ]; then
+    require_file "$RELEASE_BUILD_SCRIPT"
+    build_jobs="$(cpu_jobs_for_build)"
+    echo "Rebuilding all release binaries via tests/compile_release_binaries_locally.sh --clean --jobs=$build_jobs"
+    if ! /bin/sh "$RELEASE_BUILD_SCRIPT" --clean --jobs="$build_jobs"; then
+        echo "error: failed to rebuild release binaries" >&2
+        exit 1
+    fi
+fi
 
 for test_script in \
     "$SCRIPT_DIR/arm32-le.sh" \
@@ -30,7 +65,12 @@ do
     echo
     echo "===== Running $(basename "$test_script") ====="
     test_log="$(mktemp /tmp/ela-qemu-test-all.XXXXXX)"
-    /bin/sh "$test_script" "$@" >"$test_log" 2>&1
+    if [ -n "$forwarded_args" ]; then
+        # shellcheck disable=SC2086
+        /bin/sh "$test_script" $forwarded_args >"$test_log" 2>&1
+    else
+        /bin/sh "$test_script" >"$test_log" 2>&1
+    fi
     test_rc=$?
     cat "$test_log"
 

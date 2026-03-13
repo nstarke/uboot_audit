@@ -38,5 +38,13 @@ run_exact_case "linux ssh tunnel extra arg" 2 "$BIN" linux ssh tunnel 127.0.0.1 
 run_accept_case "linux ssh tunnel host" "$BIN" linux ssh tunnel 127.0.0.1
 run_accept_case "linux ssh tunnel host --port" "$BIN" linux ssh tunnel 127.0.0.1 --port 2222
 
+run_exact_case "linux ssh socks no host" 2 "$BIN" linux ssh socks --remote-host 127.0.0.1 --remote-port 80 --local-port 1080
+run_exact_case "linux ssh socks missing remote-host" 2 "$BIN" linux ssh socks 127.0.0.1 --remote-port 80 --local-port 1080
+run_exact_case "linux ssh socks missing remote-port" 2 "$BIN" linux ssh socks 127.0.0.1 --remote-host 127.0.0.1 --local-port 1080
+run_exact_case "linux ssh socks missing local-port" 2 "$BIN" linux ssh socks 127.0.0.1 --remote-host 127.0.0.1 --remote-port 80
+run_exact_case "linux ssh socks extra arg" 2 "$BIN" linux ssh socks 127.0.0.1 --remote-host 127.0.0.1 --remote-port 80 --local-port 1080 extra
+run_accept_case "linux ssh socks args" "$BIN" linux ssh socks 127.0.0.1 --remote-host 127.0.0.1 --remote-port 80 --local-port 1080
+run_accept_case "linux ssh socks args --port" "$BIN" linux ssh socks 127.0.0.1 --port 2222 --remote-host 127.0.0.1 --remote-port 80 --local-port 1080
+
 rm -rf "$TMP_DIR"
 finish_tests

@@ -138,6 +138,14 @@ endif
 # accepted feature toggles only.
 WOLFSSL_LIBRARY_CONFIGURE_FLAGS :=
 
+ELA_ENABLE_TPM2 ?= 1
+TPM2_TSS_CONFIGURE_HOST_ARG :=
+TPM2_TSS_CONFIGURE_BUILD_ARG :=
+ifneq ($(strip $(CMAKE_C_COMPILER_TARGET)),)
+TPM2_TSS_CONFIGURE_HOST_ARG := --host=$(CMAKE_C_COMPILER_TARGET)
+TPM2_TSS_CONFIGURE_BUILD_ARG := --build=$(shell cc -dumpmachine 2>/dev/null || gcc -dumpmachine 2>/dev/null || echo unknown-build)
+endif
+
 CURL_CMAKE_ARGS := $(CMAKE_CC_ARGS)
 ifneq ($(strip $(CMAKE_C_COMPILER_TARGET)),)
 # curl's CMake feature probes are fragile for cross targets under zig cc.
@@ -218,6 +226,17 @@ LIBSSH_BUILD  := $(LIBSSH_DIR)/build-$(CC_TAG)
 # builds because OUTPUT_SUFFIX is empty in that case.
 LIBSSH_LIB    := $(LIBSSH_BUILD)/src/libssh.a
 LIBSSH_CFLAGS := -I$(LIBSSH_DIR)/include -I$(LIBSSH_BUILD)/include -I$(LIBSSH_BUILD)
+TPM2_TSS_DIR := third_party/tpm2-tss
+TPM2_TSS_BUILD := $(TPM2_TSS_DIR)/build-$(CC_TAG)
+TPM2_TSS_BUILD_STAMP := $(TPM2_TSS_BUILD)/.ela-build-stamp
+TPM2_TSS_CFLAGS := -I$(TPM2_TSS_DIR)/include
+TPM2_TSS_RC_LIB := $(TPM2_TSS_BUILD)/src/tss2-rc/.libs/libtss2-rc.a
+TPM2_TSS_MU_LIB := $(TPM2_TSS_BUILD)/src/tss2-mu/.libs/libtss2-mu.a
+TPM2_TSS_SYS_LIB := $(TPM2_TSS_BUILD)/src/tss2-sys/.libs/libtss2-sys.a
+TPM2_TSS_ESYS_LIB := $(TPM2_TSS_BUILD)/src/tss2-esys/.libs/libtss2-esys.a
+TPM2_TSS_TCTI_DEVICE_LIB := $(TPM2_TSS_BUILD)/src/tss2-tcti/.libs/libtss2-tcti-device.a
+TPM2_TSS_BUILD_CFLAGS ?= -O2
+TPM2_TSS_ZIG_GLOBAL_CACHE := $(abspath .cache/zig-global)
 WOLFSSL_DIR   := third_party/wolfssl
 WOLFSSL_BUILD := $(WOLFSSL_DIR)/build-$(CC_TAG)
 WOLFSSL_LIB   := $(WOLFSSL_BUILD)/src/.libs/libwolfssl.a
@@ -265,6 +284,10 @@ CFLAGS += $(LIBSSH_CFLAGS)
 ifeq ($(ELA_ENABLE_WOLFSSL),1)
 CFLAGS += $(WOLFSSL_CFLAGS)
 CFLAGS += -DELA_HAS_WOLFSSL=1
+endif
+ifeq ($(ELA_ENABLE_TPM2),1)
+CFLAGS += $(TPM2_TSS_CFLAGS)
+CFLAGS += -DELA_HAS_TPM2=1
 endif
 CFLAGS += $(OPENSSL_CFLAGS)
 CFLAGS += -I.
@@ -437,6 +460,61 @@ $(LIBSSH_LIB): $(OPENSSL_SSL_LIB) $(ZLIB_LIB)
 	cmake -S $(LIBSSH_DIR) -B $(LIBSSH_BUILD) $(LIBSSH_CMAKE_ARGS) -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DBUILD_STATIC_LIB=ON -DWITH_EXAMPLES=OFF -DUNIT_TESTING=OFF -DCLIENT_TESTING=OFF -DSERVER_TESTING=OFF -DWITH_SERVER=OFF -DWITH_GSSAPI=OFF -DWITH_NACL=OFF -DWITH_ZLIB=ON -DZLIB_INCLUDE_DIR="$(abspath $(ZLIB_DIR))" -DZLIB_LIBRARY="$(abspath $(ZLIB_LIB))" -DOPENSSL_ROOT_DIR="$(abspath $(OPENSSL_INSTALL))" -DOPENSSL_INCLUDE_DIR="$(abspath $(OPENSSL_INSTALL))/include" -DOPENSSL_CRYPTO_LIBRARY="$(abspath $(OPENSSL_LIB))"
 	cmake --build $(LIBSSH_BUILD) --parallel $(JOBS) --target ssh-static
 
+$(TPM2_TSS_BUILD_STAMP): $(OPENSSL_SSL_LIB)
+	if [ ! -x "$(TPM2_TSS_DIR)/configure" ] || [ ! -f "$(TPM2_TSS_DIR)/src_vars.mk" ] || [ ! -f "$(TPM2_TSS_DIR)/aclocal.m4" ] || [ ! -f "$(TPM2_TSS_DIR)/config.guess" ] || [ ! -f "$(TPM2_TSS_DIR)/config.sub" ] || [ ! -f "$(TPM2_TSS_DIR)/install-sh" ] || grep -qE '\b(AX_[A-Z0-9_]+|DX_[A-Z0-9_]+)\b' "$(TPM2_TSS_DIR)/configure"; then \
+		$(MAKE) check-autoreconf; \
+		mkdir -p "$(TPM2_TSS_DIR)/m4"; \
+		cp build_support/tpm2-tss/ela_fallbacks.m4 "$(TPM2_TSS_DIR)/m4/ela_fallbacks.m4"; \
+		cp build_support/tpm2-tss/aminclude_static.am "$(TPM2_TSS_DIR)/aminclude_static.am"; \
+		cd $(TPM2_TSS_DIR) && ACLOCAL='aclocal -I m4' ./bootstrap; \
+	fi
+	rm -rf $(TPM2_TSS_BUILD)
+	mkdir -p $(TPM2_TSS_BUILD)
+	cd $(TPM2_TSS_BUILD) && \
+		ZIG_GLOBAL_CACHE_DIR='$(TPM2_TSS_ZIG_GLOBAL_CACHE)' \
+		ZIG_LOCAL_CACHE_DIR='$(abspath $(TPM2_TSS_BUILD))/.zig-cache' \
+		ac_cv_path_lt_DD='/usr/bin/dd' \
+		lt_cv_truncate_bin='sed -e 4q' \
+		CC='$(CC)' \
+		AR='ar' \
+		RANLIB='ranlib' \
+		CFLAGS='$(TPM2_TSS_BUILD_CFLAGS)' \
+		CPPFLAGS='-I$(abspath $(OPENSSL_INSTALL))/include' \
+		LDFLAGS='-L$(abspath $(OPENSSL_INSTALL))/lib' \
+		CRYPTO_CFLAGS='-I$(abspath $(OPENSSL_INSTALL))/include' \
+		CRYPTO_LIBS='-L$(abspath $(OPENSSL_INSTALL))/lib -lcrypto' \
+		$(abspath $(TPM2_TSS_DIR))/configure \
+			$(TPM2_TSS_CONFIGURE_BUILD_ARG) \
+			$(TPM2_TSS_CONFIGURE_HOST_ARG) \
+			--disable-shared \
+			--enable-static \
+			--disable-fapi \
+			--disable-policy \
+			--disable-tcti-mssim \
+			--disable-tcti-swtpm \
+			--disable-tcti-pcap \
+			--disable-tcti-null \
+			--disable-tcti-libtpms \
+			--disable-tcti-cmd \
+			--disable-tcti-spi-helper \
+			--disable-tcti-spi-ltt2go \
+			--disable-tcti-spidev \
+			--disable-tcti-spi-ftdi \
+			--disable-tcti-i2c-helper \
+			--disable-tcti-i2c-ftdi \
+			--disable-unit \
+			--disable-integration \
+			--enable-nodl
+	ZIG_GLOBAL_CACHE_DIR='$(TPM2_TSS_ZIG_GLOBAL_CACHE)' \
+	ZIG_LOCAL_CACHE_DIR='$(abspath $(TPM2_TSS_BUILD))/.zig-cache' \
+	$(MAKE) -C $(TPM2_TSS_BUILD) -j$(JOBS)
+	test -f $(TPM2_TSS_ESYS_LIB)
+	test -f $(TPM2_TSS_SYS_LIB)
+	test -f $(TPM2_TSS_MU_LIB)
+	test -f $(TPM2_TSS_RC_LIB)
+	test -f $(TPM2_TSS_TCTI_DEVICE_LIB)
+	touch $@
+
 $(OPENSSL_LIB): $(OPENSSL_SSL_LIB)
 
 $(WOLFSSL_LIB): check-autoconf
@@ -511,7 +589,12 @@ $(READLINE_BUILD_STAMP):
 	touch $@
 
 TARGET_DEPS := $(SRC) $(ZLIB_LIB) $(LIBUBOOTENV_LIB) $(LIBEFIVAR_BUILD_STAMP) $(LIBEFIVAR_LINK_LIB) $(JSONC_LIB) $(CURL_LIB) $(LIBSSH_LIB) $(OPENSSL_SSL_LIB) $(OPENSSL_LIB) $(READLINE_DEPS)
-TARGET_LIBS := $(LIBUBOOTENV_LIB) $(LIBEFIVAR_LINK_LIB) $(JSONC_LIB) $(CURL_LIB) $(LIBSSH_LIB) $(OPENSSL_SSL_LIB) $(OPENSSL_LIB) $(ZLIB_LIB)
+TARGET_LIBS := $(LIBUBOOTENV_LIB) $(LIBEFIVAR_LINK_LIB) $(JSONC_LIB) $(CURL_LIB) $(LIBSSH_LIB) $(ZLIB_LIB)
+ifeq ($(ELA_ENABLE_TPM2),1)
+TARGET_DEPS += $(TPM2_TSS_BUILD_STAMP)
+TARGET_LIBS += $(TPM2_TSS_ESYS_LIB) $(TPM2_TSS_SYS_LIB) $(TPM2_TSS_TCTI_DEVICE_LIB) $(TPM2_TSS_MU_LIB) $(TPM2_TSS_RC_LIB)
+endif
+TARGET_LIBS += $(OPENSSL_SSL_LIB) $(OPENSSL_LIB)
 ifeq ($(ELA_ENABLE_WOLFSSL),1)
 TARGET_DEPS += $(WOLFSSL_LIB)
 TARGET_LIBS += $(WOLFSSL_LIB)
@@ -542,6 +625,7 @@ clean:
 	rm -rf $(ZLIB_DIR)/build*
 	rm -rf $(CURL_DIR)/build*
 	rm -rf $(LIBSSH_DIR)/build*
+	rm -rf $(TPM2_TSS_DIR)/build*
 	rm -rf $(WOLFSSL_DIR)/build*
 	-cd $(OPENSSL_DIR) && $(MAKE) distclean >/dev/null 2>&1 || true
 	rm -rf $(OPENSSL_BUILD)
