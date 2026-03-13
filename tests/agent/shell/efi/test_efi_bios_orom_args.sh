@@ -110,6 +110,17 @@ rm -f "$isa_gate_log"
 python_bin="$(find_python_bin || true)"
 
 if [ -n "$python_bin" ]; then
+    run_efi_vars_http=1
+    case "${FW_AUDIT_TEST_ISA:-}" in
+        ""|x86|x86_64|aarch64-le|aarch64-be) : ;;
+        *)
+            echo "[PASS] efi dump-vars HTTP POST upload skipped (FW_AUDIT_TEST_ISA=${FW_AUDIT_TEST_ISA:-} does not support EFI)"
+            PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
+            run_efi_vars_http=0
+            ;;
+    esac
+
+    if [ "$run_efi_vars_http" -eq 1 ]; then
     efi_vars_http_path="$(mktemp /tmp/test_efi_vars_http_path.XXXXXX)"
     efi_vars_http_type="$(mktemp /tmp/test_efi_vars_http_type.XXXXXX)"
     efi_vars_http_body="$(mktemp /tmp/test_efi_vars_http_body.XXXXXX)"
@@ -204,6 +215,7 @@ PY
 
     rm -f "$efi_vars_http_path" "$efi_vars_http_type" "$efi_vars_http_body" \
         "$efi_vars_http_server_log" "$efi_vars_http_post_log"
+    fi # run_efi_vars_http
 
     no_result_mode=""
     no_result_log="$(mktemp /tmp/test_orom_no_result_probe.XXXXXX)"
