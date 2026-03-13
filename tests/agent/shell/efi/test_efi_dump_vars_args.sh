@@ -115,6 +115,7 @@ PY
         TEST_DISABLE_OUTPUT_OVERRIDE=1 run_with_output_override \
             "$BIN" --output-format json --output-http "http://127.0.0.1:$efi_vars_http_port" efi dump-vars >"$efi_vars_http_post_log" 2>&1
         rc=$?
+        kill "$efi_vars_http_server_pid" 2>/dev/null || true
         wait "$efi_vars_http_server_pid" 2>/dev/null || true
 
         if [ "$rc" -ne 2 ] && \
