@@ -90,7 +90,8 @@ ela_command_package_name() {
         perl) echo perl ;;
         libtool)
             case "$ela_manager" in
-                apt|dnf|yum|zypper|pacman|apk) echo libtool ;;
+                apt) echo libtool-bin ;;
+                dnf|yum|zypper|pacman|apk) echo libtool ;;
                 *) return 1 ;;
             esac
             ;;

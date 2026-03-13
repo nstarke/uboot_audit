@@ -152,7 +152,7 @@ jobs:
         if: ${{ github.event_name == 'workflow_dispatch' }}
         run: |
           set -euo pipefail
-          sudo apt-get install -y autoconf automake cmake libtool llvm
+          sudo apt-get install -y autoconf automake cmake libtool-bin llvm
 
       - name: Download cross-build artifacts from triggering workflow
         if: ${{ github.event_name == 'workflow_run' }}

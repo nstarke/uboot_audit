@@ -48,6 +48,36 @@ print_file_scrubbed() {
     fi
 }
 
+detect_qemu_runtime_failure() {
+    script_log="$1"
+    script_rc="$2"
+
+    case "$script_rc" in
+        132)
+            echo "Illegal Instruction"
+            return 0
+            ;;
+        139)
+            echo "Segmentation fault"
+            return 0
+            ;;
+    esac
+
+    if [ -f "$script_log" ]; then
+        if grep -Eiq '(^|[^[:alpha:]])illegal instruction([^[:alpha:]]|$)' "$script_log"; then
+            echo "Illegal Instruction"
+            return 0
+        fi
+
+        if grep -Eiq 'segmentation fault|\bsegfault\b' "$script_log"; then
+            echo "Segmentation fault"
+            return 0
+        fi
+    fi
+
+    return 1
+}
+
 isa_has_compat_binary() {
     case "$1" in
         aarch64-le|aarch64-be|mips-le|mips-be|mips64-le|mips64-be|powerpc-le|powerpc-be|x86|x86_64|riscv32|riscv64)
@@ -400,11 +430,20 @@ run_qemu_binary_tests() {
             run_qemu_script_direct "$qemu_mode" "$qemu_runner" "$binary_path" "$script_path" "$runtime_dir" >"$script_log" 2>&1
         fi
         script_rc=$?
-        if [ "$script_rc" -eq 0 ]; then
+        runtime_failure=""
+        if runtime_failure="$(detect_qemu_runtime_failure "$script_log" "$script_rc")"; then
+            :
+        else
+            runtime_failure=""
+        fi
+
+        if [ "$script_rc" -eq 0 ] && [ -z "$runtime_failure" ]; then
             echo "[PASS] script ${script_path#"$TEST_SCRIPTS_DIR"/} ($binary_label, isa=$isa, rc=$script_rc)"
             PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
         else
-            if [ "$script_rc" -eq 2 ]; then
+            if [ -n "$runtime_failure" ]; then
+                echo "[FAIL] script ${script_path#"$TEST_SCRIPTS_DIR"/} ($binary_label, isa=$isa, rc=$script_rc, $runtime_failure)"
+            elif [ "$script_rc" -eq 2 ]; then
                 echo "[FAIL] script ${script_path#"$TEST_SCRIPTS_DIR"/} ($binary_label, isa=$isa, rc=$script_rc, parser/usage failure)"
             else
                 echo "[FAIL] script ${script_path#"$TEST_SCRIPTS_DIR"/} ($binary_label, isa=$isa, rc=$script_rc)"
@@ -412,13 +451,17 @@ run_qemu_binary_tests() {
             print_file_scrubbed "$script_log"
             FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
         fi
-        rm -f "$script_log"
+
         if [ "$script_rc" -eq 2 ]; then
             echo "error: script parser/usage failure for $script_path" >&2
+            rc=1
+        elif [ -n "$runtime_failure" ]; then
+            echo "error: qemu runtime failure detected for $script_path" >&2
             rc=1
         elif [ "$script_rc" -ne 0 ]; then
             rc=1
         fi
+        rm -f "$script_log"
     done <"$script_list_file"
 
     rm -f "$script_list_file"

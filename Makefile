@@ -510,7 +510,7 @@ check-autoconf:
 check-autoreconf:
 	@command -v autoreconf >/dev/null 2>&1 || { \
 		echo "error: autoreconf is required to regenerate third_party/wolfssl configure scripts when sources are newer than generated files."; \
-		echo "hint: install automake/libtool/autoconf (providing autoreconf) and rerun make."; \
+		echo "hint: install automake/libtool-bin/autoconf on Debian-based systems (or the equivalent libtool package on your distro) and rerun make."; \
 		exit 1; \
 	}
 

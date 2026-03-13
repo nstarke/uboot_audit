@@ -404,6 +404,7 @@ require_command perl
 require_command libtool
 require_command aclocal
 require_command autoconf
+
 require_command python3
 require_command bash
 require_command make
