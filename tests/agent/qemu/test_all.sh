@@ -19,6 +19,13 @@ pass_count=0
 fail_count=0
 clean_release_binaries=0
 
+count_matches() {
+    pattern="$1"
+    log_path="$2"
+
+    grep -c -- "$pattern" "$log_path" 2>/dev/null || true
+}
+
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --clean)
@@ -66,8 +73,16 @@ do
     /bin/sh "$test_script" "$@" 2>&1 | tee "$test_log"
     test_rc=${PIPESTATUS[0]}
 
-    test_passes="$(sed -n 's/^Passed: //p' "$test_log" | tail -n 1)"
-    test_fails="$(sed -n 's/^Failed: //p' "$test_log" | tail -n 1)"
+    test_passes="$(count_matches '^\[PASS\]' "$test_log")"
+    test_fails="$(count_matches '^\[FAIL\]' "$test_log")"
+
+    if [ "$test_passes" -eq 0 ]; then
+        test_passes="$(sed -n 's/^Passed: //p' "$test_log" | tail -n 1)"
+    fi
+
+    if [ "$test_fails" -eq 0 ]; then
+        test_fails="$(sed -n 's/^Failed: //p' "$test_log" | tail -n 1)"
+    fi
 
     if [ -n "$test_passes" ]; then
         pass_count="$(expr "$pass_count" + "$test_passes")"
