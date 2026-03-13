@@ -48,6 +48,10 @@ jobs:
             zig_targets: powerpc64le-linux-musl,powerpc64le-linux-gnu
             cpu_compat: powerpc64le
             cpu_compat_zig_targets: powerpc64le-linux-musl,powerpc64le-linux-gnu
+          - name: powerpc64-be
+            zig_targets: powerpc64-linux-musl,powerpc64-linux-gnu
+            cpu_compat: powerpc64
+            cpu_compat_zig_targets: powerpc64-linux-musl,powerpc64-linux-gnu
           - name: powerpc-be
             zig_targets: powerpc-linux-musleabi,powerpc-linux-musleabihf,powerpc-linux-gnueabi,powerpc-linux-gnueabihf
             cpu_compat: powerpc
@@ -126,6 +130,9 @@ jobs:
                     CMAKE_C_COMPILER_TARGET="${T}" \
                     CC="zig cc -target ${T}"; then
               cp embedded_linux_audit "dist/${{ matrix.name }}/ela-${{ matrix.name }}"
+              if [ "${{ matrix.name }}" = "powerpc-le" ]; then
+                cp embedded_linux_audit "dist/${{ matrix.name }}/ela-powerpc64-le"
+              fi
               echo "Built default successfully with target: ${T}"
               BUILT=1
               break
@@ -166,6 +173,9 @@ jobs:
                     CMAKE_C_COMPILER_TARGET="${T}" \
                     CC="zig cc -target ${T}"; then
               cp embedded_linux_audit "dist/${{ matrix.name }}/ela-${{ matrix.name }}-compat"
+              if [ "${{ matrix.name }}" = "powerpc-le" ]; then
+                cp embedded_linux_audit "dist/${{ matrix.name }}/ela-powerpc64-le-compat"
+              fi
               echo "Built CPU_COMPAT successfully with target: ${T}"
               BUILT=1
               break
@@ -185,6 +195,8 @@ jobs:
           path: |
             dist/${{ matrix.name }}/ela-${{ matrix.name }}
             dist/${{ matrix.name }}/ela-${{ matrix.name }}-compat
+            dist/${{ matrix.name }}/ela-powerpc64-le
+            dist/${{ matrix.name }}/ela-powerpc64-le-compat
           if-no-files-found: ignore
 
   publish-release-assets:
