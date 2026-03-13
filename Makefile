@@ -398,7 +398,7 @@ ifneq ($(filter $(COMPAT_CPU),arm32 armeb powerpc powerpchf),)
 SRC += compat/legacy_sync_builtins.c
 endif
 
-.PHONY: all env image static test clean check-autoconf check-zig check-llvm-objcopy
+.PHONY: all env image static test clean check-autoconf check-autoreconf check-zig check-llvm-objcopy
 
 check-zig:
 	@if [ "$(NEEDS_ZIG)" != "1" ]; then \
@@ -507,6 +507,13 @@ check-autoconf:
 		exit 1; \
 	}
 
+check-autoreconf:
+	@command -v autoreconf >/dev/null 2>&1 || { \
+		echo "error: autoreconf is required to regenerate third_party/wolfssl configure scripts when sources are newer than generated files."; \
+		echo "hint: install automake/libtool/autoconf (providing autoreconf) and rerun make."; \
+		exit 1; \
+	}
+
 all: $(TARGET)
 
 env: $(TARGET)
@@ -545,7 +552,10 @@ $(OPENSSL_LIB): $(OPENSSL_SSL_LIB)
 
 $(WOLFSSL_LIB): check-autoconf
 	mkdir -p $(WOLFSSL_BUILD)
-	if [ ! -x "$(WOLFSSL_DIR)/configure" ]; then \
+	if [ ! -x "$(WOLFSSL_DIR)/configure" ] \
+		|| [ "$(WOLFSSL_DIR)/configure.ac" -nt "$(WOLFSSL_DIR)/configure" ] \
+		|| [ "$(WOLFSSL_DIR)/aclocal.m4" -nt "$(WOLFSSL_DIR)/configure" ]; then \
+		$(MAKE) check-autoreconf; \
 		cd $(WOLFSSL_DIR) && ./autogen.sh; \
 	fi
 	cd $(WOLFSSL_BUILD) && $(abspath $(WOLFSSL_DIR))/configure \
