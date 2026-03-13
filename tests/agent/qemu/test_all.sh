@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 set -u
 
@@ -30,9 +30,8 @@ do
     echo
     echo "===== Running $(basename "$test_script") ====="
     test_log="$(mktemp /tmp/ela-qemu-test-all.XXXXXX)"
-    /bin/sh "$test_script" "$@" >"$test_log" 2>&1
-    test_rc=$?
-    cat "$test_log"
+    /bin/sh "$test_script" "$@" 2>&1 | tee "$test_log"
+    test_rc=${PIPESTATUS[0]}
 
     test_passes="$(sed -n 's/^Passed: //p' "$test_log" | tail -n 1)"
     test_fails="$(sed -n 's/^Failed: //p' "$test_log" | tail -n 1)"

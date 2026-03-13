@@ -260,6 +260,8 @@ EOF_FW_ENV
     cp "$runtime_dir/fw_env.config" "$runtime_dir/uboot_env.config"
 }
 
+QEMU_SCRIPT_TIMEOUT="${ELA_QEMU_SCRIPT_TIMEOUT:-120}"
+
 run_qemu_script_in_chroot() {
     qemu_mode="$1"
     qemu_runner="$2"
@@ -425,13 +427,22 @@ run_qemu_binary_tests() {
         echo
         echo "===== Running ${script_path#"$TEST_SCRIPTS_DIR"/} ====="
         if [ "$use_bwrap" -eq 1 ]; then
-            run_qemu_script_in_chroot "$qemu_mode" "$(basename "$qemu_runner")" "$rootfs_dir" "$script_path" >"$script_log" 2>&1
+            run_qemu_script_in_chroot "$qemu_mode" "$(basename "$qemu_runner")" "$rootfs_dir" "$script_path" >"$script_log" 2>&1 &
         else
-            run_qemu_script_direct "$qemu_mode" "$qemu_runner" "$binary_path" "$script_path" "$runtime_dir" >"$script_log" 2>&1
+            run_qemu_script_direct "$qemu_mode" "$qemu_runner" "$binary_path" "$script_path" "$runtime_dir" >"$script_log" 2>&1 &
         fi
+        script_pid=$!
+        (sleep "$QEMU_SCRIPT_TIMEOUT" && kill "$script_pid" 2>/dev/null) >/dev/null 2>/dev/null &
+        timeout_pid=$!
+        wait "$script_pid"
         script_rc=$?
+        kill "$timeout_pid" 2>/dev/null
+        wait "$timeout_pid" 2>/dev/null
+
         runtime_failure=""
-        if runtime_failure="$(detect_qemu_runtime_failure "$script_log" "$script_rc")"; then
+        if [ "$script_rc" -eq 143 ] || [ "$script_rc" -eq 124 ]; then
+            runtime_failure="timeout after ${QEMU_SCRIPT_TIMEOUT}s"
+        elif runtime_failure="$(detect_qemu_runtime_failure "$script_log" "$script_rc")"; then
             :
         else
             runtime_failure=""
