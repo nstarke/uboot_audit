@@ -197,6 +197,13 @@ WOLFSSL_EXTRA_CONFIGURE_FLAGS += --disable-sp-asm
 endif
 endif
 
+# Some bundled wolfSSL configure scripts in our pinned submodule revision reject
+# libtool-style --enable-static/--disable-shared toggles even though we only
+# consume the static archive. The build still produces src/.libs/libwolfssl.a
+# without those options, so keep the configure invocation to the universally
+# accepted feature toggles only.
+WOLFSSL_LIBRARY_CONFIGURE_FLAGS :=
+
 CURL_CMAKE_ARGS := $(CMAKE_CC_ARGS)
 ifneq ($(strip $(CMAKE_C_COMPILER_TARGET)),)
 # curl's CMake feature probes are fragile for older cross targets under zig cc.
@@ -545,7 +552,8 @@ $(WOLFSSL_LIB): check-autoconf
 		CC="$(CC)" CFLAGS="$(COMPAT_CFLAGS)" \
 		$(WOLFSSL_CONFIGURE_HOST_ARG) \
 		$(WOLFSSL_EXTRA_CONFIGURE_FLAGS) \
-		--enable-static --disable-shared --disable-benchmark --disable-examples \
+		$(WOLFSSL_LIBRARY_CONFIGURE_FLAGS) \
+		--disable-benchmark --disable-examples \
 		--disable-crypttests --disable-dtls --disable-oldtls --disable-tls13 \
 		--disable-tls13 --enable-sni --prefix="$(abspath $(WOLFSSL_BUILD))/install"
 	$(MAKE) -C $(WOLFSSL_BUILD) -j$(JOBS)
