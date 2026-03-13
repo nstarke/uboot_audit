@@ -88,6 +88,18 @@ ela_command_package_name() {
             esac
             ;;
         perl) echo perl ;;
+        libtool)
+            case "$ela_manager" in
+                apt|dnf|yum|zypper|pacman|apk) echo libtool ;;
+                *) return 1 ;;
+            esac
+            ;;
+        aclocal|automake)
+            case "$ela_manager" in
+                apt|dnf|yum|zypper|pacman|apk) echo automake ;;
+                *) return 1 ;;
+            esac
+            ;;
         autoconf) echo autoconf ;;
         python3|python)
             case "$ela_manager" in

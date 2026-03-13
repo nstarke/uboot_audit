@@ -401,6 +401,8 @@ require_command cc
 require_command ar
 require_command ranlib
 require_command perl
+require_command libtool
+require_command aclocal
 require_command autoconf
 require_command python3
 require_command bash
