@@ -28,6 +28,11 @@
 
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 #define AUTO_SCAN_MAX_STEP 0x10000ULL
+/* Maximum bytes to scan on a non-flash block device in auto-scan mode.
+ * Flash/MTD devices (with a real erase size) are scanned fully.
+ * Large rotating or NVMe disks discovered via /sys/class/block would
+ * otherwise require hundreds of GB of sequential reads, causing hangs. */
+#define AUTO_SCAN_MAX_BLOCK_DEVICE_BYTES (256ULL * 1024 * 1024)
 
 #if defined(__GNUC__) || defined(__clang__)
 #define MAYBE_UNUSED __attribute__((unused))
@@ -1313,6 +1318,15 @@ static int scan_dev(const char *dev, uint64_t step, uint64_t env_size, const cha
 	sysfs_erasesize = uboot_guess_erasesize_from_sysfs(dev);
 	erase_size = sysfs_erasesize ? sysfs_erasesize : step;
 	sector_count = erase_size ? ((env_size + erase_size - 1) / erase_size) : 0;
+
+	/* Flash/MTD devices have a real erase size; scan them fully.
+	 * Plain block devices (eMMC partitions, SD cards, SATA disks) discovered
+	 * via /sys/class/block have no erase size.  Scanning them end-to-end can
+	 * read hundreds of GB and cause the tool to appear hung.  Cap the search
+	 * window to the first AUTO_SCAN_MAX_BLOCK_DEVICE_BYTES bytes, which is
+	 * far beyond any realistic U-Boot environment placement. */
+	if (!sysfs_erasesize && (uint64_t)st.st_size > AUTO_SCAN_MAX_BLOCK_DEVICE_BYTES)
+		st.st_size = (off_t)AUTO_SCAN_MAX_BLOCK_DEVICE_BYTES;
 
 	buf = malloc((size_t)env_size);
 	if (!buf) {

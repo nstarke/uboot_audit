@@ -144,21 +144,45 @@ bool fw_audit_isa_supported_for_efi_bios(const char *isa)
 	       !strcmp(normalized, FW_AUDIT_ISA_AARCH64_LE);
 }
 
+static bool isa_is_arm32_family(const char *isa)
+{
+	if (!isa)
+		return false;
+
+	/* Match the canonical test ISA names used in the QEMU CI harness.
+	 * Native arm32 hardware reports different names (e.g. "armv7l") via
+	 * uname, so those paths keep their hardware-accelerated crypto caps. */
+	return !strcmp(isa, "arm32-le") ||
+	       !strcmp(isa, "arm32-be");
+}
+
 void fw_audit_force_conservative_powerpc_crypto_caps(void)
 {
 	const char *isa = fw_audit_detect_isa();
-	const char *ppccap;
+	const char *cap;
 
-	if (!isa_is_powerpc_family(isa))
-		return;
+	if (isa_is_powerpc_family(isa)) {
+		/*
+		 * For PowerPC troubleshooting builds, force OpenSSL onto its most
+		 * conservative generic code paths unless the user explicitly overrides the
+		 * capability mask. This helps isolate illegal-instruction faults caused by
+		 * runtime CPU feature detection or optimized PowerPC crypto dispatch.
+		 */
+		cap = getenv("OPENSSL_ppccap");
+		if (!cap || !*cap)
+			setenv("OPENSSL_ppccap", "0", 0);
+	}
 
-	/*
-	 * For PowerPC troubleshooting builds, force OpenSSL onto its most
-	 * conservative generic code paths unless the user explicitly overrides the
-	 * capability mask. This helps isolate illegal-instruction faults caused by
-	 * runtime CPU feature detection or optimized PowerPC crypto dispatch.
-	 */
-	ppccap = getenv("OPENSSL_ppccap");
-	if (!ppccap || !*ppccap)
-		setenv("OPENSSL_ppccap", "0", 0);
+	if (isa_is_arm32_family(isa)) {
+		/*
+		 * Under QEMU user-mode emulation for 32-bit ARM (both LE and BE),
+		 * OpenSSL probes for NEON and ARMv7 crypto extensions at runtime.
+		 * QEMU does not reliably emulate these probes and they can fault with
+		 * SIGSEGV.  Force OpenSSL onto its generic (non-accelerated) code
+		 * paths unless the caller has already set the cap mask explicitly.
+		 */
+		cap = getenv("OPENSSL_armcap");
+		if (!cap || !*cap)
+			setenv("OPENSSL_armcap", "0", 0);
+	}
 }

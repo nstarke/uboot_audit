@@ -290,6 +290,17 @@ int efi_dump_vars_main(int argc, char **argv)
 		}
 	}
 
+	{
+		const char *isa = fw_audit_detect_isa();
+
+		if (!fw_audit_isa_supported_for_efi_bios(isa)) {
+			fprintf(stderr,
+				"Unsupported ISA for efi group: %s (supported: x86, x86_64, aarch64-be, aarch64-le)\n",
+				isa ? isa : "unknown");
+			return 1;
+		}
+	}
+
 	if (efi_variables_supported() < 0) {
 		report_dump_error(output_uri, insecure, "EFI variables are not supported on this system\n");
 		ret = 1;

@@ -570,6 +570,26 @@ int orom_group_main(const char *fw_mode, int argc, char **argv)
 
 	ctx.output_uri = ctx.output_http ? ctx.output_http : ctx.output_https;
 
+	/* Validate pull's required output target before the ISA check so that
+	 * missing-argument errors correctly return rc=2 on all ISAs. */
+	if (!strcmp(action, "pull") &&
+	    (!ctx.output_tcp || !*ctx.output_tcp) &&
+	    (!ctx.output_uri || !*ctx.output_uri)) {
+		fprintf(stderr, "pull requires one of --output-tcp or --output-http\n");
+		return 2;
+	}
+
+	{
+		const char *isa = fw_audit_detect_isa();
+
+		if (!fw_audit_isa_supported_for_efi_bios(isa)) {
+			fprintf(stderr,
+				"Unsupported ISA for %s group: %s (supported: x86, x86_64, aarch64-be, aarch64-le)\n",
+				fw_mode, isa ? isa : "unknown");
+			return 1;
+		}
+	}
+
 	if (!strcmp(action, "pull"))
 		return orom_execute_pull(&ctx);
 
