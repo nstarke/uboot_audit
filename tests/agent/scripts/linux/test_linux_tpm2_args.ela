@@ -3,3 +3,15 @@ linux tpm2 --help
 ela linux tpm2 --help
 embedded_linux_audit linux tpm2 list-commands
 linux tpm2 getcap --help # inline comment should be ignored
+embedded_linux_audit --output-format txt linux tpm2 list-commands
+embedded_linux_audit --output-format csv linux tpm2 list-commands
+embedded_linux_audit --output-format json linux tpm2 list-commands
+embedded_linux_audit --quiet linux tpm2 list-commands
+linux tpm2 pcrread sha256:0
+linux tpm2 getrandom
+linux tpm2 nvreadpublic
+linux tpm2 readpublic
+linux tpm2 quote
+linux tpm2 pcrextend
+embedded_linux_audit --output-format json linux tpm2 pcrread sha256:0
+embedded_linux_audit --output-format csv linux tpm2 getrandom
