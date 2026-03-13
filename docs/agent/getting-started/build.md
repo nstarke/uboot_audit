@@ -21,50 +21,6 @@ git submodule update --init --recursive
 make
 ```
 
-Compatibility CPU tuning:
-
-```bash
-make COMPAT_CPU=<profile>
-```
-
-This adds conservative ISA-specific compiler flags intended to improve runtime
-compatibility on older systems that may otherwise fail with `Illegal Instruction`.
-The selected profile is applied to the main binary and propagated into the
-third-party dependency builds.
-
-Common profiles:
-
-- `x86`, `x86_64`
-- `arm32`, `arm32hf`, `armeb`, `armebhf`, `aarch64`, `aarch64_be`
-- `mips`, `mipshf`, `mipsel`, `mipselhf`, `mips64`, `mips64el`, `mips64n32`, `mips64eln32`
-- `powerpc`, `powerpchf`, `powerpc64`, `powerpc64le`
-- `riscv32`, `riscv64`, `s390x`, `sparc64`, `loongarch64`
-
-Examples:
-
-```bash
-# Older big-endian MIPS systems
-make clean && make static ELA_USE_READLINE=0 COMPAT_CPU=mips \
-  CMAKE_C_COMPILER=$(command -v zig) \
-  CMAKE_C_COMPILER_ARG1=cc \
-  CMAKE_C_COMPILER_TARGET=mips-linux-musleabi \
-  CC='zig cc -target mips-linux-musleabi'
-
-# Older big-endian 32-bit PowerPC systems
-make clean && make static ELA_USE_READLINE=0 COMPAT_CPU=powerpc \
-  CMAKE_C_COMPILER=$(command -v zig) \
-  CMAKE_C_COMPILER_ARG1=cc \
-  CMAKE_C_COMPILER_TARGET=powerpc-linux-musleabi \
-  CC='zig cc -target powerpc-linux-musleabi'
-```
-
-If you still see `Illegal Instruction`, try lowering optimization during
-troubleshooting as well:
-
-```bash
-make clean && make static ELA_USE_READLINE=0 COMPAT_CPU=mips CFLAGS='-O0 -Wall -Wextra'
-```
-
 Notes:
 
 - Project C sources and headers now live under `agent/`, grouped by command family:

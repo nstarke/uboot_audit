@@ -50,65 +50,6 @@ CMAKE_C_COMPILER := $(ZIG_BIN)
 endif
 endif
 
-COMPAT_CPU ?=
-COMPAT_CFLAGS :=
-
-ifeq ($(COMPAT_CPU),generic)
-COMPAT_CFLAGS +=
-else ifeq ($(COMPAT_CPU),x86)
-COMPAT_CFLAGS += -march=i686
-else ifeq ($(COMPAT_CPU),x86_64)
-COMPAT_CFLAGS += -mcpu=x86_64
-else ifeq ($(COMPAT_CPU),arm32)
-COMPAT_CFLAGS += -mcpu=arm10tdmi -marm
-else ifeq ($(COMPAT_CPU),arm32hf)
-COMPAT_CFLAGS += -march=armv6 -marm -mfloat-abi=hard
-else ifeq ($(COMPAT_CPU),armeb)
-COMPAT_CFLAGS += -mcpu=arm10tdmi -marm
-else ifeq ($(COMPAT_CPU),armebhf)
-COMPAT_CFLAGS += -march=armv6 -marm -mfloat-abi=hard
-else ifeq ($(COMPAT_CPU),aarch64)
-COMPAT_CFLAGS += -mcpu=baseline
-else ifeq ($(COMPAT_CPU),aarch64_be)
-COMPAT_CFLAGS += -mcpu=baseline
-else ifeq ($(COMPAT_CPU),mips)
-COMPAT_CFLAGS += -march=mips32 -msoft-float
-else ifeq ($(COMPAT_CPU),mipshf)
-COMPAT_CFLAGS += -march=mips32 -mhard-float
-else ifeq ($(COMPAT_CPU),mipsel)
-COMPAT_CFLAGS += -march=mips32 -msoft-float
-else ifeq ($(COMPAT_CPU),mipselhf)
-COMPAT_CFLAGS += -march=mips32 -mhard-float
-else ifeq ($(COMPAT_CPU),mips64)
-COMPAT_CFLAGS += -march=mips64r2 -mabi=64
-else ifeq ($(COMPAT_CPU),mips64el)
-COMPAT_CFLAGS += -march=mips64r2 -mabi=64
-else ifeq ($(COMPAT_CPU),mips64n32)
-COMPAT_CFLAGS += -march=mips64r2 -mabi=n32
-else ifeq ($(COMPAT_CPU),mips64eln32)
-COMPAT_CFLAGS += -march=mips64r2 -mabi=n32
-else ifeq ($(COMPAT_CPU),powerpc)
-COMPAT_CFLAGS += -mcpu=ppc -mno-altivec
-else ifeq ($(COMPAT_CPU),powerpchf)
-COMPAT_CFLAGS += -mcpu=ppc -mhard-float -mno-altivec
-else ifeq ($(COMPAT_CPU),powerpc64)
-COMPAT_CFLAGS += -mcpu=ppc64 -mno-altivec
-else ifeq ($(COMPAT_CPU),powerpc64le)
-COMPAT_CFLAGS += -mcpu=ppc64 -mno-altivec
-else ifeq ($(COMPAT_CPU),riscv32)
-COMPAT_CFLAGS += -mcpu=baseline_rv32
-else ifeq ($(COMPAT_CPU),riscv64)
-COMPAT_CFLAGS += -mcpu=baseline_rv64 -mabi=lp64d
-else ifeq ($(COMPAT_CPU),s390x)
-COMPAT_CFLAGS += -march=z10
-else ifeq ($(COMPAT_CPU),sparc64)
-COMPAT_CFLAGS += -mcpu=ultrasparc
-else ifeq ($(COMPAT_CPU),loongarch64)
-COMPAT_CFLAGS += -march=loongarch64
-else ifneq ($(strip $(COMPAT_CPU)),)
-$(error Unsupported COMPAT_CPU '$(COMPAT_CPU)')
-endif
-
 ELA_USE_READLINE ?= 1
 
 ifneq (,$(findstring zig cc,$(CC)))
@@ -121,9 +62,8 @@ endif
 
 empty :=
 space := $(empty) $(empty)
-compat_tag = $(if $(strip $(COMPAT_CPU)),$(COMPAT_CPU),default)
 sanitize_tag = $(subst :,_,$(subst /,_,$(subst $(space),_,$(1))))
-CC_TAG := $(call sanitize_tag,$(CC))-$(compat_tag)
+CC_TAG := $(call sanitize_tag,$(CC))
 
 CMAKE_C_COMPILER ?= $(CC)
 CMAKE_C_COMPILER_ARG1 ?=
@@ -163,10 +103,6 @@ ifneq ($(strip $(CMAKE_C_COMPILER_TARGET)),)
 CMAKE_CC_ARGS += -DCMAKE_C_COMPILER_TARGET=$(CMAKE_C_COMPILER_TARGET)
  CMAKE_CC_ARGS += -DCMAKE_TRY_COMPILE_TARGET_TYPE=$(CMAKE_TRY_COMPILE_TARGET_TYPE)
 endif
-ifneq ($(strip $(COMPAT_CFLAGS)),)
-CMAKE_CC_ARGS += -DCMAKE_C_FLAGS="$(COMPAT_CFLAGS)"
-endif
-
 WOLFSSL_CONFIGURE_HOST_ARG :=
 ifneq ($(strip $(CMAKE_C_COMPILER_TARGET)),)
 WOLFSSL_CONFIGURE_HOST_ARG := --host=$(CMAKE_C_COMPILER_TARGET)
@@ -174,9 +110,7 @@ endif
 
 ELA_ENABLE_WOLFSSL ?=
 ifeq ($(strip $(ELA_ENABLE_WOLFSSL)),)
-ifneq ($(filter $(COMPAT_CPU),powerpc powerpchf powerpc64 powerpc64le),)
-ELA_ENABLE_WOLFSSL := 1
-else ifneq ($(strip $(CMAKE_C_COMPILER_TARGET)),)
+ifneq ($(strip $(CMAKE_C_COMPILER_TARGET)),)
 ifneq (,$(or $(findstring powerpc,$(CMAKE_C_COMPILER_TARGET)),$(findstring ppc,$(CMAKE_C_COMPILER_TARGET))))
 ELA_ENABLE_WOLFSSL := 1
 else
@@ -206,9 +140,7 @@ WOLFSSL_LIBRARY_CONFIGURE_FLAGS :=
 
 CURL_CMAKE_ARGS := $(CMAKE_CC_ARGS)
 ifneq ($(strip $(CMAKE_C_COMPILER_TARGET)),)
-# curl's CMake feature probes are fragile for older cross targets under zig cc.
-# Prefill known Unix results so configure does not depend on executable try-compile
-# checks that fail for arm32 compatibility targets.
+# curl's CMake feature probes are fragile for cross targets under zig cc.
 CURL_CMAKE_ARGS += -D_CURL_PREFILL=ON
 ifneq (,$(findstring linux,$(CMAKE_C_COMPILER_TARGET)))
 # musl uses the POSIX strerror_r signature; curl's probe can become ambiguous
@@ -216,48 +148,10 @@ ifneq (,$(findstring linux,$(CMAKE_C_COMPILER_TARGET)))
 CURL_CMAKE_ARGS += -DHAVE_POSIX_STRERROR_R=1 -DHAVE_GLIBC_STRERROR_R=0
 endif
 endif
-ifneq ($(filter $(COMPAT_CPU),arm32 armeb),)
-# Older 32-bit ARM compatibility targets do not reliably report these sizes via
-# curl's CMake probes when cross-compiling with zig cc. Seed the known values.
-CURL_CMAKE_ARGS += -DSIZEOF_SIZE_T=4 -DSIZEOF_SSIZE_T=4 -DSIZEOF_LONG=4 -DSIZEOF_INT=4 -DSIZEOF_TIME_T=4 -DSIZEOF_SUSECONDS_T=4 -DSIZEOF_SA_FAMILY_T=2 -DSIZEOF_OFF_T=8 -DSIZEOF_CURL_OFF_T=8 -DSIZEOF_CURL_SOCKET_T=4
-endif
-
-ifneq ($(filter $(COMPAT_CPU),arm32 armeb powerpc powerpchf),)
-# Older 32-bit ARM and PowerPC compatibility targets built through zig cc can
-# mis-detect working atomics in curl/zlib during cross-compile feature probes.
-# That can produce binaries that only fault once libcurl first initializes on
-# the target. Force the non-atomic fallback paths for these compat builds.
-CURL_CMAKE_ARGS += -DHAVE_ATOMIC=0 -DHAVE_STDATOMIC_H=0
-ZLIB_EXTRA_CFLAGS += -D__STDC_NO_ATOMICS__=1
-endif
-
-ifneq ($(filter $(COMPAT_CPU),powerpc powerpchf),)
-# Make libcurl as small and conservative as possible for 32-bit PowerPC compat
-# builds. These targets have been hitting runtime illegal-instruction faults on
-# HTTP output paths, so disable optional subsystems and cache/IPC helpers that
-# are not required by this project's simple HTTP use case.
-CURL_CMAKE_ARGS += -DCURL_DISABLE_ALTSVC=ON -DCURL_DISABLE_COOKIES=ON -DCURL_DISABLE_DICT=ON -DCURL_DISABLE_FILE=ON -DCURL_DISABLE_FTP=ON -DCURL_DISABLE_GOPHER=ON -DCURL_DISABLE_HSTS=ON -DCURL_DISABLE_IMAP=ON -DCURL_DISABLE_IPFS=ON -DCURL_DISABLE_LDAP=ON -DCURL_DISABLE_LDAPS=ON -DCURL_DISABLE_MIME=ON -DCURL_DISABLE_MQTT=ON -DCURL_DISABLE_NETRC=ON -DCURL_DISABLE_NTLM=ON -DCURL_DISABLE_POP3=ON -DCURL_DISABLE_PROXY=ON -DCURL_DISABLE_RTSP=ON -DCURL_DISABLE_SMB=ON -DCURL_DISABLE_SMTP=ON -DCURL_DISABLE_SOCKETPAIR=ON -DCURL_DISABLE_SHUFFLE_DNS=ON -DCURL_DISABLE_TELNET=ON -DCURL_DISABLE_TFTP=ON -DCURL_DISABLE_WEBSOCKETS=ON -DPICKY_COMPILER=OFF -DENABLE_UNIX_SOCKETS=OFF
-
-# Also make libcrypto/libssl as conservative as possible. These flags keep the
-# build focused on the minimal static TLS functionality curl needs while
-# avoiding extra provider/config/error/DSO code paths that may still exercise
-# problematic CPU-detection or runtime-init behavior on older PowerPC systems.
-OPENSSL_EXTRA_CONFIGURE_FLAGS += no-autoerrinit no-autoload-config no-atexit no-cmp no-comp no-dgram no-dso no-engine no-legacy no-ocsp no-psk no-srp no-srtp no-ssl3 no-stdio no-tls1 no-tls1_1 no-ui-console no-weak-ssl-ciphers
-endif
 
 JSONC_CMAKE_ARGS := $(CMAKE_CC_ARGS)
-ifneq ($(strip $(COMPAT_CFLAGS)),)
-JSONC_CMAKE_ARGS += -DCMAKE_C_FLAGS="$(COMPAT_CFLAGS)"
-endif
-ifneq ($(filter $(COMPAT_CPU),arm32 armeb powerpc powerpchf),)
-# Be explicit that json-c should not enable its optional threaded refcount path
-# for older 32-bit ARM/PowerPC compatibility builds. Its feature probes can
-# otherwise conclude that __sync atomics are available even when the generated
-# instructions are not safe on the oldest CPUs we target.
-JSONC_CMAKE_ARGS += -DENABLE_THREADING=OFF
-endif
 
-LIBSSH_EXTRA_CFLAGS := $(COMPAT_CFLAGS)
+LIBSSH_EXTRA_CFLAGS :=
 LIBSSH_CMAKE_ARGS := $(CMAKE_CC_ARGS)
 LIBSSH_EXTRA_CFLAGS += -DOPENSSL_ENGINE_STUBS
 ifneq ($(strip $(LIBSSH_EXTRA_CFLAGS)),)
@@ -308,8 +202,8 @@ ZLIB_DIR      := third_party/zlib
 ZLIB_BUILD    := $(ZLIB_DIR)/build-$(CC_TAG)
 ZLIB_LIB      := $(ZLIB_BUILD)/libz.a
 ZLIB_CFLAGS   := -I$(ZLIB_DIR) -I$(ZLIB_BUILD)
-ZLIB_EXTRA_CFLAGS := $(COMPAT_CFLAGS)
-LIBUBOOTENV_EXTRA_CFLAGS := -I$(abspath compat) -I$(abspath $(ZLIB_DIR)) -I$(abspath $(ZLIB_BUILD)) -Wno-switch $(COMPAT_CFLAGS)
+ZLIB_EXTRA_CFLAGS :=
+LIBUBOOTENV_EXTRA_CFLAGS := -I$(abspath compat) -I$(abspath $(ZLIB_DIR)) -I$(abspath $(ZLIB_BUILD)) -Wno-switch
 JSONC_DIR     := third_party/json-c
 JSONC_BUILD   := $(JSONC_DIR)/build-$(CC_TAG)
 JSONC_LIB     := $(JSONC_BUILD)/libjson-c.a
@@ -373,7 +267,6 @@ CFLAGS += $(WOLFSSL_CFLAGS)
 CFLAGS += -DELA_HAS_WOLFSSL=1
 endif
 CFLAGS += $(OPENSSL_CFLAGS)
-CFLAGS += $(COMPAT_CFLAGS)
 CFLAGS += -I.
 CFLAGS += -Iagent
 
@@ -393,10 +286,6 @@ SRC    := agent/embedded_linux_audit.c agent/uboot/env/uboot_env_cmd.c agent/ubo
 	  agent/uboot/audit-rules/uboot_validate_env_writeability_rule.c \
 	  agent/uboot/audit-rules/uboot_validate_secureboot_rule.c \
 	  $(LIBCSV_SRC) $(GENERATED_CA_SRC)
-
-ifneq ($(filter $(COMPAT_CPU),arm32 armeb powerpc powerpchf),)
-SRC += compat/legacy_sync_builtins.c
-endif
 
 .PHONY: all env image static test clean check-autoconf check-autoreconf check-zig check-llvm-objcopy
 
@@ -532,7 +421,7 @@ $(LIBUBOOTENV_LIB): $(ZLIB_LIB)
 
 $(LIBEFIVAR_BUILD_STAMP):
 	-$(MAKE) -C $(LIBEFIVAR_DIR)/src TOPDIR='$(abspath $(LIBEFIVAR_DIR))' clean >/dev/null 2>&1 || true
-	$(MAKE) -C $(LIBEFIVAR_DIR)/src TOPDIR='$(abspath $(LIBEFIVAR_DIR))' libefivar.a CC='$(CC)' HOSTCC='cc' HOSTCCLD='cc' AR='ar' RANLIB='ranlib' CFLAGS='$(COMPAT_CFLAGS)' CPPFLAGS='-I$(abspath $(LIBEFIVAR_DIR))/src/include' HOST_CFLAGS='$(LIBEFIVAR_HOST_CFLAGS)' HOST_CPPFLAGS='$(LIBEFIVAR_HOST_CPPFLAGS)' HOST_LDFLAGS='$(LIBEFIVAR_HOST_LDFLAGS)' HOST_CCLDFLAGS='$(LIBEFIVAR_HOST_LDFLAGS)'
+	$(MAKE) -C $(LIBEFIVAR_DIR)/src TOPDIR='$(abspath $(LIBEFIVAR_DIR))' libefivar.a CC='$(CC)' HOSTCC='cc' HOSTCCLD='cc' AR='ar' RANLIB='ranlib' CPPFLAGS='-I$(abspath $(LIBEFIVAR_DIR))/src/include' HOST_CFLAGS='$(LIBEFIVAR_HOST_CFLAGS)' HOST_CPPFLAGS='$(LIBEFIVAR_HOST_CPPFLAGS)' HOST_LDFLAGS='$(LIBEFIVAR_HOST_LDFLAGS)' HOST_CCLDFLAGS='$(LIBEFIVAR_HOST_LDFLAGS)'
 	test -f $(LIBEFIVAR_LIB)
 	touch $@
 
@@ -564,7 +453,7 @@ $(WOLFSSL_LIB): check-autoconf
 			sh ./autogen.sh; \
 	fi
 	cd $(WOLFSSL_BUILD) && $(abspath $(WOLFSSL_DIR))/configure \
-		CC="$(CC)" CFLAGS="$(COMPAT_CFLAGS)" \
+		CC="$(CC)" \
 		$(WOLFSSL_CONFIGURE_HOST_ARG) \
 		$(WOLFSSL_EXTRA_CONFIGURE_FLAGS) \
 		$(WOLFSSL_LIBRARY_CONFIGURE_FLAGS) \
@@ -577,7 +466,7 @@ $(OPENSSL_SSL_LIB):
 	mkdir -p $(OPENSSL_BUILD)
 	cd $(OPENSSL_DIR) && $(MAKE) distclean >/dev/null 2>&1 || true
 	# Use no-asm so cross builds (e.g. zig cc -target arm-*) don't pick host x86 asm paths.
-	cd $(OPENSSL_DIR) && CC="$(CC)" CFLAGS="$(COMPAT_CFLAGS)" ./Configure $(OPENSSL_CONFIGURE_TARGET) no-asm no-shared no-module no-threads no-tests no-docs $(OPENSSL_EXTRA_CONFIGURE_FLAGS) --prefix="$(abspath $(OPENSSL_INSTALL))" --openssldir="$(abspath $(OPENSSL_INSTALL))/ssl" --libdir=lib
+	cd $(OPENSSL_DIR) && CC="$(CC)" ./Configure $(OPENSSL_CONFIGURE_TARGET) no-asm no-shared no-module no-threads no-tests no-docs $(OPENSSL_EXTRA_CONFIGURE_FLAGS) --prefix="$(abspath $(OPENSSL_INSTALL))" --openssldir="$(abspath $(OPENSSL_INSTALL))/ssl" --libdir=lib
 	$(MAKE) -C $(OPENSSL_DIR) -j$(JOBS) build_generated
 	$(MAKE) -C $(OPENSSL_DIR) -j$(JOBS) build_libs
 	mkdir -p "$(OPENSSL_INSTALL)/include" "$(OPENSSL_INSTALL)/lib" "$(OPENSSL_CMAKE_DIR)"

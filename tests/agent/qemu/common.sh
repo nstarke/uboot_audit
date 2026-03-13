@@ -78,17 +78,6 @@ detect_qemu_runtime_failure() {
     return 1
 }
 
-isa_has_compat_binary() {
-    case "$1" in
-        aarch64-le|aarch64-be|mips-le|mips-be|mips64-le|mips64-be|powerpc-le|powerpc-be|x86|x86_64|riscv32|riscv64)
-            return 0
-            ;;
-        *)
-            return 1
-            ;;
-    esac
-}
-
 command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
@@ -160,10 +149,6 @@ ensure_release_binaries() {
             break
         fi
 
-        if isa_has_compat_binary "$isa_name" && [ ! -x "$RELEASE_BINARIES_DIR/$isa_name/ela-$isa_name-compat" ]; then
-            missing=1
-            break
-        fi
     done
 
     if [ "$missing" -eq 1 ]; then
@@ -479,7 +464,6 @@ run_qemu_isa_tests() {
     shift 3
 
     binary_path="${BIN:-$RELEASE_BINARIES_DIR/$isa/ela-$isa}"
-    compat_binary_path="$RELEASE_BINARIES_DIR/$isa/ela-$isa-compat"
     rc=0
     use_bwrap=0
 
@@ -503,12 +487,6 @@ run_qemu_isa_tests() {
 
     if ! run_qemu_binary_tests "$isa" "$binary_path" "default" "$qemu_mode" "$qemu_runner" "$use_bwrap"; then
         rc=1
-    fi
-
-    if [ -z "${BIN:-}" ] && [ -x "$compat_binary_path" ]; then
-        if ! run_qemu_binary_tests "$isa" "$compat_binary_path" "compat" "$qemu_mode" "$qemu_runner" "$use_bwrap"; then
-            rc=1
-        fi
     fi
 
     echo

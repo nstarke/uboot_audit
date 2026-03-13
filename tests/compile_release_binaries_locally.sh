@@ -168,10 +168,6 @@ ensure_zig() {
 set_isa_config() {
     isa="$1"
 
-    compat_name=""
-    compat_targets=""
-    cpu_compat=""
-
     case "$isa" in
         arm32-le)
             zig_targets="arm-linux-musleabi"
@@ -181,75 +177,39 @@ set_isa_config() {
             ;;
         aarch64-le)
             zig_targets="aarch64-linux-musl"
-            cpu_compat="aarch64"
-            compat_targets="aarch64-linux-musl"
-            compat_name="ela-$isa-compat"
             ;;
         aarch64-be)
             zig_targets="aarch64_be-linux-musl"
-            cpu_compat="aarch64_be"
-            compat_targets="aarch64_be-linux-musl"
-            compat_name="ela-$isa-compat"
             ;;
         mips-le)
             zig_targets="mipsel-linux-musleabi,mipsel-linux-musleabihf"
-            cpu_compat="mipsel"
-            compat_targets="mipsel-linux-musleabi"
-            compat_name="ela-$isa-compat"
             ;;
         mips-be)
             zig_targets="mips-linux-musleabi,mips-linux-musleabihf"
-            cpu_compat="mips"
-            compat_targets="mips-linux-musleabi"
-            compat_name="ela-$isa-compat"
             ;;
         mips64-le)
-            zig_targets="mips64el-linux-muslabi64,mips64el-linux-muslabin32,mips64el-linux-gnuabi64,mips64el-linux-gnuabin32"
-            cpu_compat="mips64el"
-            compat_targets="mips64el-linux-muslabi64,mips64el-linux-gnuabi64"
-            compat_name="ela-$isa-compat"
+            zig_targets="mips64el-linux-muslabi64,mips64el-linux-gnuabi64"
             ;;
         mips64-be)
-            zig_targets="mips64-linux-muslabi64,mips64-linux-muslabin32,mips64-linux-gnuabi64,mips64-linux-gnuabin32"
-            cpu_compat="mips64"
-            compat_targets="mips64-linux-muslabi64,mips64-linux-gnuabi64"
-            compat_name="ela-$isa-compat"
+            zig_targets="mips64-linux-muslabi64,mips64-linux-gnuabi64"
             ;;
         powerpc-le)
             zig_targets="powerpc64le-linux-musl,powerpc64le-linux-gnu"
-            cpu_compat="powerpc64le"
-            compat_targets="powerpc64le-linux-musl,powerpc64le-linux-gnu"
-            compat_name="ela-$isa-compat"
             ;;
         powerpc-be)
             zig_targets="powerpc-linux-musleabi,powerpc-linux-musleabihf,powerpc-linux-gnueabi,powerpc-linux-gnueabihf"
-            cpu_compat="powerpc"
-            compat_targets="powerpc-linux-musleabi,powerpc-linux-gnueabi"
-            compat_name="ela-$isa-compat"
             ;;
         x86)
             zig_targets="x86-linux-musl"
-            cpu_compat="x86"
-            compat_targets="x86-linux-musl"
-            compat_name="ela-$isa-compat"
             ;;
         x86_64)
             zig_targets="x86_64-linux-musl"
-            cpu_compat="x86_64"
-            compat_targets="x86_64-linux-musl"
-            compat_name="ela-$isa-compat"
             ;;
         riscv32)
             zig_targets="riscv32-linux-musl,riscv32-linux-gnu"
-            cpu_compat="riscv32"
-            compat_targets="riscv32-linux-musl,riscv32-linux-gnu"
-            compat_name="ela-$isa-compat"
             ;;
         riscv64)
             zig_targets="riscv64-linux-musl,riscv64-linux-gnu"
-            cpu_compat="riscv64"
-            compat_targets="riscv64-linux-musl,riscv64-linux-gnu"
-            compat_name="ela-$isa-compat"
             ;;
         *)
             echo "error: unsupported isa: $isa" >&2
@@ -262,7 +222,6 @@ set_isa_config() {
 build_with_targets() {
     output_path="$1"
     target_list="$2"
-    compat_cpu="${3:-}"
 
     old_ifs="$IFS"
     IFS=,
@@ -270,42 +229,30 @@ build_with_targets() {
     IFS="$old_ifs"
 
     for target in "$@"; do
-        echo "Trying target: $target${compat_cpu:+ (COMPAT_CPU=$compat_cpu)}"
+        echo "Trying target: $target"
         if [ "$clean_before_build" -eq 1 ]; then
             if ! make clean; then
                 build_ok=0
-                echo "Clean failed before target: $target${compat_cpu:+ (COMPAT_CPU=$compat_cpu)}"
+                echo "Clean failed before target: $target"
                 continue
             fi
         fi
 
-        if [ -n "$compat_cpu" ]; then
-            build_ok=1
-            make static \
-                JOBS="$jobs_arg" \
-                ELA_USE_READLINE=0 \
-                COMPAT_CPU="$compat_cpu" \
-                CMAKE_C_COMPILER="$(command -v zig)" \
-                CMAKE_C_COMPILER_ARG1=cc \
-                CMAKE_C_COMPILER_TARGET="$target" \
-                CC="zig cc -target $target" || build_ok=0
-        else
-            build_ok=1
-            make static \
-                JOBS="$jobs_arg" \
-                ELA_USE_READLINE=0 \
-                CMAKE_C_COMPILER="$(command -v zig)" \
-                CMAKE_C_COMPILER_ARG1=cc \
-                CMAKE_C_COMPILER_TARGET="$target" \
-                CC="zig cc -target $target" || build_ok=0
-        fi
+        build_ok=1
+        make static \
+            JOBS="$jobs_arg" \
+            ELA_USE_READLINE=0 \
+            CMAKE_C_COMPILER="$(command -v zig)" \
+            CMAKE_C_COMPILER_ARG1=cc \
+            CMAKE_C_COMPILER_TARGET="$target" \
+            CC="zig cc -target $target" || build_ok=0
 
         if [ "$build_ok" -eq 1 ]; then
             cp "$REPO_ROOT/embedded_linux_audit" "$output_path"
             chmod 755 "$output_path"
             return 0
         fi
-        echo "Target failed: $target${compat_cpu:+ (COMPAT_CPU=$compat_cpu)}"
+        echo "Target failed: $target"
     done
 
     return 1
@@ -337,14 +284,6 @@ build_release_binary() {
         exit 1
     fi
 
-    if [ -n "$compat_name" ]; then
-        compat_dest="$dest_dir/$compat_name"
-        echo "Building compatibility release binary for $isa"
-        if ! build_with_targets "$compat_dest" "$compat_targets" "$cpu_compat"; then
-            echo "error: failed to build compatibility static binary for $isa" >&2
-            exit 1
-        fi
-    fi
 }
 
 clean_before_build=0

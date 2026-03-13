@@ -28,29 +28,7 @@ Why this matters:
 - Better portability across minimal/older Linux environments.
 - Easier drop-in usage for triage and recovery workflows.
 
-For older targets that are sensitive to CPU baseline differences, the build also
-supports `COMPAT_CPU=<profile>` to add conservative ISA-specific compiler flags
-for the selected architecture family. This is especially useful when testing on
-older MIPS and PowerPC systems that may otherwise fail with `Illegal Instruction`.
-
-Examples:
-
-```bash
-make clean && make static ELA_USE_READLINE=0 COMPAT_CPU=mips \
-  CMAKE_C_COMPILER=$(command -v zig) \
-  CMAKE_C_COMPILER_ARG1=cc \
-  CMAKE_C_COMPILER_TARGET=mips-linux-musleabi \
-  CC='zig cc -target mips-linux-musleabi'
-
-make clean && make static ELA_USE_READLINE=0 COMPAT_CPU=powerpc \
-  CMAKE_C_COMPILER=$(command -v zig) \
-  CMAKE_C_COMPILER_ARG1=cc \
-  CMAKE_C_COMPILER_TARGET=powerpc-linux-musleabi \
-  CC='zig cc -target powerpc-linux-musleabi'
-```
-
-See [docs/agent/getting-started/build.md](docs/agent/getting-started/build.md) for the full build matrix and supported
-compatibility profiles.
+See [docs/agent/getting-started/build.md](docs/agent/getting-started/build.md) for the full build matrix.
 
 ## Documentation
 
