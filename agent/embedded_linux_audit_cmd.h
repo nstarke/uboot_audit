@@ -16,10 +16,10 @@
 #define FW_SCAN_GLOB_MMCBLK    (1U << 4)
 #define FW_SCAN_GLOB_SDBLK     (1U << 5)
 
-#define FW_AUDIT_ISA_X86          "x86"
-#define FW_AUDIT_ISA_X86_64       "x86_64"
-#define FW_AUDIT_ISA_AARCH64_BE   "aarch64-be"
-#define FW_AUDIT_ISA_AARCH64_LE   "aarch64-le"
+#define ELA_ISA_X86          "x86"
+#define ELA_ISA_X86_64       "x86_64"
+#define ELA_ISA_AARCH64_BE   "aarch64-be"
+#define ELA_ISA_AARCH64_LE   "aarch64-le"
 
 int uboot_get_mtd_index(const char *dev, char *idx, size_t idx_sz);
 
@@ -44,25 +44,25 @@ int uboot_ensure_block_nodes_collect(bool verbose, bool include_sd, bool include
 				  char ***created_nodes, size_t *created_count);
 void uboot_ensure_block_nodes(bool verbose, bool include_sd, bool include_emmc);
 
-int uboot_parse_u64(const char *s, uint64_t *out);
-uint32_t uboot_read_be32(const uint8_t *p);
-const char *fw_audit_detect_isa(void);
-bool fw_audit_isa_supported_for_efi_bios(const char *isa);
-bool fw_audit_is_valid_tcp_output_target(const char *spec);
-int uboot_connect_tcp_ipv4(const char *spec);
-int uboot_send_all(int sock, const uint8_t *buf, size_t len);
-char *uboot_http_uri_normalize_default_port(const char *uri, uint16_t default_port);
-int fw_audit_parse_http_output_uri(const char *uri,
+int ela_parse_u64(const char *s, uint64_t *out);
+uint32_t ela_read_be32(const uint8_t *p);
+const char *ela_detect_isa(void);
+bool ela_isa_supported_for_efi_bios(const char *isa);
+bool ela_is_valid_tcp_output_target(const char *spec);
+int ela_connect_tcp_ipv4(const char *spec);
+int ela_send_all(int sock, const uint8_t *buf, size_t len);
+char *ela_http_uri_normalize_default_port(const char *uri, uint16_t default_port);
+int ela_parse_http_output_uri(const char *uri,
 				  const char **output_http,
 				  const char **output_https,
 				  char *errbuf,
 				  size_t errbuf_len);
-int uboot_http_get_upload_mac(const char *base_uri, char *mac_buf, size_t mac_buf_len);
-char *uboot_http_build_upload_uri(const char *base_uri, const char *upload_type, const char *file_path);
-int uboot_http_post_log_message(const char *base_uri, const char *message,
+int ela_http_get_upload_mac(const char *base_uri, char *mac_buf, size_t mac_buf_len);
+char *ela_http_build_upload_uri(const char *base_uri, const char *upload_type, const char *file_path);
+int ela_http_post_log_message(const char *base_uri, const char *message,
 				bool insecure, bool verbose,
 				char *errbuf, size_t errbuf_len);
-int fw_audit_emit_lifecycle_event(const char *output_format,
+int ela_emit_lifecycle_event(const char *output_format,
 				  const char *output_tcp,
 				  const char *output_http,
 				  const char *output_https,
@@ -70,16 +70,16 @@ int fw_audit_emit_lifecycle_event(const char *output_format,
 				  const char *command,
 				  const char *phase,
 				  int rc);
-int uboot_http_get_to_file(const char *uri, const char *output_path,
+int ela_http_get_to_file(const char *uri, const char *output_path,
 			   bool insecure, bool verbose,
 			   char *errbuf, size_t errbuf_len);
-int uboot_http_post(const char *uri, const uint8_t *data, size_t len,
+int ela_http_post(const char *uri, const uint8_t *data, size_t len,
 		 const char *content_type, bool insecure, bool verbose,
 		 char *errbuf, size_t errbuf_len);
-extern const unsigned char uboot_default_ca_bundle_pem[];
-extern const size_t uboot_default_ca_bundle_pem_len;
-void uboot_crc32_init(uint32_t table[256]);
-uint32_t uboot_crc32_calc(const uint32_t table[256], const uint8_t *buf, size_t len);
+extern const unsigned char ela_default_ca_bundle_pem[];
+extern const size_t ela_default_ca_bundle_pem_len;
+void ela_crc32_init(uint32_t table[256]);
+uint32_t ela_crc32_calc(const uint32_t table[256], const uint8_t *buf, size_t len);
 
 int uboot_env_scan_main(int argc, char **argv);
 int uboot_env_scan_core_main(int argc, char **argv);
@@ -118,7 +118,7 @@ struct embedded_linux_audit_rule {
 	int (*run)(const struct embedded_linux_audit_input *input, char *message, size_t message_len);
 };
 
-#define FW_AUDIT_RULE_SECTION "embedded_linux_audit_rules"
+#define ELA_RULE_SECTION "embedded_linux_audit_rules"
 
 #if defined(__has_attribute)
 #  if __has_attribute(retain)
@@ -132,9 +132,9 @@ struct embedded_linux_audit_rule {
 #  define UBOOT_SECTION_RETAIN
 #endif
 
-#define FW_REGISTER_AUDIT_RULE(symbol) \
+#define ELA_REGISTER_RULE(symbol) \
 	static const struct embedded_linux_audit_rule * const __embedded_linux_audit_rule_ptr_##symbol \
-	__attribute__((used, section(FW_AUDIT_RULE_SECTION))) UBOOT_SECTION_RETAIN = &(symbol)
+	__attribute__((used, section(ELA_RULE_SECTION))) UBOOT_SECTION_RETAIN = &(symbol)
 
 extern const struct embedded_linux_audit_rule * const __start_embedded_linux_audit_rules[];
 extern const struct embedded_linux_audit_rule * const __stop_embedded_linux_audit_rules[];

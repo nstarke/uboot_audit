@@ -223,7 +223,7 @@ EOF_GROUP
 EOF_HOSTS
 
     cat >"$rootfs_dir/isa.env" <<EOF_ISA
-FW_AUDIT_TEST_ISA=$isa
+ELA_TEST_ISA=$isa
 EOF_ISA
 
     cat >"$rootfs_dir/fw_env.config" <<EOF_FW_ENV
@@ -262,7 +262,7 @@ run_qemu_script_in_chroot() {
             --tmpfs /run \
             --setenv HOME /root \
             --setenv TMPDIR /tmp \
-            --setenv FW_AUDIT_TEST_ISA "$(sed -n 's/^FW_AUDIT_TEST_ISA=//p' "$rootfs_dir/isa.env")" \
+            --setenv ELA_TEST_ISA "$(sed -n 's/^ELA_TEST_ISA=//p' "$rootfs_dir/isa.env")" \
             --chdir / \
             "/usr/bin/$qemu_runner" /bin/embedded_linux_audit --script "$script_path"
     else
@@ -274,7 +274,7 @@ run_qemu_script_in_chroot() {
             --tmpfs /run \
             --setenv HOME /root \
             --setenv TMPDIR /tmp \
-            --setenv FW_AUDIT_TEST_ISA "$(sed -n 's/^FW_AUDIT_TEST_ISA=//p' "$rootfs_dir/isa.env")" \
+            --setenv ELA_TEST_ISA "$(sed -n 's/^ELA_TEST_ISA=//p' "$rootfs_dir/isa.env")" \
             --chdir / \
             /bin/embedded_linux_audit --script "$script_path"
     fi
@@ -310,21 +310,21 @@ run_qemu_script_direct() {
 
     if [ "$qemu_mode" = "static" ]; then
         if should_run_qemu_as_root; then
-            sudo -n env HOME=/tmp TMPDIR=/tmp FW_AUDIT_TEST_ISA="${FW_AUDIT_TEST_ISA:-}" \
+            sudo -n env HOME=/tmp TMPDIR=/tmp ELA_TEST_ISA="${ELA_TEST_ISA:-}" \
                 /bin/sh -c 'cd "$1" && exec "$2" "$3" --script "$4"' \
                 /bin/sh "$runtime_dir" "$qemu_runner" "$binary_path" "$script_path"
         else
-            HOME=/tmp TMPDIR=/tmp FW_AUDIT_TEST_ISA="${FW_AUDIT_TEST_ISA:-}" \
+            HOME=/tmp TMPDIR=/tmp ELA_TEST_ISA="${ELA_TEST_ISA:-}" \
                 /bin/sh -c 'cd "$1" && exec "$2" "$3" --script "$4"' \
                 /bin/sh "$runtime_dir" "$qemu_runner" "$binary_path" "$script_path"
         fi
     else
         if should_run_qemu_as_root; then
-            sudo -n env HOME=/tmp TMPDIR=/tmp FW_AUDIT_TEST_ISA="${FW_AUDIT_TEST_ISA:-}" \
+            sudo -n env HOME=/tmp TMPDIR=/tmp ELA_TEST_ISA="${ELA_TEST_ISA:-}" \
                 /bin/sh -c 'cd "$1" && exec "$2" --script "$3"' \
                 /bin/sh "$runtime_dir" "$binary_path" "$script_path"
         else
-            HOME=/tmp TMPDIR=/tmp FW_AUDIT_TEST_ISA="${FW_AUDIT_TEST_ISA:-}" \
+            HOME=/tmp TMPDIR=/tmp ELA_TEST_ISA="${ELA_TEST_ISA:-}" \
                 /bin/sh -c 'cd "$1" && exec "$2" --script "$3"' \
                 /bin/sh "$runtime_dir" "$binary_path" "$script_path"
         fi
@@ -578,8 +578,8 @@ run_qemu_isa_tests() {
     qemu_mode="${qemu_resolution%%:*}"
     qemu_runner="${qemu_resolution#*:}"
 
-    FW_AUDIT_TEST_ISA="$isa"
-    export FW_AUDIT_TEST_ISA
+    ELA_TEST_ISA="$isa"
+    export ELA_TEST_ISA
 
     if command_exists bwrap && bwrap_supports_qemu_chroot; then
         use_bwrap=1

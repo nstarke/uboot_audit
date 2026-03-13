@@ -181,16 +181,16 @@ static int format_command_output(const char *command,
 
 int linux_execute_command_scan_main(int argc, char **argv)
 {
-	const char *output_format = getenv("FW_AUDIT_OUTPUT_FORMAT");
-	const char *output_tcp = getenv("FW_AUDIT_OUTPUT_TCP");
-	const char *output_http = getenv("FW_AUDIT_OUTPUT_HTTP");
-	const char *output_https = getenv("FW_AUDIT_OUTPUT_HTTPS");
+	const char *output_format = getenv("ELA_OUTPUT_FORMAT");
+	const char *output_tcp = getenv("ELA_OUTPUT_TCP");
+	const char *output_http = getenv("ELA_OUTPUT_HTTP");
+	const char *output_https = getenv("ELA_OUTPUT_HTTPS");
 	const char *parsed_output_http = NULL;
 	const char *parsed_output_https = NULL;
 	const char *output_uri = NULL;
 	const char *command = NULL;
 	const char *content_type;
-	bool insecure = getenv("FW_AUDIT_OUTPUT_INSECURE") && !strcmp(getenv("FW_AUDIT_OUTPUT_INSECURE"), "1");
+	bool insecure = getenv("ELA_OUTPUT_INSECURE") && !strcmp(getenv("ELA_OUTPUT_INSECURE"), "1");
 	int output_sock = -1;
 	struct output_buffer raw = {0};
 	struct output_buffer formatted = {0};
@@ -239,7 +239,7 @@ int linux_execute_command_scan_main(int argc, char **argv)
 	}
 
 	if (output_http && *output_http &&
-	    fw_audit_parse_http_output_uri(output_http,
+	    ela_parse_http_output_uri(output_http,
 					    &parsed_output_http,
 					    &parsed_output_https,
 					    errbuf,
@@ -261,7 +261,7 @@ int linux_execute_command_scan_main(int argc, char **argv)
 		output_uri = output_https;
 
 	if (output_tcp && *output_tcp) {
-		output_sock = uboot_connect_tcp_ipv4(output_tcp);
+		output_sock = ela_connect_tcp_ipv4(output_tcp);
 		if (output_sock < 0) {
 			fprintf(stderr, "Invalid/failed output target (expected IPv4:port): %s\n", output_tcp);
 			return 2;
@@ -308,14 +308,14 @@ int linux_execute_command_scan_main(int argc, char **argv)
 		goto out;
 	}
 
-	if (output_sock >= 0 && formatted.len && uboot_send_all(output_sock, (const uint8_t *)formatted.data, formatted.len) < 0) {
+	if (output_sock >= 0 && formatted.len && ela_send_all(output_sock, (const uint8_t *)formatted.data, formatted.len) < 0) {
 		fprintf(stderr, "Failed sending bytes to %s\n", output_tcp);
 		ret = 1;
 		goto out;
 	}
 
 	if (output_uri) {
-		upload_uri = uboot_http_build_upload_uri(output_uri, "cmd", NULL);
+		upload_uri = ela_http_build_upload_uri(output_uri, "cmd", NULL);
 		if (!upload_uri) {
 			fprintf(stderr, "Unable to build upload URI for command output\n");
 			ret = 1;
@@ -325,7 +325,7 @@ int linux_execute_command_scan_main(int argc, char **argv)
 		content_type = !strcmp(output_format, "csv") ? "text/csv; charset=utf-8" :
 			(!strcmp(output_format, "json") ? "application/json; charset=utf-8" : "text/plain; charset=utf-8");
 
-		if (uboot_http_post(upload_uri,
+		if (ela_http_post(upload_uri,
 				   (const uint8_t *)(formatted.data ? formatted.data : ""),
 				   formatted.len,
 				   content_type,

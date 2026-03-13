@@ -16,10 +16,10 @@
 
 static int ensure_fw_env_config_exists(void)
 {
-	const char *output_tcp = getenv("FW_AUDIT_OUTPUT_TCP");
-	const char *output_http = getenv("FW_AUDIT_OUTPUT_HTTP");
-	const char *output_https = getenv("FW_AUDIT_OUTPUT_HTTPS");
-	const char *output_insecure = getenv("FW_AUDIT_OUTPUT_INSECURE");
+	const char *output_tcp = getenv("ELA_OUTPUT_TCP");
+	const char *output_http = getenv("ELA_OUTPUT_HTTP");
+	const char *output_https = getenv("ELA_OUTPUT_HTTPS");
+	const char *output_insecure = getenv("ELA_OUTPUT_INSECURE");
 	char *argv[8];
 	int argc = 0;
 
@@ -114,4 +114,4 @@ static const struct embedded_linux_audit_rule uboot_validate_env_writeability_ru
 	.run = run_validate_env_writeability,
 };
 
-FW_REGISTER_AUDIT_RULE(uboot_validate_env_writeability_rule);
+ELA_REGISTER_RULE(uboot_validate_env_writeability_rule);

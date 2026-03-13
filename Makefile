@@ -267,7 +267,7 @@ LIBEFIVAR_REPACK_DIR := $(GENERATED_DIR)/libefivar-repack-$(CC_TAG)
 DEFAULT_CA_BUNDLE_PEM := $(GENERATED_DIR)/cacert.pem
 CA_BUNDLE_URL ?= https://curl.se/ca/cacert.pem
 CA_BUNDLE_PEM ?= $(DEFAULT_CA_BUNDLE_PEM)
-GENERATED_CA_SRC := $(GENERATED_DIR)/fw_default_ca_bundle.c
+GENERATED_CA_SRC := $(GENERATED_DIR)/ela_default_ca_bundle.c
 
 ZLIB_CMAKE_ARGS := $(CMAKE_CC_ARGS)
 ifneq ($(strip $(ZLIB_EXTRA_CFLAGS)),)

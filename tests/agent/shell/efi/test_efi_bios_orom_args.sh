@@ -84,7 +84,7 @@ run_accept_case "efi orom list with --output-format csv" "$BIN" --output-format 
 run_accept_case "bios orom list with --output-format json" "$BIN" --output-format json bios orom list --output-http http://127.0.0.1:1/orom
 
 isa_gate_log="$(mktemp /tmp/test_efi_bios_isa_gate.XXXXXX)"
-FW_AUDIT_TEST_ISA=riscv64 TEST_DISABLE_OUTPUT_OVERRIDE=1 run_with_output_override "$BIN" efi orom list >"$isa_gate_log" 2>&1
+ELA_TEST_ISA=riscv64 TEST_DISABLE_OUTPUT_OVERRIDE=1 run_with_output_override "$BIN" efi orom list >"$isa_gate_log" 2>&1
 rc=$?
 if [ "$rc" -eq 1 ] && grep -F "Unsupported ISA for efi group: riscv64" "$isa_gate_log" >/dev/null 2>&1; then
     echo "[PASS] efi group rejects unsupported ISA with error log"
@@ -95,7 +95,7 @@ else
     FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
 fi
 
-FW_AUDIT_TEST_ISA=riscv64 TEST_DISABLE_OUTPUT_OVERRIDE=1 run_with_output_override "$BIN" bios orom list >"$isa_gate_log" 2>&1
+ELA_TEST_ISA=riscv64 TEST_DISABLE_OUTPUT_OVERRIDE=1 run_with_output_override "$BIN" bios orom list >"$isa_gate_log" 2>&1
 rc=$?
 if [ "$rc" -eq 1 ] && grep -F "Unsupported ISA for bios group: riscv64" "$isa_gate_log" >/dev/null 2>&1; then
     echo "[PASS] bios group rejects unsupported ISA with error log"
@@ -111,10 +111,10 @@ python_bin="$(find_python_bin || true)"
 
 if [ -n "$python_bin" ]; then
     run_efi_vars_http=1
-    case "${FW_AUDIT_TEST_ISA:-}" in
+    case "${ELA_TEST_ISA:-}" in
         ""|x86|x86_64|aarch64-le|aarch64-be) : ;;
         *)
-            echo "[PASS] efi dump-vars HTTP POST upload skipped (FW_AUDIT_TEST_ISA=${FW_AUDIT_TEST_ISA:-} does not support EFI)"
+            echo "[PASS] efi dump-vars HTTP POST upload skipped (ELA_TEST_ISA=${ELA_TEST_ISA:-} does not support EFI)"
             PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
             run_efi_vars_http=0
             ;;

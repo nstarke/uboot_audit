@@ -203,11 +203,11 @@ int execute_script_commands(const char *prog, const char *script_source)
 		return 2;
 	script_dir[0] = '\0';
 
-	insecure = getenv("FW_AUDIT_OUTPUT_INSECURE") &&
-		!strcmp(getenv("FW_AUDIT_OUTPUT_INSECURE"), "1");
-	output_uri = getenv("FW_AUDIT_OUTPUT_HTTP");
-	if ((!output_uri || !*output_uri) && getenv("FW_AUDIT_OUTPUT_HTTPS") && *getenv("FW_AUDIT_OUTPUT_HTTPS"))
-		output_uri = getenv("FW_AUDIT_OUTPUT_HTTPS");
+	insecure = getenv("ELA_OUTPUT_INSECURE") &&
+		!strcmp(getenv("ELA_OUTPUT_INSECURE"), "1");
+	output_uri = getenv("ELA_OUTPUT_HTTP");
+	if ((!output_uri || !*output_uri) && getenv("ELA_OUTPUT_HTTPS") && *getenv("ELA_OUTPUT_HTTPS"))
+		output_uri = getenv("ELA_OUTPUT_HTTPS");
 
 	if (is_http_script_source(script_source)) {
 		if (create_temp_script_path(script_dir,
@@ -221,7 +221,7 @@ int execute_script_commands(const char *prog, const char *script_source)
 			return 2;
 		}
 
-		if (uboot_http_get_to_file(script_source,
+		if (ela_http_get_to_file(script_source,
 					  script_path,
 					  insecure,
 					  false,
@@ -260,7 +260,7 @@ int execute_script_commands(const char *prog, const char *script_source)
 			return 2;
 		}
 
-		if (uboot_http_get_to_file(fallback_uri,
+		if (ela_http_get_to_file(fallback_uri,
 					  script_path,
 					  insecure,
 					  false,

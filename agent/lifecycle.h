@@ -5,6 +5,6 @@
 
 #include <stdbool.h>
 
-bool fw_audit_lifecycle_logging_enabled(void);
+bool ela_lifecycle_logging_enabled(void);
 
 #endif /* AGENT_LIFECYCLE_H */

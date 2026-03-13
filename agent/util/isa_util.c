@@ -10,36 +10,36 @@
 #include <sys/utsname.h>
 #include <unistd.h>
 
-static const char *fw_audit_sigill_stage = "startup";
+static const char *ela_sigill_stage = "startup";
 
 #ifdef DEBUG
-static bool fw_audit_sigill_debug_enabled(void)
+static bool ela_sigill_debug_enabled(void)
 {
-	const char *v = getenv("FW_AUDIT_SIGILL_DEBUG");
+	const char *v = getenv("ELA_SIGILL_DEBUG");
 	return v && !strcmp(v, "1");
 }
 #endif
 
-void fw_audit_set_sigill_stage(const char *stage)
+void ela_set_sigill_stage(const char *stage)
 {
 	if (stage && *stage)
-		fw_audit_sigill_stage = stage;
+		ela_sigill_stage = stage;
 
 #ifdef DEBUG
-	if (fw_audit_sigill_debug_enabled())
-		fprintf(stderr, "FW_AUDIT_SIGILL stage=%s\n", fw_audit_sigill_stage);
+	if (ela_sigill_debug_enabled())
+		fprintf(stderr, "FW_AUDIT_SIGILL stage=%s\n", ela_sigill_stage);
 #endif
 }
 
 #ifdef DEBUG
-static void fw_audit_sigill_handler(int signum)
+static void ela_sigill_handler(int signum)
 {
 	char buf[256];
 	int len;
 	(void)signum;
 	len = snprintf(buf, sizeof(buf),
 		"FW_AUDIT_SIGILL caught illegal instruction at stage=%s\n",
-		fw_audit_sigill_stage ? fw_audit_sigill_stage : "unknown");
+		ela_sigill_stage ? ela_sigill_stage : "unknown");
 	if (len > 0)
 		write(STDERR_FILENO, buf, (size_t)len);
 	signal(SIGILL, SIG_DFL);
@@ -47,17 +47,17 @@ static void fw_audit_sigill_handler(int signum)
 }
 #endif
 
-void fw_audit_install_sigill_debug_handler(void)
+void ela_install_sigill_debug_handler(void)
 {
 	#ifdef DEBUG
 	static bool installed;
 	struct sigaction sa;
 
-	if (installed || !fw_audit_sigill_debug_enabled())
+	if (installed || !ela_sigill_debug_enabled())
 		return;
 
 	memset(&sa, 0, sizeof(sa));
-	sa.sa_handler = fw_audit_sigill_handler;
+	sa.sa_handler = ela_sigill_handler;
 	sigemptyset(&sa.sa_mask);
 	sa.sa_flags = 0;
 	if (sigaction(SIGILL, &sa, NULL) == 0)
@@ -72,17 +72,17 @@ const char *normalize_isa_name(const char *isa)
 
 	if (!strcmp(isa, "x86") || !strcmp(isa, "i386") || !strcmp(isa, "i486") ||
 	    !strcmp(isa, "i586") || !strcmp(isa, "i686"))
-		return FW_AUDIT_ISA_X86;
+		return ELA_ISA_X86;
 
 	if (!strcmp(isa, "x86_64") || !strcmp(isa, "amd64"))
-		return FW_AUDIT_ISA_X86_64;
+		return ELA_ISA_X86_64;
 
 	if (!strcmp(isa, "aarch64") || !strcmp(isa, "arm64") || !strcmp(isa, "aarch64le") ||
 	    !strcmp(isa, "aarch64-le"))
-		return FW_AUDIT_ISA_AARCH64_LE;
+		return ELA_ISA_AARCH64_LE;
 
 	if (!strcmp(isa, "aarch64_be") || !strcmp(isa, "aarch64be") || !strcmp(isa, "aarch64-be"))
-		return FW_AUDIT_ISA_AARCH64_BE;
+		return ELA_ISA_AARCH64_BE;
 
 	return isa;
 }
@@ -102,7 +102,7 @@ bool isa_is_powerpc_family(const char *isa)
 	       !strcmp(normalized, "ppc64le");
 }
 
-const char *fw_audit_detect_isa(void)
+const char *ela_detect_isa(void)
 {
 	static char detected_isa[32];
 	static bool initialized;
@@ -113,7 +113,7 @@ const char *fw_audit_detect_isa(void)
 	if (initialized)
 		return detected_isa[0] ? detected_isa : NULL;
 
-	override_isa = getenv("FW_AUDIT_TEST_ISA");
+	override_isa = getenv("ELA_TEST_ISA");
 	if (override_isa && *override_isa) {
 		normalized = normalize_isa_name(override_isa);
 		snprintf(detected_isa, sizeof(detected_isa), "%s", normalized ? normalized : override_isa);
@@ -131,17 +131,17 @@ const char *fw_audit_detect_isa(void)
 	return detected_isa[0] ? detected_isa : NULL;
 }
 
-bool fw_audit_isa_supported_for_efi_bios(const char *isa)
+bool ela_isa_supported_for_efi_bios(const char *isa)
 {
 	const char *normalized = normalize_isa_name(isa);
 
 	if (!normalized)
 		return false;
 
-	return !strcmp(normalized, FW_AUDIT_ISA_X86) ||
-	       !strcmp(normalized, FW_AUDIT_ISA_X86_64) ||
-	       !strcmp(normalized, FW_AUDIT_ISA_AARCH64_BE) ||
-	       !strcmp(normalized, FW_AUDIT_ISA_AARCH64_LE);
+	return !strcmp(normalized, ELA_ISA_X86) ||
+	       !strcmp(normalized, ELA_ISA_X86_64) ||
+	       !strcmp(normalized, ELA_ISA_AARCH64_BE) ||
+	       !strcmp(normalized, ELA_ISA_AARCH64_LE);
 }
 
 static bool isa_is_arm32_family(const char *isa)
@@ -156,9 +156,9 @@ static bool isa_is_arm32_family(const char *isa)
 	       !strcmp(isa, "arm32-be");
 }
 
-void fw_audit_force_conservative_powerpc_crypto_caps(void)
+void ela_force_conservative_crypto_caps(void)
 {
-	const char *isa = fw_audit_detect_isa();
+	const char *isa = ela_detect_isa();
 	const char *cap;
 
 	if (isa_is_powerpc_family(isa)) {

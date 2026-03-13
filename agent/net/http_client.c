@@ -157,14 +157,14 @@ static int ssl_ctx_add_embedded_ca_store(X509_STORE *store, char *errbuf, size_t
 		return -1;
 	}
 
-	if (uboot_default_ca_bundle_pem_len == 0) {
+	if (ela_default_ca_bundle_pem_len == 0) {
 		if (errbuf && errbuf_len)
 			snprintf(errbuf, errbuf_len, "embedded CA bundle is empty");
 		return -1;
 	}
 
-	bio = BIO_new_mem_buf((const void *)uboot_default_ca_bundle_pem,
-			     (int)uboot_default_ca_bundle_pem_len);
+	bio = BIO_new_mem_buf((const void *)ela_default_ca_bundle_pem,
+			     (int)ela_default_ca_bundle_pem_len);
 	if (!bio) {
 		if (errbuf && errbuf_len)
 			snprintf(errbuf, errbuf_len, "failed to create OpenSSL BIO for embedded CA bundle");
@@ -302,7 +302,7 @@ static int simple_http_post(const char *uri,
 			uri, len, content_type);
 	}
 
-	if (uboot_send_all(sock, (const uint8_t *)request, request_len) != 0) {
+	if (ela_send_all(sock, (const uint8_t *)request, request_len) != 0) {
 		if (errbuf && errbuf_len)
 			snprintf(errbuf, errbuf_len, "failed to send HTTP request");
 		free(request);
@@ -382,7 +382,7 @@ static int simple_http_get_to_file(const char *uri,
 	if (verbose)
 		fprintf(stderr, "HTTP GET request uri=%s -> file=%s insecure=false (socket)\n", uri, output_path);
 
-	if (uboot_send_all(sock, (const uint8_t *)request, request_len) != 0) {
+	if (ela_send_all(sock, (const uint8_t *)request, request_len) != 0) {
 		if (errbuf && errbuf_len)
 			snprintf(errbuf, errbuf_len, "failed to send HTTP request");
 		goto fail;
@@ -500,14 +500,14 @@ static int simple_wolfssl_https_get_to_file(const struct parsed_http_uri *parsed
 	int status;
 	int rc;
 
-	fw_audit_set_sigill_stage("https:wolfssl_init");
+	ela_set_sigill_stage("https:wolfssl_init");
 	if (wolfSSL_Init() != WOLFSSL_SUCCESS) {
 		if (errbuf && errbuf_len)
 			snprintf(errbuf, errbuf_len, "wolfSSL_Init failed");
 		goto cleanup;
 	}
 
-	fw_audit_set_sigill_stage("https:wolfssl_ctx_new");
+	ela_set_sigill_stage("https:wolfssl_ctx_new");
 	ctx = wolfSSL_CTX_new(wolfTLSv1_2_client_method());
 	if (!ctx) {
 		if (errbuf && errbuf_len)
@@ -516,10 +516,10 @@ static int simple_wolfssl_https_get_to_file(const struct parsed_http_uri *parsed
 	}
 	wolfSSL_CTX_set_verify(ctx, insecure ? WOLFSSL_VERIFY_NONE : WOLFSSL_VERIFY_PEER, NULL);
 	if (!insecure) {
-		fw_audit_set_sigill_stage("https:wolfssl_load_ca");
+		ela_set_sigill_stage("https:wolfssl_load_ca");
 		if (wolfSSL_CTX_load_verify_buffer(ctx,
-				(const unsigned char *)uboot_default_ca_bundle_pem,
-				(long)uboot_default_ca_bundle_pem_len,
+				(const unsigned char *)ela_default_ca_bundle_pem,
+				(long)ela_default_ca_bundle_pem_len,
 				WOLFSSL_FILETYPE_PEM) != WOLFSSL_SUCCESS) {
 			if (errbuf && errbuf_len)
 				snprintf(errbuf, errbuf_len, "wolfSSL_CTX_load_verify_buffer failed");
@@ -527,7 +527,7 @@ static int simple_wolfssl_https_get_to_file(const struct parsed_http_uri *parsed
 		}
 	}
 
-	fw_audit_set_sigill_stage("https:wolfssl_tcp_connect");
+	ela_set_sigill_stage("https:wolfssl_tcp_connect");
 	sock = connect_tcp_host_port_any(parsed->host, parsed->port);
 	if (sock < 0) {
 		if (errbuf && errbuf_len)
@@ -535,7 +535,7 @@ static int simple_wolfssl_https_get_to_file(const struct parsed_http_uri *parsed
 		goto cleanup;
 	}
 
-	fw_audit_set_sigill_stage("https:wolfssl_new");
+	ela_set_sigill_stage("https:wolfssl_new");
 	ssl = wolfSSL_new(ctx);
 	if (!ssl) {
 		if (errbuf && errbuf_len)
@@ -550,7 +550,7 @@ static int simple_wolfssl_https_get_to_file(const struct parsed_http_uri *parsed
 	if (!insecure)
 		wolfSSL_check_domain_name(ssl, parsed->host);
 
-	fw_audit_set_sigill_stage("https:wolfssl_connect");
+	ela_set_sigill_stage("https:wolfssl_connect");
 	while ((rc = wolfSSL_connect(ssl)) != WOLFSSL_SUCCESS) {
 		int err = wolfSSL_get_error(ssl, rc);
 		if (err != WOLFSSL_ERROR_WANT_READ && err != WOLFSSL_ERROR_WANT_WRITE &&
@@ -582,14 +582,14 @@ static int simple_wolfssl_https_get_to_file(const struct parsed_http_uri *parsed
 		fprintf(stderr, "HTTPS GET request uri=%s -> file=%s insecure=%s (wolfssl)\n",
 			uri, output_path, insecure ? "true" : "false");
 
-	fw_audit_set_sigill_stage("https:wolfssl_write_request");
+	ela_set_sigill_stage("https:wolfssl_write_request");
 	if ((rc = wolfSSL_write(ssl, request, (int)request_len)) <= 0) {
 		if (errbuf && errbuf_len)
 			snprintf(errbuf, errbuf_len, "wolfSSL_write failed: %d", wolfSSL_get_error(ssl, rc));
 		goto cleanup;
 	}
 
-	fw_audit_set_sigill_stage("https:wolfssl_read_headers");
+	ela_set_sigill_stage("https:wolfssl_read_headers");
 	if (wolfssl_read_headers(ssl, &headers) != 0)
 		goto cleanup;
 	status = parse_status_code_from_headers(headers);
@@ -599,7 +599,7 @@ static int simple_wolfssl_https_get_to_file(const struct parsed_http_uri *parsed
 		goto cleanup;
 	}
 
-	fw_audit_set_sigill_stage("https:wolfssl_read_body");
+	ela_set_sigill_stage("https:wolfssl_read_body");
 	if (wolfssl_copy_response_body_to_file(ssl, fp) != 0)
 		goto cleanup;
 
@@ -765,9 +765,9 @@ static int ssl_connect_with_embedded_ca(const struct parsed_http_uri *parsed,
 	if (!parsed || !ctx_out || !ssl_out || !sock_out)
 		return -1;
 
-	fw_audit_install_sigill_debug_handler();
-	fw_audit_set_sigill_stage("https:openssl_init");
-	fw_audit_force_conservative_powerpc_crypto_caps();
+	ela_install_sigill_debug_handler();
+	ela_set_sigill_stage("https:openssl_init");
+	ela_force_conservative_crypto_caps();
 
 	if (OPENSSL_init_ssl(0, NULL) != 1) {
 		if (errbuf && errbuf_len)
@@ -775,7 +775,7 @@ static int ssl_connect_with_embedded_ca(const struct parsed_http_uri *parsed,
 		return -1;
 	}
 
-	fw_audit_set_sigill_stage("https:ssl_ctx_new");
+	ela_set_sigill_stage("https:ssl_ctx_new");
 	ctx = SSL_CTX_new(TLS_client_method());
 	if (!ctx) {
 		if (errbuf && errbuf_len)
@@ -784,7 +784,7 @@ static int ssl_connect_with_embedded_ca(const struct parsed_http_uri *parsed,
 	}
 
 	SSL_CTX_set_verify(ctx, insecure ? SSL_VERIFY_NONE : SSL_VERIFY_PEER, NULL);
-	fw_audit_set_sigill_stage("https:set_tls12_only");
+	ela_set_sigill_stage("https:set_tls12_only");
 	SSL_CTX_set_min_proto_version(ctx, TLS1_2_VERSION);
 	SSL_CTX_set_max_proto_version(ctx, TLS1_2_VERSION);
 	/*
@@ -797,12 +797,12 @@ static int ssl_connect_with_embedded_ca(const struct parsed_http_uri *parsed,
 		"ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-AES128-SHA:AES128-SHA");
 	SSL_CTX_set1_groups_list(ctx, "P-256");
 	if (!insecure) {
-		fw_audit_set_sigill_stage("https:load_ca_store");
+		ela_set_sigill_stage("https:load_ca_store");
 		if (ssl_ctx_add_embedded_ca_store(SSL_CTX_get_cert_store(ctx), errbuf, errbuf_len) < 0)
 			goto fail;
 	}
 
-	fw_audit_set_sigill_stage("https:tcp_connect");
+	ela_set_sigill_stage("https:tcp_connect");
 	sock = connect_tcp_host_port_any(parsed->host, parsed->port);
 	if (sock < 0) {
 		if (errbuf && errbuf_len)
@@ -810,7 +810,7 @@ static int ssl_connect_with_embedded_ca(const struct parsed_http_uri *parsed,
 		goto fail;
 	}
 
-	fw_audit_set_sigill_stage("https:ssl_new");
+	ela_set_sigill_stage("https:ssl_new");
 	ssl = SSL_new(ctx);
 	if (!ssl) {
 		if (errbuf && errbuf_len)
@@ -818,7 +818,7 @@ static int ssl_connect_with_embedded_ca(const struct parsed_http_uri *parsed,
 		goto fail;
 	}
 
-	fw_audit_set_sigill_stage("https:set_sni");
+	ela_set_sigill_stage("https:set_sni");
 	if (SSL_set_tlsext_host_name(ssl, parsed->host) != 1) {
 		if (errbuf && errbuf_len)
 			snprintf(errbuf, errbuf_len, "failed to set TLS SNI hostname");
@@ -827,7 +827,7 @@ static int ssl_connect_with_embedded_ca(const struct parsed_http_uri *parsed,
 
 	vpm = SSL_get0_param(ssl);
 	if (!insecure) {
-		fw_audit_set_sigill_stage("https:set_verify_host");
+		ela_set_sigill_stage("https:set_verify_host");
 		X509_VERIFY_PARAM_set_hostflags(vpm, 0);
 		if (X509_VERIFY_PARAM_set1_host(vpm, parsed->host, 0) != 1) {
 			if (errbuf && errbuf_len)
@@ -837,7 +837,7 @@ static int ssl_connect_with_embedded_ca(const struct parsed_http_uri *parsed,
 	}
 
 	SSL_set_fd(ssl, sock);
-	fw_audit_set_sigill_stage("https:ssl_connect");
+	ela_set_sigill_stage("https:ssl_connect");
 	if (SSL_connect(ssl) != 1) {
 		if (errbuf && errbuf_len)
 			snprintf(errbuf, errbuf_len, "TLS handshake failed");
@@ -845,7 +845,7 @@ static int ssl_connect_with_embedded_ca(const struct parsed_http_uri *parsed,
 	}
 
 	if (!insecure) {
-		fw_audit_set_sigill_stage("https:verify_peer");
+		ela_set_sigill_stage("https:verify_peer");
 		if (SSL_get_verify_result(ssl) != X509_V_OK) {
 			if (errbuf && errbuf_len)
 				snprintf(errbuf, errbuf_len, "TLS peer certificate verification failed");
@@ -856,7 +856,7 @@ static int ssl_connect_with_embedded_ca(const struct parsed_http_uri *parsed,
 	*ctx_out = ctx;
 	*ssl_out = ssl;
 	*sock_out = sock;
-	fw_audit_set_sigill_stage("https:connected");
+	ela_set_sigill_stage("https:connected");
 	return 0;
 
 fail:
@@ -894,19 +894,19 @@ static int simple_https_get_to_file(const char *uri,
 	}
 
 	#ifdef ELA_HAS_WOLFSSL
-	if (isa_is_powerpc_family(fw_audit_detect_isa())) {
-		fw_audit_set_sigill_stage("https:wolfssl_fallback");
+	if (isa_is_powerpc_family(ela_detect_isa())) {
+		ela_set_sigill_stage("https:wolfssl_fallback");
 		return simple_wolfssl_https_get_to_file(&parsed, uri, output_path, insecure,
 			verbose, errbuf, errbuf_len);
 	}
 	#endif
 
-	fw_audit_install_sigill_debug_handler();
-	fw_audit_set_sigill_stage("https:get:start");
+	ela_install_sigill_debug_handler();
+	ela_set_sigill_stage("https:get:start");
 	if (ssl_connect_with_embedded_ca(&parsed, insecure, &ctx, &ssl, &sock, errbuf, errbuf_len) < 0)
 		return -1;
 
-	fw_audit_set_sigill_stage("https:get:fopen");
+	ela_set_sigill_stage("https:get:fopen");
 	fp = fopen(output_path, "wb");
 	if (!fp) {
 		if (errbuf && errbuf_len)
@@ -914,7 +914,7 @@ static int simple_https_get_to_file(const char *uri,
 		goto fail;
 	}
 
-	fw_audit_set_sigill_stage("https:get:build_request");
+	ela_set_sigill_stage("https:get:build_request");
 	if (append_text(&request, &request_len, &request_cap, "GET ") != 0 ||
 	    append_text(&request, &request_len, &request_cap, parsed.path) != 0 ||
 	    append_text(&request, &request_len, &request_cap, " HTTP/1.1\r\nHost: ") != 0 ||
@@ -929,14 +929,14 @@ static int simple_https_get_to_file(const char *uri,
 		fprintf(stderr, "HTTPS GET request uri=%s -> file=%s insecure=%s (openssl)\n",
 			uri, output_path, insecure ? "true" : "false");
 
-	fw_audit_set_sigill_stage("https:get:write_request");
+	ela_set_sigill_stage("https:get:write_request");
 	if (ssl_write_all(ssl, (const uint8_t *)request, request_len) != 0) {
 		if (errbuf && errbuf_len)
 			snprintf(errbuf, errbuf_len, "failed to send HTTPS request");
 		goto fail;
 	}
 
-	fw_audit_set_sigill_stage("https:get:read_headers");
+	ela_set_sigill_stage("https:get:read_headers");
 	if (ssl_read_headers(ssl, &headers) != 0) {
 		if (errbuf && errbuf_len)
 			snprintf(errbuf, errbuf_len, "failed to read HTTPS response headers");
@@ -944,7 +944,7 @@ static int simple_https_get_to_file(const char *uri,
 	}
 
 	status = parse_status_code_from_headers(headers);
-	fw_audit_set_sigill_stage("https:get:read_body");
+	ela_set_sigill_stage("https:get:read_body");
 	if (status < 200 || status >= 300) {
 		if (errbuf && errbuf_len)
 			snprintf(errbuf, errbuf_len, "HTTP status %d", status);
@@ -957,7 +957,7 @@ static int simple_https_get_to_file(const char *uri,
 		goto fail;
 	}
 
-	fw_audit_set_sigill_stage("https:get:done");
+	ela_set_sigill_stage("https:get:done");
 	free(headers);
 	free(request);
 	SSL_shutdown(ssl);
@@ -1263,7 +1263,7 @@ static int first_non_loopback_mac(char *mac_buf, size_t mac_buf_len)
 	return -1;
 }
 
-int uboot_http_get_upload_mac(const char *base_uri, char *mac_buf, size_t mac_buf_len)
+int ela_http_get_upload_mac(const char *base_uri, char *mac_buf, size_t mac_buf_len)
 {
 	const char *override_mac;
 	struct in_addr dest_addr;
@@ -1274,7 +1274,7 @@ int uboot_http_get_upload_mac(const char *base_uri, char *mac_buf, size_t mac_bu
 		return -1;
 	mac_buf[0] = '\0';
 
-	override_mac = getenv("FW_AUDIT_UPLOAD_MAC");
+	override_mac = getenv("ELA_UPLOAD_MAC");
 	if (override_mac && is_valid_mac_address_string(override_mac)) {
 		snprintf(mac_buf, mac_buf_len, "%s", override_mac);
 		return 0;
@@ -1312,7 +1312,7 @@ int uboot_http_get_upload_mac(const char *base_uri, char *mac_buf, size_t mac_bu
 	return 0;
 }
 
-char *uboot_http_uri_normalize_default_port(const char *uri, uint16_t default_port)
+char *ela_http_uri_normalize_default_port(const char *uri, uint16_t default_port)
 {
 	const char *scheme_end;
 	const char *authority;
@@ -1380,7 +1380,7 @@ char *uboot_http_uri_normalize_default_port(const char *uri, uint16_t default_po
 	return out;
 }
 
-int fw_audit_parse_http_output_uri(const char *uri,
+int ela_parse_http_output_uri(const char *uri,
 				  const char **output_http,
 				  const char **output_https,
 				  char *errbuf,
@@ -1416,7 +1416,7 @@ int fw_audit_parse_http_output_uri(const char *uri,
 	return -1;
 }
 
-char *uboot_http_build_upload_uri(const char *base_uri, const char *upload_type, const char *file_path)
+char *ela_http_build_upload_uri(const char *base_uri, const char *upload_type, const char *file_path)
 {
 	const char *scheme_end;
 	const char *authority;
@@ -1442,7 +1442,7 @@ char *uboot_http_build_upload_uri(const char *base_uri, const char *upload_type,
 	while (*authority_end && *authority_end != '/' && *authority_end != '?' && *authority_end != '#')
 		authority_end++;
 
-	if (uboot_http_get_upload_mac(base_uri, mac_addr, sizeof(mac_addr)) < 0)
+	if (ela_http_get_upload_mac(base_uri, mac_addr, sizeof(mac_addr)) < 0)
 		return NULL;
 
 	if (file_path && *file_path) {
@@ -1478,7 +1478,7 @@ char *uboot_http_build_upload_uri(const char *base_uri, const char *upload_type,
 	return out;
 }
 
-int uboot_http_post_log_message(const char *base_uri, const char *message,
+int ela_http_post_log_message(const char *base_uri, const char *message,
 				bool insecure, bool verbose,
 				char *errbuf, size_t errbuf_len)
 {
@@ -1494,14 +1494,14 @@ int uboot_http_post_log_message(const char *base_uri, const char *message,
 		return -1;
 	}
 
-	upload_uri = uboot_http_build_upload_uri(base_uri, "log", NULL);
+	upload_uri = ela_http_build_upload_uri(base_uri, "log", NULL);
 	if (!upload_uri) {
 		if (errbuf && errbuf_len)
 			snprintf(errbuf, errbuf_len, "failed to build log upload URI");
 		return -1;
 	}
 
-	rc = uboot_http_post(upload_uri,
+	rc = ela_http_post(upload_uri,
 		(const uint8_t *)message,
 		strlen(message),
 		"text/plain; charset=utf-8",
@@ -1513,7 +1513,7 @@ int uboot_http_post_log_message(const char *base_uri, const char *message,
 	return rc;
 }
 
-int uboot_http_post(const char *uri, const uint8_t *data, size_t len,
+int ela_http_post(const char *uri, const uint8_t *data, size_t len,
 		 const char *content_type, bool insecure, bool verbose,
 		 char *errbuf, size_t errbuf_len)
 {
@@ -1539,9 +1539,9 @@ int uboot_http_post(const char *uri, const uint8_t *data, size_t len,
 
 	is_https = !strncmp(uri, "https://", 8);
 	if (!strncmp(uri, "http://", 7)) {
-		normalized_uri = uboot_http_uri_normalize_default_port(uri, 80);
+		normalized_uri = ela_http_uri_normalize_default_port(uri, 80);
 	} else if (is_https) {
-		normalized_uri = uboot_http_uri_normalize_default_port(uri, 443);
+		normalized_uri = ela_http_uri_normalize_default_port(uri, 443);
 	}
 	if ((!strncmp(uri, "http://", 7) || is_https) && !normalized_uri) {
 		if (errbuf && errbuf_len)
@@ -1566,7 +1566,7 @@ int uboot_http_post(const char *uri, const uint8_t *data, size_t len,
 		return ret;
 	}
 
-	fw_audit_force_conservative_powerpc_crypto_caps();
+	ela_force_conservative_crypto_caps();
 
 	if (!curl_global_ready) {
 		if (curl_global_init(CURL_GLOBAL_DEFAULT) != CURLE_OK) {
@@ -1667,7 +1667,7 @@ int uboot_http_post(const char *uri, const uint8_t *data, size_t len,
 	return 0;
 }
 
-int uboot_http_get_to_file(const char *uri, const char *output_path,
+int ela_http_get_to_file(const char *uri, const char *output_path,
 			   bool insecure, bool verbose,
 			   char *errbuf, size_t errbuf_len)
 {
@@ -1690,8 +1690,8 @@ int uboot_http_get_to_file(const char *uri, const char *output_path,
 		return -1;
 	}
 
-	fw_audit_install_sigill_debug_handler();
-	fw_audit_set_sigill_stage("download-file:entry");
+	ela_install_sigill_debug_handler();
+	ela_set_sigill_stage("download-file:entry");
 
 	if (!strncmp(uri, "http://", 7))
 		return simple_http_get_to_file(uri, output_path, verbose, errbuf, errbuf_len);
@@ -1700,9 +1700,9 @@ int uboot_http_get_to_file(const char *uri, const char *output_path,
 
 	is_https = !strncmp(uri, "https://", 8);
 	if (!strncmp(uri, "http://", 7)) {
-		normalized_uri = uboot_http_uri_normalize_default_port(uri, 80);
+		normalized_uri = ela_http_uri_normalize_default_port(uri, 80);
 	} else if (is_https) {
-		normalized_uri = uboot_http_uri_normalize_default_port(uri, 443);
+		normalized_uri = ela_http_uri_normalize_default_port(uri, 443);
 	} else {
 		if (errbuf && errbuf_len)
 			snprintf(errbuf, errbuf_len, "unsupported URI scheme (expected http:// or https://)");
@@ -1716,8 +1716,8 @@ int uboot_http_get_to_file(const char *uri, const char *output_path,
 	}
 	effective_uri = normalized_uri;
 
-	fw_audit_set_sigill_stage("download-file:curl_global_init");
-	fw_audit_force_conservative_powerpc_crypto_caps();
+	ela_set_sigill_stage("download-file:curl_global_init");
+	ela_force_conservative_crypto_caps();
 
 	if (!curl_global_ready) {
 		if (curl_global_init(CURL_GLOBAL_DEFAULT) != CURLE_OK) {
@@ -1729,7 +1729,7 @@ int uboot_http_get_to_file(const char *uri, const char *output_path,
 		curl_global_ready = true;
 	}
 
-	fw_audit_set_sigill_stage("download-file:fopen");
+	ela_set_sigill_stage("download-file:fopen");
 	fp = fopen(output_path, "wb");
 	if (!fp) {
 		if (errbuf && errbuf_len)
@@ -1738,7 +1738,7 @@ int uboot_http_get_to_file(const char *uri, const char *output_path,
 		return -1;
 	}
 
-	fw_audit_set_sigill_stage("download-file:curl_easy_init");
+	ela_set_sigill_stage("download-file:curl_easy_init");
 	curl = curl_easy_init();
 	if (!curl) {
 		if (errbuf && errbuf_len)
@@ -1756,7 +1756,7 @@ int uboot_http_get_to_file(const char *uri, const char *output_path,
 			insecure ? "true" : "false");
 	}
 
-	fw_audit_set_sigill_stage("download-file:curl_setopt");
+	ela_set_sigill_stage("download-file:curl_setopt");
 	curl_easy_setopt(curl, CURLOPT_URL, effective_uri);
 	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
 	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curl_write_to_fp);
@@ -1785,7 +1785,7 @@ int uboot_http_get_to_file(const char *uri, const char *output_path,
 		}
 	}
 
-	fw_audit_set_sigill_stage("download-file:curl_perform");
+	ela_set_sigill_stage("download-file:curl_perform");
 	rc = curl_easy_perform(curl);
 	if (rc != CURLE_OK) {
 		if (verbose)
@@ -1800,7 +1800,7 @@ int uboot_http_get_to_file(const char *uri, const char *output_path,
 		return -1;
 	}
 
-	fw_audit_set_sigill_stage("download-file:curl_getinfo");
+	ela_set_sigill_stage("download-file:curl_getinfo");
 	curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
 	curl_easy_cleanup(curl);
 
@@ -1827,7 +1827,7 @@ int uboot_http_get_to_file(const char *uri, const char *output_path,
 	if (verbose)
 		fprintf(stderr, "HTTP GET success uri=%s status=%ld\n", effective_uri, http_code);
 
-	fw_audit_set_sigill_stage("download-file:success");
+	ela_set_sigill_stage("download-file:success");
 	free(normalized_uri);
 	return 0;
 }

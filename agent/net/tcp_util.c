@@ -78,7 +78,7 @@ int connect_tcp_host_port_any(const char *host, uint16_t port)
 	return sock;
 }
 
-int uboot_connect_tcp_ipv4(const char *spec)
+int ela_connect_tcp_ipv4(const char *spec)
 {
 	char host[64];
 	char *colon;
@@ -120,7 +120,7 @@ int uboot_connect_tcp_ipv4(const char *spec)
 	return sock;
 }
 
-bool fw_audit_is_valid_tcp_output_target(const char *spec)
+bool ela_is_valid_tcp_output_target(const char *spec)
 {
 	char host[64];
 	char *colon;
@@ -146,7 +146,7 @@ bool fw_audit_is_valid_tcp_output_target(const char *spec)
 	return inet_pton(AF_INET, host, &addr) == 1;
 }
 
-int uboot_send_all(int sock, const uint8_t *buf, size_t len)
+int ela_send_all(int sock, const uint8_t *buf, size_t len)
 {
 	while (len) {
 		ssize_t n = send(sock, buf, len, 0);

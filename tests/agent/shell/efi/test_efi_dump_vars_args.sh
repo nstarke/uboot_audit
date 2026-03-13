@@ -49,10 +49,10 @@ run_accept_case "efi dump-vars --output-format json" "$BIN" --output-format json
 
 python_bin="$(find_python_bin || true)"
 
-case "${FW_AUDIT_TEST_ISA:-}" in
+case "${ELA_TEST_ISA:-}" in
     ""|x86|x86_64|aarch64-le|aarch64-be) : ;;
     *)
-        echo "[PASS] efi dump-vars HTTP POST upload skipped (FW_AUDIT_TEST_ISA=${FW_AUDIT_TEST_ISA:-} does not support EFI)"
+        echo "[PASS] efi dump-vars HTTP POST upload skipped (ELA_TEST_ISA=${ELA_TEST_ISA:-} does not support EFI)"
         PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
         python_bin=""
         ;;

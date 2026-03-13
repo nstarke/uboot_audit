@@ -71,7 +71,7 @@ static bool audit_rule_may_need_signature_artifacts(const char *rule_filter)
 
 static enum uboot_output_format detect_output_format(void)
 {
-	const char *fmt = getenv("FW_AUDIT_OUTPUT_FORMAT");
+	const char *fmt = getenv("ELA_OUTPUT_FORMAT");
 
 	if (!fmt || !*fmt || !strcmp(fmt, "txt"))
 		return FW_OUTPUT_TXT;
@@ -213,11 +213,11 @@ static int flush_output_http_buffer(void)
 	if (g_output_http_len == 0)
 		return 0;
 
-	upload_uri = uboot_http_build_upload_uri(g_output_http_uri, "log", NULL);
+	upload_uri = ela_http_build_upload_uri(g_output_http_uri, "log", NULL);
 	if (!upload_uri)
 		return -1;
 
-	if (uboot_http_post(upload_uri,
+	if (ela_http_post(upload_uri,
 			 (const uint8_t *)(g_output_http_buf ? g_output_http_buf : ""),
 			 g_output_http_len,
 			 audit_http_content_type(g_output_format),
@@ -244,7 +244,7 @@ static uint64_t parse_u64(const char *s)
 {
 	uint64_t v;
 
-	if (uboot_parse_u64(s, &v)) {
+	if (ela_parse_u64(s, &v)) {
 		err_printf("Invalid number: %s\n", s);
 		exit(2);
 	}
@@ -292,9 +292,9 @@ out:
 
 static int ensure_fw_env_config_exists(bool force_scan, bool verbose)
 {
-	const char *output_tcp = getenv("FW_AUDIT_OUTPUT_TCP");
-	const char *output_http = getenv("FW_AUDIT_OUTPUT_HTTP");
-	const char *output_https = getenv("FW_AUDIT_OUTPUT_HTTPS");
+	const char *output_tcp = getenv("ELA_OUTPUT_TCP");
+	const char *output_http = getenv("ELA_OUTPUT_HTTP");
+	const char *output_https = getenv("ELA_OUTPUT_HTTPS");
 	char *env_argv[9];
 	int env_argc = 0;
 
@@ -704,12 +704,12 @@ static int send_artifact_network_record(enum uboot_output_format fmt,
 		return -1;
 
 	if (output_tcp_target && *output_tcp_target) {
-		int sock = uboot_connect_tcp_ipv4(output_tcp_target);
+		int sock = ela_connect_tcp_ipv4(output_tcp_target);
 		if (sock < 0) {
 			err_printf("Failed to send artifact record over TCP to %s\n", output_tcp_target);
 			return -1;
 		}
-		if (uboot_send_all(sock, (const uint8_t *)payload, (size_t)plen) < 0) {
+		if (ela_send_all(sock, (const uint8_t *)payload, (size_t)plen) < 0) {
 			err_printf("Failed to send artifact record over TCP to %s\n", output_tcp_target);
 			close(sock);
 			return -1;
@@ -719,10 +719,10 @@ static int send_artifact_network_record(enum uboot_output_format fmt,
 
 	if (output_http_uri && *output_http_uri) {
 		char errbuf[256];
-		char *upload_uri = uboot_http_build_upload_uri(output_http_uri, "log", NULL);
+		char *upload_uri = ela_http_build_upload_uri(output_http_uri, "log", NULL);
 		if (!upload_uri)
 			return -1;
-		if (uboot_http_post(upload_uri,
+		if (ela_http_post(upload_uri,
 				   (const uint8_t *)payload,
 				   (size_t)plen,
 				   audit_http_content_type(fmt),
@@ -849,16 +849,16 @@ int embedded_linux_audit_scan_main(int argc, char **argv)
 	const char *signature_blob_scan = NULL;
 	const char *signature_pubkey_scan = NULL;
 	const char *signature_algorithm = NULL;
-	const char *output_tcp_target = getenv("FW_AUDIT_OUTPUT_TCP");
-	const char *output_http_target = getenv("FW_AUDIT_OUTPUT_HTTP");
-	const char *output_https_target = getenv("FW_AUDIT_OUTPUT_HTTPS");
+	const char *output_tcp_target = getenv("ELA_OUTPUT_TCP");
+	const char *output_http_target = getenv("ELA_OUTPUT_HTTP");
+	const char *output_https_target = getenv("ELA_OUTPUT_HTTPS");
 	const char *output_http_uri = NULL;
 	bool scan_signature_devices = false;
-	bool insecure = getenv("FW_AUDIT_OUTPUT_INSECURE") && !strcmp(getenv("FW_AUDIT_OUTPUT_INSECURE"), "1");
+	bool insecure = getenv("ELA_OUTPUT_INSECURE") && !strcmp(getenv("ELA_OUTPUT_INSECURE"), "1");
 	uint64_t offset = 0;
 	uint64_t size = DEFAULT_AUDIT_SIZE;
 	bool size_explicit = false;
-	bool verbose = getenv("FW_AUDIT_VERBOSE") && !strcmp(getenv("FW_AUDIT_VERBOSE"), "1");
+	bool verbose = getenv("ELA_VERBOSE") && !strcmp(getenv("ELA_VERBOSE"), "1");
 	bool list_rules = false;
 	uint32_t crc32_table[256];
 	const struct embedded_linux_audit_rule * const *rulep;
@@ -985,7 +985,7 @@ int embedded_linux_audit_scan_main(int argc, char **argv)
 		output_http_uri = output_https_target;
 
 	if (output_tcp_target && *output_tcp_target) {
-		g_output_sock = uboot_connect_tcp_ipv4(output_tcp_target);
+		g_output_sock = ela_connect_tcp_ipv4(output_tcp_target);
 		if (g_output_sock < 0) {
 			err_printf("Invalid/failed output target (expected IPv4:port): %s\n", output_tcp_target);
 			ret = 1;
@@ -994,18 +994,18 @@ int embedded_linux_audit_scan_main(int argc, char **argv)
 	}
 
 	if (output_tcp_target && *output_tcp_target)
-		setenv("FW_AUDIT_OUTPUT_TCP", output_tcp_target, 1);
+		setenv("ELA_OUTPUT_TCP", output_tcp_target, 1);
 	else
-		unsetenv("FW_AUDIT_OUTPUT_TCP");
+		unsetenv("ELA_OUTPUT_TCP");
 	if (output_http_target && *output_http_target)
-		setenv("FW_AUDIT_OUTPUT_HTTP", output_http_target, 1);
+		setenv("ELA_OUTPUT_HTTP", output_http_target, 1);
 	else
-		unsetenv("FW_AUDIT_OUTPUT_HTTP");
+		unsetenv("ELA_OUTPUT_HTTP");
 	if (output_https_target && *output_https_target)
-		setenv("FW_AUDIT_OUTPUT_HTTPS", output_https_target, 1);
+		setenv("ELA_OUTPUT_HTTPS", output_https_target, 1);
 	else
-		unsetenv("FW_AUDIT_OUTPUT_HTTPS");
-	setenv("FW_AUDIT_OUTPUT_INSECURE", insecure ? "1" : "0", 1);
+		unsetenv("ELA_OUTPUT_HTTPS");
+	setenv("ELA_OUTPUT_INSECURE", insecure ? "1" : "0", 1);
 
 	g_output_http_uri = output_http_uri;
 	g_http_insecure = insecure;
@@ -1148,7 +1148,7 @@ int embedded_linux_audit_scan_main(int argc, char **argv)
 		goto out;
 	}
 
-	uboot_crc32_init(crc32_table);
+	ela_crc32_init(crc32_table);
 
 	if (fmt == FW_OUTPUT_CSV)
 		out_printf("record,rule,status,message\n");

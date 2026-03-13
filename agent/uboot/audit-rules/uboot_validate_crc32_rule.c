@@ -11,10 +11,10 @@
 
 static int ensure_fw_env_config_exists(void)
 {
-	const char *output_tcp = getenv("FW_AUDIT_OUTPUT_TCP");
-	const char *output_http = getenv("FW_AUDIT_OUTPUT_HTTP");
-	const char *output_https = getenv("FW_AUDIT_OUTPUT_HTTPS");
-	const char *output_insecure = getenv("FW_AUDIT_OUTPUT_INSECURE");
+	const char *output_tcp = getenv("ELA_OUTPUT_TCP");
+	const char *output_http = getenv("ELA_OUTPUT_HTTP");
+	const char *output_https = getenv("ELA_OUTPUT_HTTPS");
+	const char *output_insecure = getenv("ELA_OUTPUT_INSECURE");
 	char *argv[8];
 	int argc = 0;
 
@@ -70,11 +70,11 @@ static int run_validate_crc32(const struct embedded_linux_audit_input *input, ch
 		((uint32_t)input->data[1] << 8) |
 		((uint32_t)input->data[2] << 16) |
 		((uint32_t)input->data[3] << 24);
-	stored_be = uboot_read_be32(input->data);
+	stored_be = ela_read_be32(input->data);
 
-	calc_std = uboot_crc32_calc(input->crc32_table, input->data + 4, input->data_len - 4);
+	calc_std = ela_crc32_calc(input->crc32_table, input->data + 4, input->data_len - 4);
 	if (input->data_len > 5)
-		calc_redund = uboot_crc32_calc(input->crc32_table, input->data + 5, input->data_len - 5);
+		calc_redund = ela_crc32_calc(input->crc32_table, input->data + 5, input->data_len - 5);
 
 	if (calc_std == stored_le || calc_std == stored_be) {
 		if (message && message_len) {
@@ -113,4 +113,4 @@ static const struct embedded_linux_audit_rule uboot_validate_crc32_rule = {
 	.run = run_validate_crc32,
 };
 
-FW_REGISTER_AUDIT_RULE(uboot_validate_crc32_rule);
+ELA_REGISTER_RULE(uboot_validate_crc32_rule);

@@ -156,9 +156,9 @@ fail:
 int embedded_linux_audit_dispatch(int argc, char **argv)
 {
 	const char *output_format = "txt";
-	const char *output_tcp = getenv("FW_AUDIT_OUTPUT_TCP");
-	const char *output_http = getenv("FW_AUDIT_OUTPUT_HTTP");
-	const char *output_https = getenv("FW_AUDIT_OUTPUT_HTTPS");
+	const char *output_tcp = getenv("ELA_OUTPUT_TCP");
+	const char *output_http = getenv("ELA_OUTPUT_HTTP");
+	const char *output_https = getenv("ELA_OUTPUT_HTTPS");
 	const char *ela_output_format;
 	const char *ela_quiet;
 	const char *ela_output_tcp;
@@ -169,7 +169,7 @@ int embedded_linux_audit_dispatch(int argc, char **argv)
 	const char *ela_api_url = NULL;
 	const char *ela_api_insecure = NULL;
 	bool verbose = true;
-	bool insecure = getenv("FW_AUDIT_OUTPUT_INSECURE") && !strcmp(getenv("FW_AUDIT_OUTPUT_INSECURE"), "1");
+	bool insecure = getenv("ELA_OUTPUT_INSECURE") && !strcmp(getenv("ELA_OUTPUT_INSECURE"), "1");
 	bool output_format_explicit = false;
 	int cmd_idx = 1;
 	int ret;
@@ -182,8 +182,8 @@ int embedded_linux_audit_dispatch(int argc, char **argv)
 	if (ela_output_format && *ela_output_format)
 		output_format = ela_output_format;
 
-	if (getenv("FW_AUDIT_OUTPUT_FORMAT") && *getenv("FW_AUDIT_OUTPUT_FORMAT"))
-		output_format = getenv("FW_AUDIT_OUTPUT_FORMAT");
+	if (getenv("ELA_OUTPUT_FORMAT") && *getenv("ELA_OUTPUT_FORMAT"))
+		output_format = getenv("ELA_OUTPUT_FORMAT");
 
 	ela_quiet = getenv("ELA_QUIET");
 	if (ela_quiet && (!strcmp(ela_quiet, "1") || !strcmp(ela_quiet, "true") ||
@@ -253,7 +253,7 @@ int embedded_linux_audit_dispatch(int argc, char **argv)
 				usage(argv[0]);
 				return 2;
 			}
-			if (fw_audit_parse_http_output_uri(argv[cmd_idx++],
+			if (ela_parse_http_output_uri(argv[cmd_idx++],
 						  &new_output_http,
 						  &new_output_https,
 						  errbuf,
@@ -273,7 +273,7 @@ int embedded_linux_audit_dispatch(int argc, char **argv)
 			const char *new_output_http;
 			const char *new_output_https;
 
-			if (fw_audit_parse_http_output_uri(argv[cmd_idx] + 14,
+			if (ela_parse_http_output_uri(argv[cmd_idx] + 14,
 						  &new_output_http,
 						  &new_output_https,
 						  errbuf,
@@ -324,7 +324,7 @@ int embedded_linux_audit_dispatch(int argc, char **argv)
 	ela_api_url = getenv("ELA_API_URL");
 	if ((!output_http || !*output_http) && (!output_https || !*output_https) &&
 	    ela_api_url && *ela_api_url) {
-		if (fw_audit_parse_http_output_uri(ela_api_url,
+		if (ela_parse_http_output_uri(ela_api_url,
 						  &parsed_output_http,
 						  &parsed_output_https,
 						  errbuf,
@@ -365,7 +365,7 @@ int embedded_linux_audit_dispatch(int argc, char **argv)
 		return 2;
 	}
 
-	if (output_tcp && *output_tcp && !fw_audit_is_valid_tcp_output_target(output_tcp)) {
+	if (output_tcp && *output_tcp && !ela_is_valid_tcp_output_target(output_tcp)) {
 		fprintf(stderr,
 			"Invalid --output-tcp target (expected IPv4:port): %s\n\n",
 			output_tcp);
@@ -378,46 +378,46 @@ int embedded_linux_audit_dispatch(int argc, char **argv)
 		return 2;
 	}
 
-	if (setenv("FW_AUDIT_OUTPUT_FORMAT", output_format, 1) != 0) {
-		fprintf(stderr, "Failed to set FW_AUDIT_OUTPUT_FORMAT\n");
+	if (setenv("ELA_OUTPUT_FORMAT", output_format, 1) != 0) {
+		fprintf(stderr, "Failed to set ELA_OUTPUT_FORMAT\n");
 		return 2;
 	}
 
-	if (setenv("FW_AUDIT_VERBOSE", verbose ? "1" : "0", 1) != 0) {
-		fprintf(stderr, "Failed to set FW_AUDIT_VERBOSE\n");
+	if (setenv("ELA_VERBOSE", verbose ? "1" : "0", 1) != 0) {
+		fprintf(stderr, "Failed to set ELA_VERBOSE\n");
 		return 2;
 	}
 
-	if (setenv("FW_AUDIT_OUTPUT_INSECURE", insecure ? "1" : "0", 1) != 0) {
-		fprintf(stderr, "Failed to set FW_AUDIT_OUTPUT_INSECURE\n");
+	if (setenv("ELA_OUTPUT_INSECURE", insecure ? "1" : "0", 1) != 0) {
+		fprintf(stderr, "Failed to set ELA_OUTPUT_INSECURE\n");
 		return 2;
 	}
 
 	if (output_tcp && *output_tcp) {
-		if (setenv("FW_AUDIT_OUTPUT_TCP", output_tcp, 1) != 0) {
-			fprintf(stderr, "Failed to set FW_AUDIT_OUTPUT_TCP\n");
+		if (setenv("ELA_OUTPUT_TCP", output_tcp, 1) != 0) {
+			fprintf(stderr, "Failed to set ELA_OUTPUT_TCP\n");
 			return 2;
 		}
 	} else {
-		unsetenv("FW_AUDIT_OUTPUT_TCP");
+		unsetenv("ELA_OUTPUT_TCP");
 	}
 
 	if (output_http && *output_http) {
-		if (setenv("FW_AUDIT_OUTPUT_HTTP", output_http, 1) != 0) {
-			fprintf(stderr, "Failed to set FW_AUDIT_OUTPUT_HTTP\n");
+		if (setenv("ELA_OUTPUT_HTTP", output_http, 1) != 0) {
+			fprintf(stderr, "Failed to set ELA_OUTPUT_HTTP\n");
 			return 2;
 		}
 	} else {
-		unsetenv("FW_AUDIT_OUTPUT_HTTP");
+		unsetenv("ELA_OUTPUT_HTTP");
 	}
 
 	if (output_https && *output_https) {
-		if (setenv("FW_AUDIT_OUTPUT_HTTPS", output_https, 1) != 0) {
-			fprintf(stderr, "Failed to set FW_AUDIT_OUTPUT_HTTPS\n");
+		if (setenv("ELA_OUTPUT_HTTPS", output_https, 1) != 0) {
+			fprintf(stderr, "Failed to set ELA_OUTPUT_HTTPS\n");
 			return 2;
 		}
 	} else {
-		unsetenv("FW_AUDIT_OUTPUT_HTTPS");
+		unsetenv("ELA_OUTPUT_HTTPS");
 	}
 
 	if (cmd_idx < argc && (!strcmp(argv[cmd_idx], "-h") || !strcmp(argv[cmd_idx], "--help") || !strcmp(argv[cmd_idx], "help"))) {
@@ -438,7 +438,7 @@ int embedded_linux_audit_dispatch(int argc, char **argv)
 	if (!command_summary)
 		command_summary = strdup("unknown");
 	if (command_summary && emit_lifecycle_events)
-		(void)fw_audit_emit_lifecycle_event(output_format,
+		(void)ela_emit_lifecycle_event(output_format,
 			output_tcp,
 			output_http,
 			output_https,
@@ -587,7 +587,7 @@ int embedded_linux_audit_dispatch(int argc, char **argv)
 
 done:
 	if (command_summary && emit_lifecycle_events) {
-		(void)fw_audit_emit_lifecycle_event(output_format,
+		(void)ela_emit_lifecycle_event(output_format,
 			output_tcp,
 			output_http,
 			output_https,

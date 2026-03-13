@@ -91,7 +91,7 @@ static const char *env_http_content_type(void)
 
 static void detect_output_format(void)
 {
-	const char *fmt = getenv("FW_AUDIT_OUTPUT_FORMAT");
+	const char *fmt = getenv("ELA_OUTPUT_FORMAT");
 
 	g_output_format = FW_OUTPUT_TXT;
 	if (!fmt || !*fmt)
@@ -438,11 +438,11 @@ static int flush_output_http_buffer(void)
 	if (g_output_http_len == 0)
 		return 0;
 
-	upload_uri = uboot_http_build_upload_uri(g_output_http_uri, "uboot-environment", NULL);
+	upload_uri = ela_http_build_upload_uri(g_output_http_uri, "uboot-environment", NULL);
 	if (!upload_uri)
 		return -1;
 
-	if (uboot_http_post(upload_uri,
+	if (ela_http_post(upload_uri,
 			 (const uint8_t *)(g_output_http_buf ? g_output_http_buf : ""),
 			 g_output_http_len,
 			 env_http_content_type(),
@@ -543,7 +543,7 @@ static uint64_t parse_u64(const char *s)
 {
 	uint64_t v;
 
-	if (uboot_parse_u64(s, &v)) {
+	if (ela_parse_u64(s, &v)) {
 		err_printf("Invalid number: %s\n", s);
 		exit(2);
 	}
@@ -747,8 +747,8 @@ static MAYBE_UNUSED int parse_fw_config(const char *path, struct uboot_cfg_entry
 			return -1;
 		}
 
-		if (uboot_parse_u64(off_s, &off) || uboot_parse_u64(size_s, &env_size) ||
-		    uboot_parse_u64(erase_s, &erase) || uboot_parse_u64(sec_s, &sec)) {
+		if (ela_parse_u64(off_s, &off) || ela_parse_u64(size_s, &env_size) ||
+		    ela_parse_u64(erase_s, &erase) || ela_parse_u64(sec_s, &sec)) {
 			err_printf("Invalid numeric values in uboot_env.config line: %s\n", s);
 			fclose(fp);
 			return -1;
@@ -1070,8 +1070,8 @@ static MAYBE_UNUSED bool env_crc_matches(const uint8_t *buf, size_t env_size, si
 		return false;
 
 	stored_le = read_le32(buf);
-	stored_be = uboot_read_be32(buf);
-	calc = uboot_crc32_calc(crc32_table, buf + data_off, env_size - data_off);
+	stored_be = ela_read_be32(buf);
+	calc = ela_crc32_calc(crc32_table, buf + data_off, env_size - data_off);
 	if (calc == stored_le) {
 		*is_le = true;
 		return true;
@@ -1343,10 +1343,10 @@ static int scan_dev(const char *dev, uint64_t step, uint64_t env_size, const cha
 			break;
 
 		uint32_t stored_le = read_le32(buf);
-		uint32_t stored_be = uboot_read_be32(buf);
-		uint32_t calc = uboot_crc32_calc(crc32_table, buf + 4, (size_t)env_size - 4);
+		uint32_t stored_be = ela_read_be32(buf);
+		uint32_t calc = ela_crc32_calc(crc32_table, buf + 4, (size_t)env_size - 4);
 		uint32_t calc_redund = (env_size > 5)
-			? uboot_crc32_calc(crc32_table, buf + 5, (size_t)env_size - 5)
+			? ela_crc32_calc(crc32_table, buf + 5, (size_t)env_size - 5)
 			: 0;
 		bool crc_ok_std = (calc == stored_le || calc == stored_be);
 		bool crc_ok_redund = (env_size > 5) && (calc_redund == stored_le || calc_redund == stored_be);
@@ -1431,9 +1431,9 @@ int uboot_env_scan_core_main(int argc, char **argv)
 	uint64_t env_size = 0;
 	const char *hint_override = NULL;
 	const char *dev_override = NULL;
-	const char *output_tcp_target = getenv("FW_AUDIT_OUTPUT_TCP");
-	const char *output_http_target = getenv("FW_AUDIT_OUTPUT_HTTP");
-	const char *output_https_target = getenv("FW_AUDIT_OUTPUT_HTTPS");
+	const char *output_tcp_target = getenv("ELA_OUTPUT_TCP");
+	const char *output_http_target = getenv("ELA_OUTPUT_HTTP");
+	const char *output_https_target = getenv("ELA_OUTPUT_HTTPS");
 	const char *output_config_path = NULL;
 	const char *write_script_path = NULL;
 	char **parse_argv = argv;
@@ -1464,9 +1464,9 @@ int uboot_env_scan_core_main(int argc, char **argv)
 
 	optind = 1;
 	detect_output_format();
-	g_verbose = getenv("FW_AUDIT_VERBOSE") && !strcmp(getenv("FW_AUDIT_VERBOSE"), "1");
+	g_verbose = getenv("ELA_VERBOSE") && !strcmp(getenv("ELA_VERBOSE"), "1");
 	g_bruteforce = false;
-	g_insecure = getenv("FW_AUDIT_OUTPUT_INSECURE") && !strcmp(getenv("FW_AUDIT_OUTPUT_INSECURE"), "1");
+	g_insecure = getenv("ELA_OUTPUT_INSECURE") && !strcmp(getenv("ELA_OUTPUT_INSECURE"), "1");
 	g_csv_header_emitted = false;
 	g_parse_vars = false;
 
@@ -1568,7 +1568,7 @@ int uboot_env_scan_core_main(int argc, char **argv)
 			}
 			close(tmp_fd);
 
-			if (uboot_http_get_to_file(write_script_path,
+			if (ela_http_get_to_file(write_script_path,
 						  downloaded_write_script_path,
 						  g_insecure,
 						  g_verbose,
@@ -1604,7 +1604,7 @@ int uboot_env_scan_core_main(int argc, char **argv)
 	}
 
 	if (output_tcp_target && *output_tcp_target) {
-		g_output_sock = uboot_connect_tcp_ipv4(output_tcp_target);
+		g_output_sock = ela_connect_tcp_ipv4(output_tcp_target);
 		if (g_output_sock < 0) {
 			err_printf("Invalid/failed output target (expected IPv4:port): %s\n", output_tcp_target);
 			ret = 2;
@@ -1636,7 +1636,7 @@ int uboot_env_scan_core_main(int argc, char **argv)
 	}
 
 	if (write_mode && !need_generate_config) {
-		uboot_crc32_init(crc32_table);
+		ela_crc32_init(crc32_table);
 		if (!skip_mtd)
 			uboot_ensure_mtd_nodes_collect(helper_verbose, &created_mtdblock_nodes, &created_mtdblock_count);
 		if (!skip_ubi)
@@ -1656,7 +1656,7 @@ int uboot_env_scan_core_main(int argc, char **argv)
 		}
 	}
 
-	uboot_crc32_init(crc32_table);
+	ela_crc32_init(crc32_table);
 	if (!skip_mtd)
 		uboot_ensure_mtd_nodes_collect(helper_verbose, &created_mtdblock_nodes, &created_mtdblock_count);
 	if (!skip_ubi)

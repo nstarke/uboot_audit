@@ -20,15 +20,15 @@ static void usage(const char *prog)
 int uboot_image_list_commands_main(int argc, char **argv)
 {
 	const char *dev = NULL;
-	const char *output_tcp = getenv("FW_AUDIT_OUTPUT_TCP");
-	const char *output_http = getenv("FW_AUDIT_OUTPUT_HTTP");
-	const char *output_https = getenv("FW_AUDIT_OUTPUT_HTTPS");
+	const char *output_tcp = getenv("ELA_OUTPUT_TCP");
+	const char *output_http = getenv("ELA_OUTPUT_HTTP");
+	const char *output_https = getenv("ELA_OUTPUT_HTTPS");
 	const char *parsed_output_http = NULL;
 	const char *parsed_output_https = NULL;
 	uint64_t offset = 0;
 	bool have_offset = false;
-	bool verbose = getenv("FW_AUDIT_VERBOSE") && !strcmp(getenv("FW_AUDIT_VERBOSE"), "1");
-	bool insecure = getenv("FW_AUDIT_OUTPUT_INSECURE") && !strcmp(getenv("FW_AUDIT_OUTPUT_INSECURE"), "1");
+	bool verbose = getenv("ELA_VERBOSE") && !strcmp(getenv("ELA_VERBOSE"), "1");
+	bool insecure = getenv("ELA_OUTPUT_INSECURE") && !strcmp(getenv("ELA_OUTPUT_INSECURE"), "1");
 	bool send_logs = false;
 	int opt;
 	int rc;
@@ -61,7 +61,7 @@ int uboot_image_list_commands_main(int argc, char **argv)
 			output_tcp = optarg;
 			break;
 		case 'O':
-			if (fw_audit_parse_http_output_uri(optarg,
+			if (ela_parse_http_output_uri(optarg,
 						  &parsed_output_http,
 						  &parsed_output_https,
 						  NULL,

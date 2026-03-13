@@ -57,7 +57,7 @@ static void detect_output_format(struct orom_ctx *ctx)
 	const char *fmt;
 
 	ctx->fmt = OROM_FMT_TXT;
-	fmt = getenv("FW_AUDIT_OUTPUT_FORMAT");
+	fmt = getenv("ELA_OUTPUT_FORMAT");
 	if (!fmt || !*fmt)
 		return;
 	if (!strcmp(fmt, "csv"))
@@ -75,9 +75,9 @@ static void mirror_log_to_remote(struct orom_ctx *ctx, const char *line)
 		return;
 
 	if (ctx->output_uri) {
-		upload_uri = uboot_http_build_upload_uri(ctx->output_uri, "log", NULL);
+		upload_uri = ela_http_build_upload_uri(ctx->output_uri, "log", NULL);
 		if (upload_uri) {
-			(void)uboot_http_post(upload_uri,
+			(void)ela_http_post(upload_uri,
 			(const uint8_t *)line,
 			strlen(line),
 			"text/plain; charset=utf-8",
@@ -90,9 +90,9 @@ static void mirror_log_to_remote(struct orom_ctx *ctx, const char *line)
 	}
 
 	if (ctx->output_tcp) {
-		int sock = uboot_connect_tcp_ipv4(ctx->output_tcp);
+		int sock = ela_connect_tcp_ipv4(ctx->output_tcp);
 		if (sock >= 0) {
-			(void)uboot_send_all(sock, (const uint8_t *)line, strlen(line));
+			(void)ela_send_all(sock, (const uint8_t *)line, strlen(line));
 			close(sock);
 		}
 	}
@@ -215,7 +215,7 @@ static int send_rom_tcp(const char *output_tcp, const char *name, const uint8_t 
 	char hdr[512];
 	int hlen;
 
-	sock = uboot_connect_tcp_ipv4(output_tcp);
+	sock = ela_connect_tcp_ipv4(output_tcp);
 	if (sock < 0)
 		return -1;
 
@@ -225,8 +225,8 @@ static int send_rom_tcp(const char *output_tcp, const char *name, const uint8_t 
 		return -1;
 	}
 
-	if (uboot_send_all(sock, (const uint8_t *)hdr, (size_t)hlen) < 0 ||
-	    uboot_send_all(sock, data, len) < 0) {
+	if (ela_send_all(sock, (const uint8_t *)hdr, (size_t)hlen) < 0 ||
+	    ela_send_all(sock, data, len) < 0) {
 		close(sock);
 		return -1;
 	}
@@ -256,13 +256,13 @@ static int send_rom_http(const char *output_uri,
 	payload[name_len] = '\n';
 	memcpy(payload + name_len + 1, data, len);
 
-	upload_uri = uboot_http_build_upload_uri(output_uri, "orom", name);
+	upload_uri = ela_http_build_upload_uri(output_uri, "orom", name);
 	if (!upload_uri) {
 		free(payload);
 		return -1;
 	}
 
-	rc = uboot_http_post(upload_uri,
+	rc = ela_http_post(upload_uri,
 		(const uint8_t *)payload,
 		name_len + 1 + len,
 		"application/octet-stream",
@@ -486,11 +486,11 @@ int orom_group_main(const char *fw_mode, int argc, char **argv)
 	optind = 1;
 	memset(&ctx, 0, sizeof(ctx));
 	ctx.fw_mode = fw_mode;
-	ctx.verbose = getenv("FW_AUDIT_VERBOSE") && !strcmp(getenv("FW_AUDIT_VERBOSE"), "1");
-	ctx.insecure = getenv("FW_AUDIT_OUTPUT_INSECURE") && !strcmp(getenv("FW_AUDIT_OUTPUT_INSECURE"), "1");
-	ctx.output_tcp = getenv("FW_AUDIT_OUTPUT_TCP");
-	ctx.output_http = getenv("FW_AUDIT_OUTPUT_HTTP");
-	ctx.output_https = getenv("FW_AUDIT_OUTPUT_HTTPS");
+	ctx.verbose = getenv("ELA_VERBOSE") && !strcmp(getenv("ELA_VERBOSE"), "1");
+	ctx.insecure = getenv("ELA_OUTPUT_INSECURE") && !strcmp(getenv("ELA_OUTPUT_INSECURE"), "1");
+	ctx.output_tcp = getenv("ELA_OUTPUT_TCP");
+	ctx.output_http = getenv("ELA_OUTPUT_HTTP");
+	ctx.output_https = getenv("ELA_OUTPUT_HTTPS");
 	detect_output_format(&ctx);
 
 	static const struct option long_opts[] = {
@@ -529,7 +529,7 @@ int orom_group_main(const char *fw_mode, int argc, char **argv)
 			{
 				const char *new_output_http = NULL;
 				const char *new_output_https = NULL;
-				if (fw_audit_parse_http_output_uri(optarg,
+				if (ela_parse_http_output_uri(optarg,
 						      &new_output_http,
 						      &new_output_https,
 						      NULL,
@@ -580,9 +580,9 @@ int orom_group_main(const char *fw_mode, int argc, char **argv)
 	}
 
 	{
-		const char *isa = fw_audit_detect_isa();
+		const char *isa = ela_detect_isa();
 
-		if (!fw_audit_isa_supported_for_efi_bios(isa)) {
+		if (!ela_isa_supported_for_efi_bios(isa)) {
 			fprintf(stderr,
 				"Unsupported ISA for %s group: %s (supported: x86, x86_64, aarch64-be, aarch64-le)\n",
 				fw_mode, isa ? isa : "unknown");

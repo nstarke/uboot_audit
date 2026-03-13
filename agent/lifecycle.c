@@ -90,14 +90,14 @@ static const char *lifecycle_content_type(const char *output_format)
 	return "text/plain; charset=utf-8";
 }
 
-bool fw_audit_lifecycle_logging_enabled(void)
+bool ela_lifecycle_logging_enabled(void)
 {
 	const char *ela_debug = getenv("ELA_DEBUG");
 
 	return ela_debug && !strcmp(ela_debug, "1");
 }
 
-int fw_audit_emit_lifecycle_event(const char *output_format,
+int ela_emit_lifecycle_event(const char *output_format,
 				  const char *output_tcp,
 				  const char *output_http,
 				  const char *output_https,
@@ -110,7 +110,7 @@ int fw_audit_emit_lifecycle_event(const char *output_format,
 	const char *output_uri = output_http && *output_http ? output_http : output_https;
 	char errbuf[256];
 
-	if (!fw_audit_lifecycle_logging_enabled())
+	if (!ela_lifecycle_logging_enabled())
 		return 0;
 
 	if (build_lifecycle_payload(output_format, command, phase, rc, &payload) != 0)
@@ -119,18 +119,18 @@ int fw_audit_emit_lifecycle_event(const char *output_format,
 	fputs(payload, stderr);
 
 	if (output_tcp && *output_tcp) {
-		int sock = uboot_connect_tcp_ipv4(output_tcp);
+		int sock = ela_connect_tcp_ipv4(output_tcp);
 		if (sock >= 0) {
-			(void)uboot_send_all(sock, (const uint8_t *)payload, strlen(payload));
+			(void)ela_send_all(sock, (const uint8_t *)payload, strlen(payload));
 			close(sock);
 		}
 	}
 
 	if (output_uri && *output_uri) {
-		char *upload_uri = uboot_http_build_upload_uri(output_uri, "log", NULL);
+		char *upload_uri = ela_http_build_upload_uri(output_uri, "log", NULL);
 		if (!upload_uri) {
 			fprintf(stderr, "Failed to build HTTP(S) log upload URI for %s\n", output_uri);
-		} else if (uboot_http_post(upload_uri,
+		} else if (ela_http_post(upload_uri,
 					      (const uint8_t *)payload,
 					      strlen(payload),
 					      lifecycle_content_type(output_format),

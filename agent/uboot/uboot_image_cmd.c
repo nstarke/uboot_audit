@@ -67,11 +67,11 @@ static int flush_output_http_buffer(void)
 	if (g_output_http_len == 0)
 		return 0;
 
-	upload_uri = uboot_http_build_upload_uri(g_output_http_uri, "log", NULL);
+	upload_uri = ela_http_build_upload_uri(g_output_http_uri, "log", NULL);
 	if (!upload_uri)
 		return -1;
 
-	if (uboot_http_post(upload_uri,
+	if (ela_http_post(upload_uri,
 			 (const uint8_t *)(g_output_http_buf ? g_output_http_buf : ""),
 			 g_output_http_len,
 			 image_http_content_type(),
@@ -129,7 +129,7 @@ static void emit_v(FILE *stream, const char *fmt, va_list ap)
 
 	if ((size_t)needed < sizeof(stack)) {
 		if (mirror_to_remote && g_log_sock >= 0)
-			uboot_send_all(g_log_sock, (const uint8_t *)stack, (size_t)needed);
+			ela_send_all(g_log_sock, (const uint8_t *)stack, (size_t)needed);
 		if (mirror_to_remote && g_output_http_uri) {
 			size_t need = g_output_http_len + (size_t)needed + 1;
 			if (need > g_output_http_cap) {
@@ -162,7 +162,7 @@ static void emit_v(FILE *stream, const char *fmt, va_list ap)
 	vsnprintf(dyn, (size_t)needed + 1, fmt, aq);
 	va_end(aq);
 	if (mirror_to_remote && g_log_sock >= 0)
-		uboot_send_all(g_log_sock, (const uint8_t *)dyn, (size_t)needed);
+		ela_send_all(g_log_sock, (const uint8_t *)dyn, (size_t)needed);
 	if (mirror_to_remote && g_output_http_uri) {
 		size_t need = g_output_http_len + (size_t)needed + 1;
 		if (need > g_output_http_cap) {
@@ -205,7 +205,7 @@ static void err_printf(const char *fmt, ...)
 
 static void detect_output_format(void)
 {
-	const char *fmt = getenv("FW_AUDIT_OUTPUT_FORMAT");
+	const char *fmt = getenv("ELA_OUTPUT_FORMAT");
 
 	g_output_format = FW_OUTPUT_TXT;
 	if (!fmt || !*fmt)
@@ -318,14 +318,14 @@ static bool str_contains_token_ci(const char *haystack, const char *needle)
 
 static bool validate_fit_header(const uint8_t *p, uint64_t abs_off, uint64_t dev_size)
 {
-	uint32_t totalsize = uboot_read_be32(p + 4);
-	uint32_t off_dt_struct = uboot_read_be32(p + 8);
-	uint32_t off_dt_strings = uboot_read_be32(p + 12);
-	uint32_t off_mem_rsvmap = uboot_read_be32(p + 16);
-	uint32_t version = uboot_read_be32(p + 20);
-	uint32_t last_comp_version = uboot_read_be32(p + 24);
-	uint32_t size_dt_strings = uboot_read_be32(p + 32);
-	uint32_t size_dt_struct = uboot_read_be32(p + 36);
+	uint32_t totalsize = ela_read_be32(p + 4);
+	uint32_t off_dt_struct = ela_read_be32(p + 8);
+	uint32_t off_dt_strings = ela_read_be32(p + 12);
+	uint32_t off_mem_rsvmap = ela_read_be32(p + 16);
+	uint32_t version = ela_read_be32(p + 20);
+	uint32_t last_comp_version = ela_read_be32(p + 24);
+	uint32_t size_dt_strings = ela_read_be32(p + 32);
+	uint32_t size_dt_struct = ela_read_be32(p + 36);
 
 	if (totalsize < FIT_MIN_TOTAL_SIZE || totalsize > FIT_MAX_TOTAL_SIZE)
 		return false;
@@ -359,13 +359,13 @@ static bool validate_uimage_header(const uint8_t *p, uint64_t abs_off, uint64_t 
 	uint32_t data_size;
 
 	memcpy(hdr, p, sizeof(hdr));
-	header_crc = uboot_read_be32(hdr + 4);
+	header_crc = ela_read_be32(hdr + 4);
 	hdr[4] = hdr[5] = hdr[6] = hdr[7] = 0;
-	calc_crc = uboot_crc32_calc(g_crc32_table, hdr, sizeof(hdr));
+	calc_crc = ela_crc32_calc(g_crc32_table, hdr, sizeof(hdr));
 	if (calc_crc != header_crc)
 		return false;
 
-	data_size = uboot_read_be32(p + 12);
+	data_size = ela_read_be32(p + 12);
 	if (data_size == 0 || data_size > UIMAGE_MAX_DATA_SIZE)
 		return false;
 	if (abs_off + UIMAGE_HDR_SIZE + data_size > dev_size)
@@ -416,11 +416,11 @@ static bool fit_find_load_address(const uint8_t *blob,
 	if (!blob || blob_size < 40 || !addr_out)
 		return false;
 
-	total_size = uboot_read_be32(blob + 4);
-	off_dt_struct = uboot_read_be32(blob + 8);
-	off_dt_strings = uboot_read_be32(blob + 12);
-	size_dt_strings = uboot_read_be32(blob + 32);
-	size_dt_struct = uboot_read_be32(blob + 36);
+	total_size = ela_read_be32(blob + 4);
+	off_dt_struct = ela_read_be32(blob + 8);
+	off_dt_strings = ela_read_be32(blob + 12);
+	size_dt_strings = ela_read_be32(blob + 32);
+	size_dt_struct = ela_read_be32(blob + 36);
 
 	if ((uint64_t)off_dt_struct + size_dt_struct > blob_size)
 		return false;
@@ -432,7 +432,7 @@ static bool fit_find_load_address(const uint8_t *blob,
 	strings = (const char *)blob + off_dt_strings;
 
 	while (p + 4 <= end) {
-		uint32_t token = uboot_read_be32(p);
+		uint32_t token = ela_read_be32(p);
 		p += 4;
 
 		switch (token) {
@@ -495,8 +495,8 @@ static bool fit_find_load_address(const uint8_t *blob,
 
 			if (p + 8 > end)
 				return false;
-			len = uboot_read_be32(p);
-			nameoff = uboot_read_be32(p + 4);
+			len = ela_read_be32(p);
+			nameoff = ela_read_be32(p + 4);
 			p += 8;
 			if (nameoff >= size_dt_strings)
 				return false;
@@ -506,9 +506,9 @@ static bool fit_find_load_address(const uint8_t *blob,
 			name = strings + nameoff;
 			data = p;
 			if (!strcmp(name, "load") && len >= 4 && !load_found) {
-				load_value = uboot_read_be32(data);
+				load_value = ela_read_be32(data);
 				if (len >= 8 && load_value == 0)
-					load_value = uboot_read_be32(data + 4);
+					load_value = ela_read_be32(data + 4);
 				load_found = true;
 			}
 
@@ -525,17 +525,17 @@ static bool fit_find_load_address(const uint8_t *blob,
 				}
 
 				if (!strcmp(name, "data-position") && len >= 4) {
-					uint64_t pos = uboot_read_be32(data);
+					uint64_t pos = ela_read_be32(data);
 					if (len >= 8 && pos == 0)
-						pos = uboot_read_be32(data + 4);
+						pos = ela_read_be32(data + 4);
 					image_payload_off_found = true;
 					image_payload_off = pos;
 				}
 
 				if (!strcmp(name, "data-offset") && len >= 4) {
-					uint64_t ext_off = uboot_read_be32(data);
+					uint64_t ext_off = ela_read_be32(data);
 					if (len >= 8 && ext_off == 0)
-						ext_off = uboot_read_be32(data + 4);
+						ext_off = ela_read_be32(data + 4);
 					image_payload_off_found = true;
 					image_payload_off = (uint64_t)total_size + ext_off;
 				}
@@ -879,7 +879,7 @@ static int list_image_commands(const char *dev, uint64_t offset)
 			goto out;
 		}
 
-		data_size = uboot_read_be32(hdr + 12);
+		data_size = ela_read_be32(hdr + 12);
 		total_size = UIMAGE_HDR_SIZE + data_size;
 		image_len = (size_t)total_size;
 		image_blob = malloc(image_len);
@@ -906,7 +906,7 @@ static int list_image_commands(const char *dev, uint64_t offset)
 			goto out;
 		}
 
-		total_size = uboot_read_be32(hdr + 4);
+		total_size = ela_read_be32(hdr + 4);
 		image_len = (size_t)total_size;
 		image_blob = malloc(image_len);
 		if (!image_blob) {
@@ -990,7 +990,7 @@ uint64_t uboot_image_parse_u64(const char *s)
 {
 	uint64_t v;
 
-	if (uboot_parse_u64(s, &v)) {
+	if (ela_parse_u64(s, &v)) {
 		fprintf(stderr, "Invalid number: %s\n", s);
 		exit(2);
 	}
@@ -1045,10 +1045,10 @@ int uboot_image_find_address_execute(const char *dev, uint64_t offset)
 			return 1;
 		}
 		if (g_output_format == FW_OUTPUT_TXT) {
-			out_printf("uImage load address: 0x%08x\n", uboot_read_be32(hdr + 16));
+			out_printf("uImage load address: 0x%08x\n", ela_read_be32(hdr + 16));
 		} else {
 			char value[32];
-			snprintf(value, sizeof(value), "0x%08x", uboot_read_be32(hdr + 16));
+			snprintf(value, sizeof(value), "0x%08x", ela_read_be32(hdr + 16));
 			emit_image_record("image_load_address", dev, offset, "uImage", value);
 		}
 		close(fd);
@@ -1068,7 +1068,7 @@ int uboot_image_find_address_execute(const char *dev, uint64_t offset)
 			return 1;
 		}
 
-		total_size = uboot_read_be32(hdr + 4);
+		total_size = ela_read_be32(hdr + 4);
 		fit_blob = malloc((size_t)total_size);
 		if (!fit_blob) {
 			err_printf("Unable to allocate memory to inspect FIT image\n");
@@ -1146,21 +1146,21 @@ static int pull_image_to_output_tcp(const char *dev, uint64_t offset, const char
 			close(fd);
 			return 1;
 		}
-		total_size = UIMAGE_HDR_SIZE + uboot_read_be32(hdr + 12);
+		total_size = UIMAGE_HDR_SIZE + ela_read_be32(hdr + 12);
 	} else if (!memcmp(hdr, "\xD0\x0D\xFE\xED", 4)) {
 		if (!validate_fit_header(hdr, offset, dev_size ? dev_size : UINT64_MAX)) {
 			err_printf("FIT header validation failed at offset 0x%jx\n", (uintmax_t)offset);
 			close(fd);
 			return 1;
 		}
-		total_size = uboot_read_be32(hdr + 4);
+		total_size = ela_read_be32(hdr + 4);
 	} else {
 		err_printf("Unknown image format at offset 0x%jx\n", (uintmax_t)offset);
 		close(fd);
 		return 1;
 	}
 
-	sock = uboot_connect_tcp_ipv4(output_tcp_target);
+	sock = ela_connect_tcp_ipv4(output_tcp_target);
 	if (sock < 0) {
 		err_printf("Unable to connect to output target %s\n", output_tcp_target);
 		close(fd);
@@ -1173,7 +1173,7 @@ static int pull_image_to_output_tcp(const char *dev, uint64_t offset, const char
 		while (sent < total_size) {
 			size_t want = (size_t)((total_size - sent) > sizeof(buf) ? sizeof(buf) : (total_size - sent));
 			ssize_t n = pread(fd, buf, want, (off_t)(offset + sent));
-			if (n <= 0 || uboot_send_all(sock, buf, (size_t)n) < 0) {
+			if (n <= 0 || ela_send_all(sock, buf, (size_t)n) < 0) {
 				err_printf("Pull failed while sending image bytes\n");
 				close(sock);
 				close(fd);
@@ -1223,14 +1223,14 @@ static int pull_image_to_output_http(const char *dev, uint64_t offset, const cha
 			close(fd);
 			return 1;
 		}
-		total_size = UIMAGE_HDR_SIZE + uboot_read_be32(hdr + 12);
+		total_size = UIMAGE_HDR_SIZE + ela_read_be32(hdr + 12);
 	} else if (!memcmp(hdr, "\xD0\x0D\xFE\xED", 4)) {
 		if (!validate_fit_header(hdr, offset, dev_size ? dev_size : UINT64_MAX)) {
 			err_printf("FIT header validation failed at offset 0x%jx\n", (uintmax_t)offset);
 			close(fd);
 			return 1;
 		}
-		total_size = uboot_read_be32(hdr + 4);
+		total_size = ela_read_be32(hdr + 4);
 	} else {
 		err_printf("Unknown image format at offset 0x%jx\n", (uintmax_t)offset);
 		close(fd);
@@ -1252,7 +1252,7 @@ static int pull_image_to_output_http(const char *dev, uint64_t offset, const cha
 	}
 
 	snprintf(file_path, sizeof(file_path), "%s@0x%jx.bin", dev, (uintmax_t)offset);
-	upload_uri = uboot_http_build_upload_uri(output_http_uri, "uboot-image", file_path);
+	upload_uri = ela_http_build_upload_uri(output_http_uri, "uboot-image", file_path);
 	if (!upload_uri) {
 		err_printf("Failed to build upload URI for %s\n", dev);
 		free(img);
@@ -1260,7 +1260,7 @@ static int pull_image_to_output_http(const char *dev, uint64_t offset, const cha
 		return 1;
 	}
 
-	if (uboot_http_post(upload_uri, img, (size_t)total_size,
+	if (ela_http_post(upload_uri, img, (size_t)total_size,
 			 g_pull_binary_content_type, g_insecure,
 			 g_verbose,
 			 errbuf, sizeof(errbuf)) < 0) {
@@ -1383,9 +1383,9 @@ static int scan_dev_for_image(const char *dev, uint64_t step)
 int uboot_image_scan_main(int argc, char **argv)
 {
 	const char *dev_override = NULL;
-	const char *output_tcp_target = getenv("FW_AUDIT_OUTPUT_TCP");
-	const char *output_http_target = getenv("FW_AUDIT_OUTPUT_HTTP");
-	const char *output_https_target = getenv("FW_AUDIT_OUTPUT_HTTPS");
+	const char *output_tcp_target = getenv("ELA_OUTPUT_TCP");
+	const char *output_http_target = getenv("ELA_OUTPUT_HTTP");
+	const char *output_https_target = getenv("ELA_OUTPUT_HTTPS");
 	uint64_t step = 0x1000;
 	bool skip_mtd = false;
 	bool skip_ubi = false;
@@ -1405,10 +1405,10 @@ int uboot_image_scan_main(int argc, char **argv)
 
 	optind = 1;
 	detect_output_format();
-	g_verbose = getenv("FW_AUDIT_VERBOSE") && !strcmp(getenv("FW_AUDIT_VERBOSE"), "1");
+	g_verbose = getenv("ELA_VERBOSE") && !strcmp(getenv("ELA_VERBOSE"), "1");
 	g_allow_text = false;
 	g_allow_text_pattern = "U-Boot";
-	g_insecure = getenv("FW_AUDIT_OUTPUT_INSECURE") && !strcmp(getenv("FW_AUDIT_OUTPUT_INSECURE"), "1");
+	g_insecure = getenv("ELA_OUTPUT_INSECURE") && !strcmp(getenv("ELA_OUTPUT_INSECURE"), "1");
 	if (argc > 1) {
 		if (!strcmp(argv[1], "pull"))
 			return uboot_image_pull_main(argc - 1, argv + 1);
@@ -1504,14 +1504,14 @@ int uboot_image_scan_main(int argc, char **argv)
 	}
 
 	if (g_send_logs) {
-		g_log_sock = uboot_connect_tcp_ipv4(output_tcp_target);
+		g_log_sock = ela_connect_tcp_ipv4(output_tcp_target);
 		if (g_log_sock < 0) {
 			err_printf("Unable to connect to log output target %s\n", output_tcp_target);
 			return 1;
 		}
 	}
 
-	uboot_crc32_init(g_crc32_table);
+	ela_crc32_init(g_crc32_table);
 
 	if (geteuid() != 0) {
 		err_printf("This program must be run as root.\n");
@@ -1649,14 +1649,14 @@ int uboot_image_prepare(bool verbose,
 	}
 
 	if (g_send_logs) {
-		g_log_sock = uboot_connect_tcp_ipv4(output_tcp_target);
+		g_log_sock = ela_connect_tcp_ipv4(output_tcp_target);
 		if (g_log_sock < 0) {
 			err_printf("Unable to connect to log output target %s\n", output_tcp_target);
 			return 2;
 		}
 	}
 
-	uboot_crc32_init(g_crc32_table);
+	ela_crc32_init(g_crc32_table);
 	return 0;
 }
 

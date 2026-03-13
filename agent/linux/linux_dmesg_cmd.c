@@ -157,11 +157,11 @@ static int flush_output_http_buffer(void)
 	if (g_output_http_len == 0)
 		return 0;
 
-	upload_uri = uboot_http_build_upload_uri(g_output_http_uri, "dmesg", NULL);
+	upload_uri = ela_http_build_upload_uri(g_output_http_uri, "dmesg", NULL);
 	if (!upload_uri)
 		return -1;
 
-	if (uboot_http_post(upload_uri,
+	if (ela_http_post(upload_uri,
 			 (const uint8_t *)(g_output_http_buf ? g_output_http_buf : ""),
 			 g_output_http_len,
 			 "text/plain; charset=utf-8",
@@ -208,9 +208,9 @@ static void usage(const char *prog)
 
 int linux_dmesg_scan_main(int argc, char **argv)
 {
-	const char *output_tcp_target = getenv("FW_AUDIT_OUTPUT_TCP");
-	const char *output_http_target = getenv("FW_AUDIT_OUTPUT_HTTP");
-	const char *output_https_target = getenv("FW_AUDIT_OUTPUT_HTTPS");
+	const char *output_tcp_target = getenv("ELA_OUTPUT_TCP");
+	const char *output_http_target = getenv("ELA_OUTPUT_HTTP");
+	const char *output_https_target = getenv("ELA_OUTPUT_HTTPS");
 	const char *parsed_output_http = NULL;
 	const char *parsed_output_https = NULL;
 	FILE *fp = NULL;
@@ -224,8 +224,8 @@ int linux_dmesg_scan_main(int argc, char **argv)
 	int opt;
 
 	optind = 1;
-	g_verbose = getenv("FW_AUDIT_VERBOSE") && !strcmp(getenv("FW_AUDIT_VERBOSE"), "1");
-	g_insecure = getenv("FW_AUDIT_OUTPUT_INSECURE") && !strcmp(getenv("FW_AUDIT_OUTPUT_INSECURE"), "1");
+	g_verbose = getenv("ELA_VERBOSE") && !strcmp(getenv("ELA_VERBOSE"), "1");
+	g_insecure = getenv("ELA_OUTPUT_INSECURE") && !strcmp(getenv("ELA_OUTPUT_INSECURE"), "1");
 	if (g_output_sock >= 0) {
 		close(g_output_sock);
 		g_output_sock = -1;
@@ -272,7 +272,7 @@ int linux_dmesg_scan_main(int argc, char **argv)
 	}
 
 	if (output_tcp_target && *output_tcp_target) {
-		g_output_sock = uboot_connect_tcp_ipv4(output_tcp_target);
+		g_output_sock = ela_connect_tcp_ipv4(output_tcp_target);
 		if (g_output_sock < 0) {
 			err_printf("Invalid/failed output target (expected IPv4:port): %s\n", output_tcp_target);
 			ret = 2;
@@ -281,7 +281,7 @@ int linux_dmesg_scan_main(int argc, char **argv)
 	}
 
 	if (output_http_target && *output_http_target) {
-		if (fw_audit_parse_http_output_uri(output_http_target,
+		if (ela_parse_http_output_uri(output_http_target,
 						  &parsed_output_http,
 						  &parsed_output_https,
 						  line,

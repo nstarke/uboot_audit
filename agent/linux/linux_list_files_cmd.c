@@ -368,7 +368,7 @@ static int emit_path(const char *path,
 	if (line_len < 0 || (size_t)line_len >= sizeof(line))
 		return -1;
 
-	if (output_sock >= 0 && uboot_send_all(output_sock, (const uint8_t *)line, (size_t)line_len) < 0)
+	if (output_sock >= 0 && ela_send_all(output_sock, (const uint8_t *)line, (size_t)line_len) < 0)
 		return -1;
 
 	if (capture)
@@ -398,7 +398,7 @@ static void report_list_error(const char *output_uri,
 	if (!output_uri)
 		return;
 
-	if (uboot_http_post_log_message(output_uri, msg, insecure, false, errbuf, sizeof(errbuf)) < 0)
+	if (ela_http_post_log_message(output_uri, msg, insecure, false, errbuf, sizeof(errbuf)) < 0)
 		fprintf(stderr, "Failed HTTP(S) POST log to %s: %s\n", output_uri, errbuf[0] ? errbuf : "unknown error");
 }
 
@@ -466,14 +466,14 @@ static int list_files_recursive(const char *dir_path,
 
 int linux_list_files_scan_main(int argc, char **argv)
 {
-	const char *output_tcp = getenv("FW_AUDIT_OUTPUT_TCP");
-	const char *output_http = getenv("FW_AUDIT_OUTPUT_HTTP");
-	const char *output_https = getenv("FW_AUDIT_OUTPUT_HTTPS");
+	const char *output_tcp = getenv("ELA_OUTPUT_TCP");
+	const char *output_http = getenv("ELA_OUTPUT_HTTP");
+	const char *output_https = getenv("ELA_OUTPUT_HTTPS");
 	const char *parsed_output_http = NULL;
 	const char *parsed_output_https = NULL;
 	const char *output_uri = NULL;
 	const char *dir_path = "/";
-	bool insecure = getenv("FW_AUDIT_OUTPUT_INSECURE") && !strcmp(getenv("FW_AUDIT_OUTPUT_INSECURE"), "1");
+	bool insecure = getenv("ELA_OUTPUT_INSECURE") && !strcmp(getenv("ELA_OUTPUT_INSECURE"), "1");
 	bool recursive = false;
 	const char *permissions_arg = NULL;
 	const char *user_arg = NULL;
@@ -561,7 +561,7 @@ int linux_list_files_scan_main(int argc, char **argv)
 	}
 
 	if (output_http && *output_http &&
-	    fw_audit_parse_http_output_uri(output_http,
+	    ela_parse_http_output_uri(output_http,
 					    &parsed_output_http,
 					    &parsed_output_https,
 					    NULL,
@@ -591,7 +591,7 @@ int linux_list_files_scan_main(int argc, char **argv)
 	}
 
 	if (output_tcp && *output_tcp) {
-		output_sock = uboot_connect_tcp_ipv4(output_tcp);
+		output_sock = ela_connect_tcp_ipv4(output_tcp);
 		if (output_sock < 0) {
 			fprintf(stderr, "Invalid/failed output target (expected IPv4:port): %s\n", output_tcp);
 			return 2;
@@ -604,14 +604,14 @@ int linux_list_files_scan_main(int argc, char **argv)
 	}
 
 	if (output_uri) {
-		upload_uri = uboot_http_build_upload_uri(output_uri, "file-list", dir_path);
+		upload_uri = ela_http_build_upload_uri(output_uri, "file-list", dir_path);
 		if (!upload_uri) {
 			fprintf(stderr, "Unable to build upload URI for %s\n", dir_path);
 			ret = 1;
 			goto out;
 		}
 
-		if (uboot_http_post(upload_uri,
+		if (ela_http_post(upload_uri,
 				   (const uint8_t *)(buf.data ? buf.data : ""),
 				   buf.len,
 				   "text/plain; charset=utf-8",

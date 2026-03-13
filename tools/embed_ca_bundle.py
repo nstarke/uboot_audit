@@ -33,10 +33,10 @@ def main() -> int:
     out_path.write_text(
         "// Generated file. Do not edit manually.\n"
         "#include <stddef.h>\n\n"
-        "const unsigned char uboot_default_ca_bundle_pem[] = {\n"
+        "const unsigned char ela_default_ca_bundle_pem[] = {\n"
         f"{body}\n"
         "};\n"
-        "const size_t uboot_default_ca_bundle_pem_len = sizeof(uboot_default_ca_bundle_pem);\n",
+        "const size_t ela_default_ca_bundle_pem_len = sizeof(ela_default_ca_bundle_pem);\n",
         encoding="utf-8",
     )
     return 0

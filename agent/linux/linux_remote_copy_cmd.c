@@ -100,7 +100,7 @@ static void report_remote_copy_http_error(const char *output_uri,
 		return;
 	}
 
-	if (uboot_http_post_log_message(output_uri, message, insecure, verbose, errbuf, sizeof(errbuf)) < 0) {
+	if (ela_http_post_log_message(output_uri, message, insecure, verbose, errbuf, sizeof(errbuf)) < 0) {
 		fprintf(stderr, "Failed HTTP(S) POST log to %s: %s\n", output_uri,
 			errbuf[0] ? errbuf : "unknown error");
 	}
@@ -143,7 +143,7 @@ static int send_symlink_to_http(const char *path, const char *output_uri, bool i
 	}
 	target[target_len] = '\0';
 
-	upload_uri = uboot_http_build_upload_uri(output_uri, "file", path);
+	upload_uri = ela_http_build_upload_uri(output_uri, "file", path);
 	if (!upload_uri) {
 		char message[PATH_MAX + 64];
 		snprintf(message, sizeof(message), "Unable to build upload URI for symlink %s\n", path);
@@ -185,7 +185,7 @@ static int send_symlink_to_http(const char *path, const char *output_uri, bool i
 		upload_uri = final_uri;
 	}
 
-	if (uboot_http_post(upload_uri,
+	if (ela_http_post(upload_uri,
 			   (const uint8_t *)"",
 			   0,
 			   "application/octet-stream",
@@ -218,7 +218,7 @@ static int send_file_to_tcp(const char *path, const char *output_tcp, bool verbo
 		return -1;
 	}
 
-	sock = uboot_connect_tcp_ipv4(output_tcp);
+	sock = ela_connect_tcp_ipv4(output_tcp);
 	if (sock < 0) {
 		fprintf(stderr, "Invalid/failed output target (expected IPv4:port): %s\n", output_tcp);
 		close(fd);
@@ -235,7 +235,7 @@ static int send_file_to_tcp(const char *path, const char *output_tcp, bool verbo
 		}
 		if (n == 0)
 			break;
-		if (uboot_send_all(sock, buf, (size_t)n) < 0) {
+		if (ela_send_all(sock, buf, (size_t)n) < 0) {
 			fprintf(stderr, "Failed sending bytes to %s\n", output_tcp);
 			close(sock);
 			close(fd);
@@ -299,7 +299,7 @@ static int send_file_to_http(const char *path, const char *output_uri, bool inse
 		data_len += (size_t)got;
 	}
 
-	upload_uri = uboot_http_build_upload_uri(output_uri, "file", path);
+	upload_uri = ela_http_build_upload_uri(output_uri, "file", path);
 	if (!upload_uri) {
 		char message[PATH_MAX + 64];
 		snprintf(message, sizeof(message), "Unable to build upload URI for %s\n", path);
@@ -307,7 +307,7 @@ static int send_file_to_http(const char *path, const char *output_uri, bool inse
 		goto out;
 	}
 
-	if (uboot_http_post(upload_uri,
+	if (ela_http_post(upload_uri,
 			   data,
 			   data_len,
 			   "application/octet-stream",
@@ -447,9 +447,9 @@ static int upload_path_http(const char *path,
 
 int linux_remote_copy_scan_main(int argc, char **argv)
 {
-	const char *output_tcp = getenv("FW_AUDIT_OUTPUT_TCP");
-	const char *output_http = getenv("FW_AUDIT_OUTPUT_HTTP");
-	const char *output_https = getenv("FW_AUDIT_OUTPUT_HTTPS");
+	const char *output_tcp = getenv("ELA_OUTPUT_TCP");
+	const char *output_http = getenv("ELA_OUTPUT_HTTP");
+	const char *output_https = getenv("ELA_OUTPUT_HTTPS");
 	const char *output_uri = NULL;
 	const char *path = NULL;
 	struct stat st;
@@ -458,8 +458,8 @@ int linux_remote_copy_scan_main(int argc, char **argv)
 	bool allow_sysfs = false;
 	bool allow_proc = false;
 	bool allow_symlinks = false;
-	bool insecure = getenv("FW_AUDIT_OUTPUT_INSECURE") && !strcmp(getenv("FW_AUDIT_OUTPUT_INSECURE"), "1");
-	bool verbose = getenv("FW_AUDIT_VERBOSE") && !strcmp(getenv("FW_AUDIT_VERBOSE"), "1");
+	bool insecure = getenv("ELA_OUTPUT_INSECURE") && !strcmp(getenv("ELA_OUTPUT_INSECURE"), "1");
+	bool verbose = getenv("ELA_VERBOSE") && !strcmp(getenv("ELA_VERBOSE"), "1");
 	uint64_t copied_files = 0;
 	int opt;
 
@@ -518,7 +518,7 @@ int linux_remote_copy_scan_main(int argc, char **argv)
 		return 2;
 	}
 
-	if (getenv("FW_AUDIT_OUTPUT_HTTP") && getenv("FW_AUDIT_OUTPUT_HTTPS")) {
+	if (getenv("ELA_OUTPUT_HTTP") && getenv("ELA_OUTPUT_HTTPS")) {
 		fprintf(stderr, "Use only one of --output-http or --output-https\n");
 		return 2;
 	}

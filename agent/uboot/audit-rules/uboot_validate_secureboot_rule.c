@@ -366,9 +366,9 @@ static int choose_env_data_offset(const struct embedded_linux_audit_input *input
 		((uint32_t)input->data[1] << 8) |
 		((uint32_t)input->data[2] << 16) |
 		((uint32_t)input->data[3] << 24);
-	stored_be = uboot_read_be32(input->data);
+	stored_be = ela_read_be32(input->data);
 
-	calc_std = uboot_crc32_calc(input->crc32_table, input->data + 4, input->data_len - 4);
+	calc_std = ela_crc32_calc(input->crc32_table, input->data + 4, input->data_len - 4);
 	if (calc_std == stored_le || calc_std == stored_be) {
 		*data_off = 4;
 		return 0;
@@ -377,7 +377,7 @@ static int choose_env_data_offset(const struct embedded_linux_audit_input *input
 	if (input->data_len <= 5)
 		return -1;
 
-	calc_redund = uboot_crc32_calc(input->crc32_table, input->data + 5, input->data_len - 5);
+	calc_redund = ela_crc32_calc(input->crc32_table, input->data + 5, input->data_len - 5);
 	if (calc_redund == stored_le || calc_redund == stored_be) {
 		*data_off = 5;
 		return 0;
@@ -545,4 +545,4 @@ static const struct embedded_linux_audit_rule uboot_validate_secureboot_rule = {
 	.run = run_validate_secureboot,
 };
 
-FW_REGISTER_AUDIT_RULE(uboot_validate_secureboot_rule);
+ELA_REGISTER_RULE(uboot_validate_secureboot_rule);

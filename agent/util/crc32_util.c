@@ -5,7 +5,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-void uboot_crc32_init(uint32_t table[256])
+void ela_crc32_init(uint32_t table[256])
 {
 	const uint32_t poly = 0xEDB88320U;
 
@@ -20,7 +20,7 @@ void uboot_crc32_init(uint32_t table[256])
 	}
 }
 
-uint32_t uboot_crc32_calc(const uint32_t table[256], const uint8_t *buf, size_t len)
+uint32_t ela_crc32_calc(const uint32_t table[256], const uint8_t *buf, size_t len)
 {
 	uint32_t c = 0xFFFFFFFFU;
 

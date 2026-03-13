@@ -289,7 +289,7 @@ int interactive_set_command(int argc, char **argv)
 	}
 
 	if (!strcmp(argv[1], "ELA_OUTPUT_TCP")) {
-		if (!fw_audit_is_valid_tcp_output_target(argv[2])) {
+		if (!ela_is_valid_tcp_output_target(argv[2])) {
 			fprintf(stderr,
 				"Invalid ELA_OUTPUT_TCP target (expected IPv4:port): %s\n",
 				argv[2]);

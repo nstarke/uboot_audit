@@ -24,8 +24,8 @@ int linux_download_file_scan_main(int argc, char **argv)
 {
 	const char *url = NULL;
 	const char *output_path = NULL;
-	bool insecure = getenv("FW_AUDIT_OUTPUT_INSECURE") && !strcmp(getenv("FW_AUDIT_OUTPUT_INSECURE"), "1");
-	bool verbose = getenv("FW_AUDIT_VERBOSE") && !strcmp(getenv("FW_AUDIT_VERBOSE"), "1");
+	bool insecure = getenv("ELA_OUTPUT_INSECURE") && !strcmp(getenv("ELA_OUTPUT_INSECURE"), "1");
+	bool verbose = getenv("ELA_VERBOSE") && !strcmp(getenv("ELA_VERBOSE"), "1");
 	char errbuf[256];
 	struct stat st;
 	uint64_t downloaded_bytes = 0;
@@ -80,7 +80,7 @@ int linux_download_file_scan_main(int argc, char **argv)
 		return 2;
 	}
 
-	if (uboot_http_get_to_file(url, output_path, insecure, verbose, errbuf, sizeof(errbuf)) < 0) {
+	if (ela_http_get_to_file(url, output_path, insecure, verbose, errbuf, sizeof(errbuf)) < 0) {
 		fprintf(stderr, "Failed to download %s to %s: %s\n",
 			url,
 			output_path,
