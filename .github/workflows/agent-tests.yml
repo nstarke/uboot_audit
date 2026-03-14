@@ -14,8 +14,27 @@ permissions:
 
 jobs:
   build-release-binaries:
-    name: build/release-binaries
+    name: build/release-binaries-${{ matrix.isa }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        isa:
+          - arm32-le
+          - arm32-be
+          - aarch64-le
+          - aarch64-be
+          - mips-le
+          - mips-be
+          - mips64-le
+          - mips64-be
+          - powerpc-le
+          - powerpc-be
+          - x86
+          - x86_64
+          - riscv32
+          - riscv64
     steps:
       - name: Skip local release build when using triggering workflow artifacts
         if: ${{ github.event_name == 'workflow_run' }}
@@ -41,16 +60,14 @@ jobs:
         if: ${{ github.event_name != 'workflow_run' }}
         run: |
           set -euo pipefail
-          /bin/sh tests/compile_release_binaries_locally.sh --jobs="$(nproc)" \
-            arm32-le arm32-be aarch64-le aarch64-be mips-le mips-be mips64-le mips64-be \
-            powerpc-le powerpc-be x86 x86_64 riscv32 riscv64
+          /bin/sh tests/compile_release_binaries_locally.sh --jobs="$(nproc)" "${{ matrix.isa }}"
 
       - name: Upload locally built release binaries
         if: ${{ github.event_name != 'workflow_run' }}
         uses: actions/upload-artifact@v4
         with:
-          name: ela-release-binaries
-          path: api/data/release_binaries
+          name: ela-${{ matrix.isa }}
+          path: api/data/release_binaries/${{ matrix.isa }}
 
   shell-tests:
     name: tests/agent/shell
@@ -78,7 +95,7 @@ jobs:
         if: ${{ github.event_name != 'workflow_run' }}
         uses: actions/download-artifact@v4
         with:
-          name: ela-release-binaries
+          name: ela-x86_64
           path: downloaded-release-binaries
 
       - name: Stage native agent binary
@@ -125,7 +142,7 @@ jobs:
         if: ${{ github.event_name != 'workflow_run' }}
         uses: actions/download-artifact@v4
         with:
-          name: ela-release-binaries
+          name: ela-x86_64
           path: downloaded-release-binaries
 
       - name: Stage native agent binary
@@ -202,7 +219,7 @@ jobs:
         if: ${{ github.event_name != 'workflow_run' }}
         uses: actions/download-artifact@v4
         with:
-          name: ela-release-binaries
+          pattern: ela-*
           path: downloaded-release-binaries
 
       - name: Stage downloaded release binaries for qemu tests
