@@ -94,7 +94,7 @@ static void emit_watch_line(const char *line, const char *fmt)
 			goto done;
 		json_object_object_add(obj, "record",  json_object_new_string("dmesg"));
 		json_object_object_add(obj, "message", json_object_new_string(msg));
-		js = json_object_to_json_string_ext(obj, JSON_C_TO_STRING_PLAIN);
+		js = json_object_to_json_string_ext(obj, JSON_C_TO_STRING_PLAIN | JSON_C_TO_STRING_NOSLASHESCAPE);
 		js_len = strlen(js);
 		buf = malloc(js_len + 2U);
 		if (buf) {

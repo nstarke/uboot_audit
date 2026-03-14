@@ -180,7 +180,7 @@ static int emit_record(const char *output_format,
 		json_object_object_add(obj, "attributes", json_object_new_uint64((uint64_t)attributes));
 		json_object_object_add(obj, "size", json_object_new_uint64((uint64_t)data_size));
 		json_object_object_add(obj, "data_hex", json_object_new_string(hex_data));
-		js = json_object_to_json_string_ext(obj, JSON_C_TO_STRING_PLAIN);
+		js = json_object_to_json_string_ext(obj, JSON_C_TO_STRING_PLAIN | JSON_C_TO_STRING_NOSLASHESCAPE);
 		if (output_buffer_append(&line, js) != 0 || output_buffer_append(&line, "\n") != 0) {
 			json_object_put(obj);
 			goto out;

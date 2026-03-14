@@ -272,7 +272,7 @@ void emit_image_record(const char *record, const char *dev, uint64_t off,
 		json_object_object_add(obj, "type", json_object_new_string(type ? type : ""));
 		if (value)
 			json_object_object_add(obj, "value", json_object_new_string(value));
-		out_printf("%s\n", json_object_to_json_string_ext(obj, JSON_C_TO_STRING_PLAIN));
+		out_printf("%s\n", json_object_to_json_string_ext(obj, JSON_C_TO_STRING_PLAIN | JSON_C_TO_STRING_NOSLASHESCAPE));
 		json_object_put(obj);
 	}
 }

@@ -124,7 +124,7 @@ static int emit_symlink(const char *link_path,
 			goto out;
 		json_object_object_add(obj, "link_path",     json_object_new_string(link_path));
 		json_object_object_add(obj, "location_path", json_object_new_string(target_path));
-		js = json_object_to_json_string_ext(obj, JSON_C_TO_STRING_PLAIN);
+		js = json_object_to_json_string_ext(obj, JSON_C_TO_STRING_PLAIN | JSON_C_TO_STRING_NOSLASHESCAPE);
 		if (output_buffer_append(&line, js) != 0 ||
 		    output_buffer_append(&line, "\n") != 0) {
 			json_object_put(obj);

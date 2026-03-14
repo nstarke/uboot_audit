@@ -174,7 +174,7 @@ static void emit_env_candidate_record(const char *dev, uint64_t off,
 		json_object_object_add(obj, "env_size", json_object_new_uint64(env_size));
 		json_object_object_add(obj, "erase_size", json_object_new_uint64(erase_size));
 		json_object_object_add(obj, "sector_count", json_object_new_uint64(sector_count));
-		out_printf("%s\n", json_object_to_json_string_ext(obj, JSON_C_TO_STRING_PLAIN));
+		out_printf("%s\n", json_object_to_json_string_ext(obj, JSON_C_TO_STRING_PLAIN | JSON_C_TO_STRING_NOSLASHESCAPE));
 		json_object_put(obj);
 		return;
 	}
@@ -223,7 +223,7 @@ static void emit_redundant_pair_record(const char *dev, uint64_t a, uint64_t b)
 		json_object_object_add(obj, "device", json_object_new_string(dev));
 		json_object_object_add(obj, "offset_a", json_object_new_uint64(a));
 		json_object_object_add(obj, "offset_b", json_object_new_uint64(b));
-		out_printf("%s\n", json_object_to_json_string_ext(obj, JSON_C_TO_STRING_PLAIN));
+		out_printf("%s\n", json_object_to_json_string_ext(obj, JSON_C_TO_STRING_PLAIN | JSON_C_TO_STRING_NOSLASHESCAPE));
 		json_object_put(obj);
 		return;
 	}
@@ -267,7 +267,7 @@ static void emit_env_verbose(const char *dev, uint64_t off, const char *msg)
 			json_object_object_add(obj, "device", json_object_new_string(dev));
 		json_object_object_add(obj, "offset", json_object_new_uint64(off));
 		json_object_object_add(obj, "message", json_object_new_string(msg));
-		out_printf("%s\n", json_object_to_json_string_ext(obj, JSON_C_TO_STRING_PLAIN));
+		out_printf("%s\n", json_object_to_json_string_ext(obj, JSON_C_TO_STRING_PLAIN | JSON_C_TO_STRING_NOSLASHESCAPE));
 		json_object_put(obj);
 		emitted = true;
 	}
@@ -314,7 +314,7 @@ static void emit_env_scan_start_verbose(const char *dev,
 		json_object_object_add(obj, "step", json_object_new_uint64(step));
 		json_object_object_add(obj, "env_size", json_object_new_uint64(env_size));
 		json_object_object_add(obj, "device_size", json_object_new_uint64(device_size));
-		out_printf("%s\n", json_object_to_json_string_ext(obj, JSON_C_TO_STRING_PLAIN));
+		out_printf("%s\n", json_object_to_json_string_ext(obj, JSON_C_TO_STRING_PLAIN | JSON_C_TO_STRING_NOSLASHESCAPE));
 		json_object_put(obj);
 
 		if (g_output_http_uri && g_output_http_len > 0)
@@ -1162,7 +1162,7 @@ static MAYBE_UNUSED void dump_env_vars(const char *dev, uint64_t env_off,
 			json_object_object_add(obj, "device", json_object_new_string(dev));
 		json_object_object_add(obj, "offset", json_object_new_uint64(env_off));
 		json_object_object_add(obj, "vars", vars_arr);
-		out_printf("%s\n", json_object_to_json_string_ext(obj, JSON_C_TO_STRING_PLAIN));
+		out_printf("%s\n", json_object_to_json_string_ext(obj, JSON_C_TO_STRING_PLAIN | JSON_C_TO_STRING_NOSLASHESCAPE));
 		json_object_put(obj);
 		return;
 	}

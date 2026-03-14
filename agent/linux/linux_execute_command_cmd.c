@@ -118,7 +118,7 @@ static int format_command_output(const char *command,
 			return -1;
 		json_object_object_add(obj, "command", json_object_new_string(command));
 		json_object_object_add(obj, "output",  json_object_new_string(command_output));
-		js = json_object_to_json_string_ext(obj, JSON_C_TO_STRING_PLAIN);
+		js = json_object_to_json_string_ext(obj, JSON_C_TO_STRING_PLAIN | JSON_C_TO_STRING_NOSLASHESCAPE);
 		err = output_buffer_append(formatted, js);
 		if (err == 0)
 			err = output_buffer_append(formatted, "\n");

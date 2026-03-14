@@ -56,7 +56,7 @@ static int build_lifecycle_payload(const char *output_format,
 		json_object_object_add(obj, "phase",           json_object_new_string(phase));
 		json_object_object_add(obj, "command",         json_object_new_string(command));
 		json_object_object_add(obj, "rc",              json_object_new_int(rc));
-		js = json_object_to_json_string_ext(obj, JSON_C_TO_STRING_PLAIN);
+		js = json_object_to_json_string_ext(obj, JSON_C_TO_STRING_PLAIN | JSON_C_TO_STRING_NOSLASHESCAPE);
 		js_len = strlen(js);
 		if (append_bytes(&buf, &len, &cap, js, js_len) != 0 ||
 		    append_text(&buf, &len, &cap, "\n") != 0) {

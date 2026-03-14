@@ -346,7 +346,7 @@ static void emit_record(struct orom_ctx *ctx,
 			json_object_object_add(obj, "type", json_object_new_string(type));
 		if (value)
 			json_object_object_add(obj, "value", json_object_new_string(value));
-		js = json_object_to_json_string_ext(obj, JSON_C_TO_STRING_PLAIN);
+		js = json_object_to_json_string_ext(obj, JSON_C_TO_STRING_PLAIN | JSON_C_TO_STRING_NOSLASHESCAPE);
 		printf("%s\n", js);
 		fflush(stdout);
 		snprintf(line, sizeof(line), "%s\n", js);
