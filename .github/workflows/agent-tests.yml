@@ -230,7 +230,14 @@ jobs:
               done
             done
           else
-            cp -a downloaded-release-binaries/release_binaries/. api/data/release_binaries/
+            local_release_dir="$(find downloaded-release-binaries -type d -name release_binaries | head -n 1)"
+            if [ -z "$local_release_dir" ]; then
+              echo "error: unable to locate downloaded release_binaries directory" >&2
+              find downloaded-release-binaries -maxdepth 5 -print >&2 || true
+              exit 1
+            fi
+
+            cp -a "$local_release_dir"/. api/data/release_binaries/
           fi
 
       - name: Run qemu ISA tests
