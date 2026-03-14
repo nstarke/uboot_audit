@@ -2,9 +2,11 @@
 
 #include "embedded_linux_audit_cmd.h"
 
+#include <csv.h>
 #include <dirent.h>
 #include <errno.h>
 #include <getopt.h>
+#include <json.h>
 #include <limits.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -71,79 +73,21 @@ static int output_buffer_append(struct output_buffer *buf, const char *text)
 	return output_buffer_append_len(buf, text, strlen(text));
 }
 
-static int json_escape_append(struct output_buffer *buf, const char *text)
+static int csv_write_to_buf(struct output_buffer *buf, const char *text)
 {
-	const unsigned char *p = (const unsigned char *)text;
-	char esc[7];
+	const char *in = text ? text : "";
+	size_t in_len = strlen(in);
+	size_t field_sz = (in_len * 2U) + 3U;
+	char *field = malloc(field_sz);
+	size_t written;
+	int ret;
 
-	if (!buf || !text)
+	if (!field)
 		return -1;
-
-	while (*p) {
-		switch (*p) {
-		case '\\':
-			if (output_buffer_append(buf, "\\\\") != 0)
-				return -1;
-			break;
-		case '"':
-			if (output_buffer_append(buf, "\\\"") != 0)
-				return -1;
-			break;
-		case '\b':
-			if (output_buffer_append(buf, "\\b") != 0)
-				return -1;
-			break;
-		case '\f':
-			if (output_buffer_append(buf, "\\f") != 0)
-				return -1;
-			break;
-		case '\n':
-			if (output_buffer_append(buf, "\\n") != 0)
-				return -1;
-			break;
-		case '\r':
-			if (output_buffer_append(buf, "\\r") != 0)
-				return -1;
-			break;
-		case '\t':
-			if (output_buffer_append(buf, "\\t") != 0)
-				return -1;
-			break;
-		default:
-			if (*p < 0x20) {
-				int n = snprintf(esc, sizeof(esc), "\\u%04x", (unsigned int)*p);
-				if (n < 0 || (size_t)n >= sizeof(esc) || output_buffer_append_len(buf, esc, (size_t)n) != 0)
-					return -1;
-			} else if (output_buffer_append_len(buf, (const char *)p, 1) != 0) {
-				return -1;
-			}
-			break;
-		}
-		p++;
-	}
-
-	return 0;
-}
-
-static int csv_escape_append(struct output_buffer *buf, const char *text)
-{
-	const char *p = text;
-
-	if (!buf || !text)
-		return -1;
-
-	if (output_buffer_append(buf, "\"") != 0)
-		return -1;
-
-	while (*p) {
-		if (*p == '"' && output_buffer_append(buf, "\"\"") != 0)
-			return -1;
-		else if (*p != '"' && output_buffer_append_len(buf, p, 1) != 0)
-			return -1;
-		p++;
-	}
-
-	return output_buffer_append(buf, "\"");
+	written = csv_write(field, field_sz, in, in_len);
+	ret = output_buffer_append_len(buf, field, written);
+	free(field);
+	return ret;
 }
 
 static int emit_symlink(const char *link_path,
@@ -166,18 +110,27 @@ static int emit_symlink(const char *link_path,
 		    output_buffer_append(&line, "\n") != 0)
 			goto out;
 	} else if (!strcmp(output_format, "csv")) {
-		if (csv_escape_append(&line, link_path) != 0 ||
+		if (csv_write_to_buf(&line, link_path) != 0 ||
 		    output_buffer_append(&line, ",") != 0 ||
-		    csv_escape_append(&line, target_path) != 0 ||
+		    csv_write_to_buf(&line, target_path) != 0 ||
 		    output_buffer_append(&line, "\n") != 0)
 			goto out;
 	} else if (!strcmp(output_format, "json")) {
-		if (output_buffer_append(&line, "{\"link_path\":\"") != 0 ||
-		    json_escape_append(&line, link_path) != 0 ||
-		    output_buffer_append(&line, "\",\"location_path\":\"") != 0 ||
-		    json_escape_append(&line, target_path) != 0 ||
-		    output_buffer_append(&line, "\"}\n") != 0)
+		json_object *obj;
+		const char *js;
+
+		obj = json_object_new_object();
+		if (!obj)
 			goto out;
+		json_object_object_add(obj, "link_path",     json_object_new_string(link_path));
+		json_object_object_add(obj, "location_path", json_object_new_string(target_path));
+		js = json_object_to_json_string_ext(obj, JSON_C_TO_STRING_PLAIN);
+		if (output_buffer_append(&line, js) != 0 ||
+		    output_buffer_append(&line, "\n") != 0) {
+			json_object_put(obj);
+			goto out;
+		}
+		json_object_put(obj);
 	} else {
 		goto out;
 	}

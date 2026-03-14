@@ -5,6 +5,8 @@
 #include "net/http_client.h"
 #include "util/str_util.h"
 
+#include <csv.h>
+#include <json.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -42,28 +44,53 @@ static int build_lifecycle_payload(const char *output_format,
 		 (int)tm_now.tm_min, (int)tm_now.tm_sec);
 
 	if (!strcmp(fmt, "json")) {
-		if (append_text(&buf, &len, &cap, "{\"record\":\"log\",\"agent_timestamp\":\"") != 0 ||
-		    append_json_escaped(&buf, &len, &cap, ts_buf) != 0 ||
-		    append_text(&buf, &len, &cap, "\",\"phase\":\"") != 0 ||
-		    append_json_escaped(&buf, &len, &cap, phase) != 0 ||
-		    append_text(&buf, &len, &cap, "\",\"command\":\"") != 0 ||
-		    append_json_escaped(&buf, &len, &cap, command) != 0 ||
-		    append_text(&buf, &len, &cap, "\",\"rc\":") != 0 ||
-		    append_text(&buf, &len, &cap, rc_buf) != 0 ||
-		    append_text(&buf, &len, &cap, "}\n") != 0)
+		json_object *obj;
+		const char *js;
+		size_t js_len;
+
+		obj = json_object_new_object();
+		if (!obj)
 			goto fail;
+		json_object_object_add(obj, "record",          json_object_new_string("log"));
+		json_object_object_add(obj, "agent_timestamp", json_object_new_string(ts_buf));
+		json_object_object_add(obj, "phase",           json_object_new_string(phase));
+		json_object_object_add(obj, "command",         json_object_new_string(command));
+		json_object_object_add(obj, "rc",              json_object_new_int(rc));
+		js = json_object_to_json_string_ext(obj, JSON_C_TO_STRING_PLAIN);
+		js_len = strlen(js);
+		if (append_bytes(&buf, &len, &cap, js, js_len) != 0 ||
+		    append_text(&buf, &len, &cap, "\n") != 0) {
+			json_object_put(obj);
+			goto fail;
+		}
+		json_object_put(obj);
 	} else if (!strcmp(fmt, "csv")) {
-		if (append_csv_field(&buf, &len, &cap, "log") != 0 ||
-		    append_text(&buf, &len, &cap, ",") != 0 ||
-		    append_csv_field(&buf, &len, &cap, ts_buf) != 0 ||
-		    append_text(&buf, &len, &cap, ",") != 0 ||
-		    append_csv_field(&buf, &len, &cap, phase) != 0 ||
-		    append_text(&buf, &len, &cap, ",") != 0 ||
-		    append_csv_field(&buf, &len, &cap, command) != 0 ||
-		    append_text(&buf, &len, &cap, ",") != 0 ||
-		    append_csv_field(&buf, &len, &cap, rc_buf) != 0 ||
-		    append_text(&buf, &len, &cap, "\n") != 0)
-			goto fail;
+		const char *vals[5];
+		size_t i;
+
+		vals[0] = "log";
+		vals[1] = ts_buf;
+		vals[2] = phase;
+		vals[3] = command;
+		vals[4] = rc_buf;
+		for (i = 0; i < 5; i++) {
+			const char *in = vals[i];
+			size_t in_len = strlen(in);
+			size_t field_sz = (in_len * 2U) + 3U;
+			char *field = malloc(field_sz);
+			size_t written;
+			int err;
+
+			if (!field)
+				goto fail;
+			written = csv_write(field, field_sz, in, in_len);
+			err = append_bytes(&buf, &len, &cap, field, written);
+			free(field);
+			if (err != 0)
+				goto fail;
+			if (append_text(&buf, &len, &cap, i < 4 ? "," : "\n") != 0)
+				goto fail;
+		}
 	} else {
 		if (append_text(&buf, &len, &cap, "log agent_timestamp=") != 0 ||
 		    append_text(&buf, &len, &cap, ts_buf) != 0 ||

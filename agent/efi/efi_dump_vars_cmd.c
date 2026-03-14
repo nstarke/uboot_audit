@@ -2,6 +2,7 @@
 
 #include "embedded_linux_audit_cmd.h"
 
+#include <csv.h>
 #include <errno.h>
 #include <getopt.h>
 #include <json.h>
@@ -66,24 +67,21 @@ static int output_buffer_append(struct output_buffer *buf, const char *text)
 	return output_buffer_append_len(buf, text, strlen(text));
 }
 
-static int csv_escape_append(struct output_buffer *buf, const char *text)
+static int csv_write_to_buf(struct output_buffer *buf, const char *text)
 {
-	const char *p = text ? text : "";
+	const char *in = text ? text : "";
+	size_t in_len = strlen(in);
+	size_t field_sz = (in_len * 2U) + 3U;
+	char *field = malloc(field_sz);
+	size_t written;
+	int ret;
 
-	if (output_buffer_append(buf, "\"") != 0)
+	if (!field)
 		return -1;
-
-	while (*p) {
-		if (*p == '"') {
-			if (output_buffer_append(buf, "\"\"") != 0)
-				return -1;
-		} else if (output_buffer_append_len(buf, p, 1) != 0) {
-			return -1;
-		}
-		p++;
-	}
-
-	return output_buffer_append(buf, "\"");
+	written = csv_write(field, field_sz, in, in_len);
+	ret = output_buffer_append_len(buf, field, written);
+	free(field);
+	return ret;
 }
 
 static char *hex_encode(const uint8_t *data, size_t len)
@@ -159,15 +157,15 @@ static int emit_record(const char *output_format,
 		    output_buffer_append(&line, "\n") != 0)
 			goto out;
 	} else if (!strcmp(output_format, "csv")) {
-		if (csv_escape_append(&line, guid_str) != 0 ||
+		if (csv_write_to_buf(&line, guid_str) != 0 ||
 		    output_buffer_append(&line, ",") != 0 ||
-		    csv_escape_append(&line, name) != 0 ||
+		    csv_write_to_buf(&line, name) != 0 ||
 		    output_buffer_append(&line, ",") != 0 ||
-		    csv_escape_append(&line, attr_buf) != 0 ||
+		    csv_write_to_buf(&line, attr_buf) != 0 ||
 		    output_buffer_append(&line, ",") != 0 ||
-		    csv_escape_append(&line, size_buf) != 0 ||
+		    csv_write_to_buf(&line, size_buf) != 0 ||
 		    output_buffer_append(&line, ",") != 0 ||
-		    csv_escape_append(&line, hex_data) != 0 ||
+		    csv_write_to_buf(&line, hex_data) != 0 ||
 		    output_buffer_append(&line, "\n") != 0)
 			goto out;
 	} else if (!strcmp(output_format, "json")) {
