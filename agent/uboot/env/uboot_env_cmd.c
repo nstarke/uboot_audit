@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later - Copyright (c) 2026 Nicholas Starke
 
 #include "embedded_linux_audit_cmd.h"
+#include "uboot/env/uboot_env_internal.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -539,6 +540,24 @@ static void err_printf(const char *fmt, ...)
 	va_end(ap);
 }
 
+void uboot_env_out_printf(const char *fmt, ...)
+{
+	va_list ap;
+
+	va_start(ap, fmt);
+	emit_v(stdout, fmt, ap);
+	va_end(ap);
+}
+
+void uboot_env_err_printf(const char *fmt, ...)
+{
+	va_list ap;
+
+	va_start(ap, fmt);
+	emit_v(stderr, fmt, ap);
+	va_end(ap);
+}
+
 static uint64_t parse_u64(const char *s)
 {
 	uint64_t v;
@@ -575,7 +594,7 @@ static bool is_http_write_source(const char *s)
 	return !strncmp(s, "http://", 7) || !strncmp(s, "https://", 8);
 }
 
-static bool uboot_valid_var_name(const char *name)
+bool uboot_valid_var_name(const char *name)
 {
 	if (!name || !*name)
 		return false;
@@ -590,7 +609,7 @@ static bool uboot_valid_var_name(const char *name)
 	return true;
 }
 
-static bool uboot_is_sensitive_env_var(const char *name)
+bool uboot_is_sensitive_env_var(const char *name)
 {
 	static const char *sensitive_vars[] = {
 		"bootcmd",
@@ -614,7 +633,7 @@ static bool uboot_is_sensitive_env_var(const char *name)
 	return false;
 }
 
-static bool uboot_confirm_sensitive_write(const char *name)
+bool uboot_confirm_sensitive_write(const char *name)
 {
 	char answer[32];
 
@@ -627,7 +646,7 @@ static bool uboot_confirm_sensitive_write(const char *name)
 	return answer[0] == 'Y' || answer[0] == 'y';
 }
 
-static char *uboot_trim(char *s)
+char *uboot_trim(char *s)
 {
 	char *end;
 
@@ -918,87 +937,6 @@ static MAYBE_UNUSED int apply_write_script(const char *script_path, struct env_k
 	return 0;
 }
 
-static int apply_write_script_libuboot(const char *script_path, struct uboot_ctx *ctx)
-{
-	FILE *fp;
-	char line[4096];
-	unsigned long lineno = 0;
-
-	if (!script_path || !ctx)
-		return -1;
-
-	fp = fopen(script_path, "r");
-	if (!fp) {
-		err_printf("Cannot open write script %s: %s\n", script_path, strerror(errno));
-		return -1;
-	}
-
-	while (fgets(line, sizeof(line), fp)) {
-		char *s;
-		char *name;
-		char *value = NULL;
-		char *eq;
-		char *space;
-		bool delete_var = false;
-
-		lineno++;
-		s = uboot_trim(line);
-		if (!*s || *s == '#')
-			continue;
-
-		eq = strchr(s, '=');
-		space = strpbrk(s, " \t");
-		if (eq && (!space || eq < space)) {
-			*eq = '\0';
-			name = uboot_trim(s);
-			value = eq + 1;
-		} else {
-			if (space) {
-				*space = '\0';
-				name = uboot_trim(s);
-				value = uboot_trim(space + 1);
-				if (!*value)
-					delete_var = true;
-			} else {
-				name = uboot_trim(s);
-				delete_var = true;
-			}
-		}
-
-		if (!uboot_valid_var_name(name)) {
-			err_printf("Invalid variable name at %s:%lu\n", script_path, lineno);
-			fclose(fp);
-			return -1;
-		}
-
-		if (uboot_is_sensitive_env_var(name) && !uboot_confirm_sensitive_write(name)) {
-			out_printf("Skipping update for %s\n", name);
-			continue;
-		}
-
-		if (delete_var) {
-			if (libuboot_set_env(ctx, name, NULL) < 0) {
-				err_printf("Failed to delete variable '%s' via libubootenv\n", name);
-				fclose(fp);
-				return -1;
-			}
-			continue;
-		}
-
-		if (!value)
-			value = "";
-
-		if (libuboot_set_env(ctx, name, value) < 0) {
-			err_printf("Failed to set variable '%s' via libubootenv\n", name);
-			fclose(fp);
-			return -1;
-		}
-	}
-
-	fclose(fp);
-	return 0;
-}
-
 static MAYBE_UNUSED int build_env_region(const struct env_kv *kvs, size_t count, uint8_t *out, size_t out_len)
 {
 	size_t pos = 0;
@@ -1109,48 +1047,6 @@ static MAYBE_UNUSED int write_env_copy(const struct uboot_cfg_entry *cfg, const 
 
 	close(fd);
 	return 0;
-}
-
-static int perform_write_operation(const char *config_path, const char *script_path)
-{
-	struct uboot_ctx *ctx = NULL;
-	int ret = 1;
-
-	if (!config_path || !script_path)
-		return 1;
-
-	if (libuboot_initialize(&ctx, NULL) < 0 || !ctx) {
-		err_printf("libubootenv initialization failed\n");
-		goto out;
-	}
-
-	if (libuboot_read_config(ctx, config_path) < 0) {
-		err_printf("libubootenv failed reading config %s\n", config_path);
-		goto out;
-	}
-
-	if (libuboot_open(ctx) < 0) {
-		err_printf("libubootenv failed opening current environment from %s\n", config_path);
-		goto out;
-	}
-
-	if (apply_write_script_libuboot(script_path, ctx))
-		goto out;
-
-	if (libuboot_env_store(ctx) < 0) {
-		err_printf("libubootenv failed storing updated environment\n");
-		goto out;
-	}
-
-	out_printf("Environment write complete using %s\n", config_path);
-	ret = 0;
-
-out:
-	if (ctx) {
-		libuboot_close(ctx);
-		libuboot_exit(ctx);
-	}
-	return ret;
 }
 
 static bool has_hint_var(const uint8_t *data, size_t len, const char *hint_override)

@@ -2,6 +2,7 @@
 
 #include "embedded_linux_audit_cmd.h"
 #include "uboot/image/uboot_image_cmd.h"
+#include "uboot/image/uboot_image_internal.h"
 
 #include <errno.h>
 #include <arpa/inet.h>
@@ -24,39 +25,26 @@
 #include <json.h>
 #include <csv.h>
 
-#ifndef O_CLOEXEC
-#define O_CLOEXEC 0
-#endif
+/* Global state definitions (authoritative) */
+bool g_verbose;
+bool g_allow_text;
+const char *g_allow_text_pattern = "U-Boot";
+bool g_send_logs;
+bool g_insecure;
+uint32_t g_crc32_table[256];
+int g_log_sock = -1;
+const char *g_pull_binary_content_type = "application/octet-stream";
+const char *g_output_http_uri = NULL;
+char *g_output_http_buf = NULL;
+size_t g_output_http_len;
+size_t g_output_http_cap;
+enum uboot_output_format g_output_format = FW_OUTPUT_TXT;
+bool g_csv_header_emitted;
 
-#define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
-#define UIMAGE_HDR_SIZE 64U
-#define FIT_MIN_TOTAL_SIZE 0x100U
-#define FIT_MAX_TOTAL_SIZE (64U * 1024U * 1024U)
-#define UIMAGE_MAX_DATA_SIZE (256U * 1024U * 1024U)
-
-static bool g_verbose;
-static bool g_allow_text;
-static const char *g_allow_text_pattern = "U-Boot";
-static bool g_send_logs;
-static bool g_insecure;
-static uint32_t g_crc32_table[256];
-static int g_log_sock = -1;
-static const char *g_pull_binary_content_type = "application/octet-stream";
-static const char *g_output_http_uri = NULL;
-static char *g_output_http_buf = NULL;
-static size_t g_output_http_len;
-static size_t g_output_http_cap;
-enum uboot_output_format {
-	FW_OUTPUT_TXT = 0,
-	FW_OUTPUT_CSV,
-	FW_OUTPUT_JSON,
-};
-static enum uboot_output_format g_output_format = FW_OUTPUT_TXT;
-static bool g_csv_header_emitted;
 static const char *image_http_content_type(void);
 static void err_printf(const char *fmt, ...);
 
-static int flush_output_http_buffer(void)
+int flush_output_http_buffer(void)
 {
 	char errbuf[256];
 	char *upload_uri;
@@ -203,6 +191,22 @@ static void err_printf(const char *fmt, ...)
 	va_end(ap);
 }
 
+void uboot_img_out_printf(const char *fmt, ...)
+{
+	va_list ap;
+	va_start(ap, fmt);
+	emit_v(stdout, fmt, ap);
+	va_end(ap);
+}
+
+void uboot_img_err_printf(const char *fmt, ...)
+{
+	va_list ap;
+	va_start(ap, fmt);
+	emit_v(stderr, fmt, ap);
+	va_end(ap);
+}
+
 static void detect_output_format(void)
 {
 	const char *fmt = getenv("ELA_OUTPUT_FORMAT");
@@ -241,8 +245,8 @@ static void csv_out_field(const char *s)
 	free(buf);
 }
 
-static void emit_image_record(const char *record, const char *dev, uint64_t off,
-			      const char *type, const char *value)
+void emit_image_record(const char *record, const char *dev, uint64_t off,
+		       const char *type, const char *value)
 {
 	if (g_output_format == FW_OUTPUT_CSV) {
 		char off_s[32];
@@ -273,7 +277,7 @@ static void emit_image_record(const char *record, const char *dev, uint64_t off,
 	}
 }
 
-static void emit_image_verbose(const char *dev, uint64_t off, const char *msg)
+void emit_image_verbose(const char *dev, uint64_t off, const char *msg)
 {
 	bool emitted = false;
 
@@ -316,7 +320,7 @@ static bool str_contains_token_ci(const char *haystack, const char *needle)
 	return false;
 }
 
-static bool validate_fit_header(const uint8_t *p, uint64_t abs_off, uint64_t dev_size)
+bool validate_fit_header(const uint8_t *p, uint64_t abs_off, uint64_t dev_size)
 {
 	uint32_t totalsize = ela_read_be32(p + 4);
 	uint32_t off_dt_struct = ela_read_be32(p + 8);
@@ -351,7 +355,7 @@ static bool validate_fit_header(const uint8_t *p, uint64_t abs_off, uint64_t dev
 	return true;
 }
 
-static bool validate_uimage_header(const uint8_t *p, uint64_t abs_off, uint64_t dev_size)
+bool validate_uimage_header(const uint8_t *p, uint64_t abs_off, uint64_t dev_size)
 {
 	uint8_t hdr[UIMAGE_HDR_SIZE];
 	uint32_t header_crc;
@@ -374,11 +378,11 @@ static bool validate_uimage_header(const uint8_t *p, uint64_t abs_off, uint64_t 
 	return true;
 }
 
-static bool fit_find_load_address(const uint8_t *blob,
-				  size_t blob_size,
-				  uint32_t *addr_out,
-				  uint64_t *uboot_off_out,
-				  bool *uboot_off_found_out)
+bool fit_find_load_address(const uint8_t *blob,
+			   size_t blob_size,
+			   uint32_t *addr_out,
+			   uint64_t *uboot_off_out,
+			   bool *uboot_off_found_out)
 {
 	const uint32_t FDT_BEGIN_NODE = 1;
 	const uint32_t FDT_END_NODE = 2;
@@ -559,731 +563,6 @@ static bool fit_find_load_address(const uint8_t *blob,
 	return load_found;
 }
 
-struct extracted_command {
-	char *name;
-	unsigned int hits;
-	int best_occ_score;
-	bool known;
-	bool context_seen;
-};
-
-static bool is_printable_ascii(uint8_t c)
-{
-	return c >= 0x20 && c <= 0x7e;
-}
-
-static bool token_in_list_ci(const char *token, const char *const *list, size_t list_count)
-{
-	for (size_t i = 0; i < list_count; i++) {
-		if (!strcasecmp(token, list[i]))
-			return true;
-	}
-	return false;
-}
-
-static bool bytes_contains_token_ci(const uint8_t *buf, size_t len, const char *needle)
-{
-	size_t nlen;
-
-	if (!buf || !needle)
-		return false;
-
-	nlen = strlen(needle);
-	if (!nlen || len < nlen)
-		return false;
-
-	for (size_t i = 0; i + nlen <= len; i++) {
-		size_t j = 0;
-		for (; j < nlen; j++) {
-			if (tolower((unsigned char)buf[i + j]) != tolower((unsigned char)needle[j]))
-				break;
-		}
-		if (j == nlen)
-			return true;
-	}
-
-	return false;
-}
-
-static bool token_has_command_context(const uint8_t *buf, size_t len, size_t start, size_t end)
-{
-	static const char *const ctx_needles[] = {
-		"unknown command",
-		"list of commands",
-		"commands",
-		"usage:",
-		"help",
-		"cmd"
-	};
-	size_t lo = (start > 96U) ? (start - 96U) : 0U;
-	size_t hi = end + 96U;
-
-	if (hi > len)
-		hi = len;
-	if (hi <= lo)
-		return false;
-
-	for (size_t i = 0; i < ARRAY_SIZE(ctx_needles); i++) {
-		if (bytes_contains_token_ci(buf + lo, hi - lo, ctx_needles[i]))
-			return true;
-	}
-
-	return false;
-}
-
-static bool token_looks_like_command_name(const char *s)
-{
-	size_t len;
-	bool has_alpha = false;
-
-	if (!s)
-		return false;
-
-	len = strlen(s);
-	if (len < 2 || len > 32)
-		return false;
-
-	for (size_t i = 0; i < len; i++) {
-		unsigned char c = (unsigned char)s[i];
-		if (!(isalnum(c) || c == '_' || c == '-' || c == '.'))
-			return false;
-		if (isalpha(c))
-			has_alpha = true;
-	}
-
-	if (!has_alpha)
-		return false;
-	if (!isalpha((unsigned char)s[0]))
-		return false;
-
-	return true;
-}
-
-static int find_extracted_command(struct extracted_command *cmds, size_t count, const char *name)
-{
-	for (size_t i = 0; i < count; i++) {
-		if (!strcmp(cmds[i].name, name))
-			return (int)i;
-	}
-	return -1;
-}
-
-static int add_extracted_command(struct extracted_command **cmds,
-					 size_t *count,
-					 const char *name,
-					 int occ_score,
-					 bool known,
-					 bool context_seen)
-{
-	int idx = find_extracted_command(*cmds, *count, name);
-
-	if (idx >= 0) {
-		struct extracted_command *c = &(*cmds)[(size_t)idx];
-		c->hits++;
-		if (occ_score > c->best_occ_score)
-			c->best_occ_score = occ_score;
-		if (known)
-			c->known = true;
-		if (context_seen)
-			c->context_seen = true;
-		return 0;
-	}
-
-	struct extracted_command *tmp = realloc(*cmds, (*count + 1U) * sizeof(**cmds));
-	if (!tmp)
-		return -1;
-	*cmds = tmp;
-
-	tmp[*count].name = strdup(name);
-	if (!tmp[*count].name)
-		return -1;
-	tmp[*count].hits = 1;
-	tmp[*count].best_occ_score = occ_score;
-	tmp[*count].known = known;
-	tmp[*count].context_seen = context_seen;
-	(*count)++;
-
-	return 0;
-}
-
-static int extracted_command_final_score(const struct extracted_command *c)
-{
-	int score;
-
-	if (!c)
-		return 0;
-
-	score = c->best_occ_score;
-	if (c->known)
-		score += 2;
-	if (c->context_seen)
-		score += 1;
-	if (c->hits > 1) {
-		unsigned int extra = c->hits - 1;
-		if (extra > 3)
-			extra = 3;
-		score += (int)extra;
-	}
-
-	return score;
-}
-
-static const char *confidence_from_score(int score)
-{
-	if (score >= 10)
-		return "high";
-	if (score >= 7)
-		return "medium";
-	return "low";
-}
-
-static int extracted_command_cmp(const void *a, const void *b)
-{
-	const struct extracted_command *ca = (const struct extracted_command *)a;
-	const struct extracted_command *cb = (const struct extracted_command *)b;
-	int sa = extracted_command_final_score(ca);
-	int sb = extracted_command_final_score(cb);
-
-	if (sa != sb)
-		return sb - sa;
-
-	return strcmp(ca->name, cb->name);
-}
-
-static int extract_commands_from_blob(const uint8_t *blob,
-				      size_t blob_len,
-				      struct extracted_command **out_cmds,
-				      size_t *out_count)
-{
-	static const char *const known_cmds[] = {
-		"help", "printenv", "setenv", "env", "saveenv", "run", "echo", "version",
-		"bdinfo", "boot", "bootm", "booti", "bootz", "bootd", "source", "reset",
-		"mm", "mw", "md", "cmp", "cp", "go", "load", "loadb", "loadx", "loady",
-		"fatload", "fatls", "ext4load", "ext4ls", "nand", "ubi", "ubifsmount",
-		"ubifsls", "ubifsload", "sf", "mmc", "usb", "dhcp", "tftpboot", "ping",
-		"crc32", "iminfo", "imls", "fdt", "itest", "true", "false", "sleep"
-	};
-	static const char *const stop_tokens[] = {
-		"u-boot", "usage", "unknown", "command", "commands", "description",
-		"firmware", "images", "image", "load", "data", "hash", "signature", "algo"
-	};
-	struct extracted_command *cmds = NULL;
-	size_t count = 0;
-	char token[64];
-
-	if (!blob || !blob_len || !out_cmds || !out_count)
-		return -1;
-
-	for (size_t i = 0; i < blob_len;) {
-		size_t start = i;
-		size_t end;
-		size_t len;
-		bool known;
-		bool context_seen;
-		bool has_upper = false;
-		bool has_sep = false;
-		int occ_score = 0;
-
-		if (!is_printable_ascii(blob[i])) {
-			i++;
-			continue;
-		}
-
-		while (i < blob_len && is_printable_ascii(blob[i]))
-			i++;
-		end = i;
-		len = end - start;
-
-		if (len >= sizeof(token))
-			continue;
-
-		memcpy(token, blob + start, len);
-		token[len] = '\0';
-
-		if (!token_looks_like_command_name(token))
-			continue;
-
-		for (size_t j = 0; j < len; j++) {
-			if (isupper((unsigned char)token[j]))
-				has_upper = true;
-			if (token[j] == '-' || token[j] == '_')
-				has_sep = true;
-		}
-
-		if (token_in_list_ci(token, stop_tokens, ARRAY_SIZE(stop_tokens)))
-			continue;
-
-		known = token_in_list_ci(token, known_cmds, ARRAY_SIZE(known_cmds));
-		context_seen = token_has_command_context(blob, blob_len, start, end);
-
-		if (known)
-			occ_score += 3;
-		if (context_seen)
-			occ_score += 3;
-		if (!has_upper)
-			occ_score += 1;
-		if (len >= 3 && len <= 12)
-			occ_score += 1;
-		if (has_sep)
-			occ_score += 1;
-
-		if (occ_score < 2)
-			continue;
-
-		if (add_extracted_command(&cmds, &count, token, occ_score, known, context_seen) < 0) {
-			for (size_t k = 0; k < count; k++)
-				free(cmds[k].name);
-			free(cmds);
-			return -1;
-		}
-	}
-
-	if (count)
-		qsort(cmds, count, sizeof(*cmds), extracted_command_cmp);
-
-	*out_cmds = cmds;
-	*out_count = count;
-	return 0;
-}
-
-static int list_image_commands(const char *dev, uint64_t offset)
-{
-	uint8_t hdr[UIMAGE_HDR_SIZE];
-	uint64_t dev_size = uboot_guess_size_any(dev);
-	uint8_t *image_blob = NULL;
-	size_t image_len = 0;
-	const uint8_t *payload = NULL;
-	size_t payload_len = 0;
-	struct extracted_command *cmds = NULL;
-	size_t cmd_count = 0;
-	int fd;
-	int rc = 1;
-
-	fd = open(dev, O_RDONLY | O_CLOEXEC);
-	if (fd < 0) {
-		err_printf("Cannot open %s: %s\n", dev, strerror(errno));
-		return 1;
-	}
-
-	if (pread(fd, hdr, sizeof(hdr), (off_t)offset) != (ssize_t)sizeof(hdr)) {
-		err_printf("Unable to read image header from %s @ 0x%jx\n", dev, (uintmax_t)offset);
-		goto out;
-	}
-
-	if (!memcmp(hdr, "\x27\x05\x19\x56", 4)) {
-		uint32_t total_size;
-		uint32_t data_size;
-
-		if (!validate_uimage_header(hdr, offset, dev_size ? dev_size : UINT64_MAX)) {
-			err_printf("uImage header validation failed at offset 0x%jx\n", (uintmax_t)offset);
-			goto out;
-		}
-
-		data_size = ela_read_be32(hdr + 12);
-		total_size = UIMAGE_HDR_SIZE + data_size;
-		image_len = (size_t)total_size;
-		image_blob = malloc(image_len);
-		if (!image_blob) {
-			err_printf("Unable to allocate memory to inspect uImage\n");
-			goto out;
-		}
-
-		if (pread(fd, image_blob, image_len, (off_t)offset) != (ssize_t)image_len) {
-			err_printf("Unable to read full uImage for command extraction\n");
-			goto out;
-		}
-
-		payload = image_blob + UIMAGE_HDR_SIZE;
-		payload_len = data_size;
-	} else if (!memcmp(hdr, "\xD0\x0D\xFE\xED", 4)) {
-		uint32_t total_size;
-		uint64_t uboot_off = 0;
-		bool uboot_off_found = false;
-		uint32_t unused_addr = 0;
-
-		if (!validate_fit_header(hdr, offset, dev_size ? dev_size : UINT64_MAX)) {
-			err_printf("FIT header validation failed at offset 0x%jx\n", (uintmax_t)offset);
-			goto out;
-		}
-
-		total_size = ela_read_be32(hdr + 4);
-		image_len = (size_t)total_size;
-		image_blob = malloc(image_len);
-		if (!image_blob) {
-			err_printf("Unable to allocate memory to inspect FIT image\n");
-			goto out;
-		}
-
-		if (pread(fd, image_blob, image_len, (off_t)offset) != (ssize_t)image_len) {
-			err_printf("Unable to read full FIT image for command extraction\n");
-			goto out;
-		}
-
-		(void)fit_find_load_address(image_blob,
-					    image_len,
-					    &unused_addr,
-					    &uboot_off,
-					    &uboot_off_found);
-
-		if (uboot_off_found && uboot_off < image_len) {
-			payload = image_blob + (size_t)uboot_off;
-			payload_len = image_len - (size_t)uboot_off;
-		} else {
-			payload = image_blob;
-			payload_len = image_len;
-		}
-	} else {
-		err_printf("Unknown image format at offset 0x%jx\n", (uintmax_t)offset);
-		goto out;
-	}
-
-	if (extract_commands_from_blob(payload, payload_len, &cmds, &cmd_count) < 0) {
-		err_printf("Failed command extraction from image payload\n");
-		goto out;
-	}
-
-	if (!cmd_count) {
-		if (g_output_format == FW_OUTPUT_TXT)
-			out_printf("No likely U-Boot commands extracted from image bytes.\n");
-		else
-			emit_image_record("image_command", dev, offset, "low", "none");
-		rc = 0;
-		goto out;
-	}
-
-	bool emitted_any = false;
-	for (size_t i = 0; i < cmd_count; i++) {
-		int score = extracted_command_final_score(&cmds[i]);
-		const char *confidence = confidence_from_score(score);
-
-		if (score < 5)
-			continue;
-		emitted_any = true;
-
-		if (g_output_format == FW_OUTPUT_TXT) {
-			out_printf("image command: %s offset=0x%jx command=%s confidence=%s score=%d hits=%u\n",
-				dev, (uintmax_t)offset, cmds[i].name, confidence, score, cmds[i].hits);
-		} else {
-			emit_image_record("image_command", dev, offset, confidence, cmds[i].name);
-		}
-	}
-
-	if (!emitted_any) {
-		if (g_output_format == FW_OUTPUT_TXT)
-			out_printf("No likely U-Boot commands extracted from image bytes.\n");
-		else
-			emit_image_record("image_command", dev, offset, "low", "none");
-	}
-
-	rc = 0;
-
-out:
-	for (size_t i = 0; i < cmd_count; i++)
-		free(cmds[i].name);
-	free(cmds);
-	free(image_blob);
-	close(fd);
-	return rc;
-}
-
-uint64_t uboot_image_parse_u64(const char *s)
-{
-	uint64_t v;
-
-	if (ela_parse_u64(s, &v)) {
-		fprintf(stderr, "Invalid number: %s\n", s);
-		exit(2);
-	}
-	return v;
-}
-
-static void usage(const char *prog)
-{
-	fprintf(stderr,
-		"Usage: %s [--dev <device>] [--step <bytes>] [--allow-text]\n"
-		"       %s [--skip-remove] [--skip-mtd] [--skip-ubi] [--skip-sd] [--skip-emmc]\n"
-		"       %s pull --dev <device> --offset <bytes>\n"
-		"       %s find-address --dev <device> --offset <bytes>\n"
-		"       %s list-commands --dev <device> --offset <bytes>\n"
-		"  no args: scan /dev/mtdblock*, /dev/ubi*_*, /dev/ubiblock*_*, /dev/mmcblk* and /dev/sd* for U-Boot image signatures\n"
-		"  --dev: scan only a specific device\n"
-		"  --step: step size when scanning (default: 0x1000)\n"
-		"  --allow-text[=<text>]: also match plain text (default: 'U-Boot'; higher false-positive risk)\n"
-		"  --skip-remove: keep any helper /dev nodes created during scan\n"
-		"  --skip-mtd: skip mtdblock scan targets\n"
-		"  --skip-ubi: skip UBI and ubiblock scan targets\n"
-		"  --skip-sd: skip /dev/sd* scan targets\n"
-		"  --skip-emmc: skip /dev/mmcblk* scan targets\n"
-		"  pull: read image from --dev at --offset and stream bytes to a remote destination\n"
-		"  find-address: print image load address from header/FIT data\n"
-		"  list-commands: best-effort extraction of command names from image bytes\n",
-		prog, prog, prog, prog, prog);
-}
-
-int uboot_image_find_address_execute(const char *dev, uint64_t offset)
-{
-	uint8_t hdr[UIMAGE_HDR_SIZE];
-	uint64_t dev_size = uboot_guess_size_any(dev);
-	int fd;
-
-	fd = open(dev, O_RDONLY | O_CLOEXEC);
-	if (fd < 0) {
-		err_printf("Cannot open %s: %s\n", dev, strerror(errno));
-		return 1;
-	}
-
-	if (pread(fd, hdr, sizeof(hdr), (off_t)offset) != (ssize_t)sizeof(hdr)) {
-		err_printf("Unable to read image header from %s @ 0x%jx\n", dev, (uintmax_t)offset);
-		close(fd);
-		return 1;
-	}
-
-	if (!memcmp(hdr, "\x27\x05\x19\x56", 4)) {
-		if (!validate_uimage_header(hdr, offset, dev_size ? dev_size : UINT64_MAX)) {
-			err_printf("uImage header validation failed at offset 0x%jx\n", (uintmax_t)offset);
-			close(fd);
-			return 1;
-		}
-		if (g_output_format == FW_OUTPUT_TXT) {
-			out_printf("uImage load address: 0x%08x\n", ela_read_be32(hdr + 16));
-		} else {
-			char value[32];
-			snprintf(value, sizeof(value), "0x%08x", ela_read_be32(hdr + 16));
-			emit_image_record("image_load_address", dev, offset, "uImage", value);
-		}
-		close(fd);
-		return 0;
-	}
-
-	if (!memcmp(hdr, "\xD0\x0D\xFE\xED", 4)) {
-		uint32_t total_size;
-		uint8_t *fit_blob;
-		uint32_t load_addr;
-		uint64_t uboot_off = 0;
-		bool uboot_off_found = false;
-
-		if (!validate_fit_header(hdr, offset, dev_size ? dev_size : UINT64_MAX)) {
-			err_printf("FIT header validation failed at offset 0x%jx\n", (uintmax_t)offset);
-			close(fd);
-			return 1;
-		}
-
-		total_size = ela_read_be32(hdr + 4);
-		fit_blob = malloc((size_t)total_size);
-		if (!fit_blob) {
-			err_printf("Unable to allocate memory to inspect FIT image\n");
-			close(fd);
-			return 1;
-		}
-
-		if (pread(fd, fit_blob, (size_t)total_size, (off_t)offset) != (ssize_t)total_size) {
-			err_printf("Unable to read full FIT image for address lookup\n");
-			free(fit_blob);
-			close(fd);
-			return 1;
-		}
-
-		if (fit_find_load_address(fit_blob,
-					  (size_t)total_size,
-					  &load_addr,
-					  &uboot_off,
-					  &uboot_off_found)) {
-			if (g_output_format == FW_OUTPUT_TXT) {
-				out_printf("FIT load address: 0x%08x\n", load_addr);
-			} else {
-				char value[32];
-				snprintf(value, sizeof(value), "0x%08x", load_addr);
-				emit_image_record("image_load_address", dev, offset, "FIT", value);
-			}
-		}
-		else
-			err_printf("FIT load address not found\n");
-
-		if (uboot_off_found) {
-			if (g_output_format == FW_OUTPUT_TXT) {
-				out_printf("FIT U-Boot code offset: 0x%jx\n", (uintmax_t)uboot_off);
-			} else {
-				char value[32];
-				snprintf(value, sizeof(value), "0x%jx", (uintmax_t)uboot_off);
-				emit_image_record("fit_uboot_offset", dev, offset, "FIT", value);
-			}
-		}
-		else
-			err_printf("FIT U-Boot code offset not found\n");
-
-		free(fit_blob);
-		close(fd);
-		return 0;
-	}
-
-	err_printf("Unknown image format at offset 0x%jx\n", (uintmax_t)offset);
-	close(fd);
-	return 1;
-}
-
-static int pull_image_to_output_tcp(const char *dev, uint64_t offset, const char *output_tcp_target)
-{
-	uint8_t hdr[UIMAGE_HDR_SIZE];
-	uint64_t dev_size = uboot_guess_size_any(dev);
-	uint64_t total_size = 0;
-	int fd, sock;
-
-	fd = open(dev, O_RDONLY | O_CLOEXEC);
-	if (fd < 0) {
-		err_printf("Cannot open %s: %s\n", dev, strerror(errno));
-		return 1;
-	}
-
-	if (pread(fd, hdr, sizeof(hdr), (off_t)offset) != (ssize_t)sizeof(hdr)) {
-		err_printf("Unable to read image header from %s @ 0x%jx\n", dev, (uintmax_t)offset);
-		close(fd);
-		return 1;
-	}
-
-	if (!memcmp(hdr, "\x27\x05\x19\x56", 4)) {
-		if (!validate_uimage_header(hdr, offset, dev_size ? dev_size : UINT64_MAX)) {
-			err_printf("uImage header validation failed at offset 0x%jx\n", (uintmax_t)offset);
-			close(fd);
-			return 1;
-		}
-		total_size = UIMAGE_HDR_SIZE + ela_read_be32(hdr + 12);
-	} else if (!memcmp(hdr, "\xD0\x0D\xFE\xED", 4)) {
-		if (!validate_fit_header(hdr, offset, dev_size ? dev_size : UINT64_MAX)) {
-			err_printf("FIT header validation failed at offset 0x%jx\n", (uintmax_t)offset);
-			close(fd);
-			return 1;
-		}
-		total_size = ela_read_be32(hdr + 4);
-	} else {
-		err_printf("Unknown image format at offset 0x%jx\n", (uintmax_t)offset);
-		close(fd);
-		return 1;
-	}
-
-	sock = ela_connect_tcp_ipv4(output_tcp_target);
-	if (sock < 0) {
-		err_printf("Unable to connect to output target %s\n", output_tcp_target);
-		close(fd);
-		return 1;
-	}
-
-	{
-		uint8_t buf[4096];
-		uint64_t sent = 0;
-		while (sent < total_size) {
-			size_t want = (size_t)((total_size - sent) > sizeof(buf) ? sizeof(buf) : (total_size - sent));
-			ssize_t n = pread(fd, buf, want, (off_t)(offset + sent));
-			if (n <= 0 || ela_send_all(sock, buf, (size_t)n) < 0) {
-				err_printf("Pull failed while sending image bytes\n");
-				close(sock);
-				close(fd);
-				return 1;
-			}
-			sent += (uint64_t)n;
-		}
-		if (g_verbose) {
-			char msg[256];
-			snprintf(msg, sizeof(msg), "Pulled %ju bytes from %s @ 0x%jx to %s",
-				(uintmax_t)total_size, dev, (uintmax_t)offset, output_tcp_target);
-			emit_image_verbose(dev, offset, msg);
-		}
-	}
-
-	close(sock);
-	close(fd);
-	return 0;
-}
-
-static int pull_image_to_output_http(const char *dev, uint64_t offset, const char *output_http_uri)
-{
-	uint8_t hdr[UIMAGE_HDR_SIZE];
-	uint64_t dev_size = uboot_guess_size_any(dev);
-	uint64_t total_size = 0;
-	uint8_t *img = NULL;
-	int fd;
-	char errbuf[256];
-	char file_path[512];
-	char *upload_uri = NULL;
-
-	fd = open(dev, O_RDONLY | O_CLOEXEC);
-	if (fd < 0) {
-		err_printf("Cannot open %s: %s\n", dev, strerror(errno));
-		return 1;
-	}
-
-	if (pread(fd, hdr, sizeof(hdr), (off_t)offset) != (ssize_t)sizeof(hdr)) {
-		err_printf("Unable to read image header from %s @ 0x%jx\n", dev, (uintmax_t)offset);
-		close(fd);
-		return 1;
-	}
-
-	if (!memcmp(hdr, "\x27\x05\x19\x56", 4)) {
-		if (!validate_uimage_header(hdr, offset, dev_size ? dev_size : UINT64_MAX)) {
-			err_printf("uImage header validation failed at offset 0x%jx\n", (uintmax_t)offset);
-			close(fd);
-			return 1;
-		}
-		total_size = UIMAGE_HDR_SIZE + ela_read_be32(hdr + 12);
-	} else if (!memcmp(hdr, "\xD0\x0D\xFE\xED", 4)) {
-		if (!validate_fit_header(hdr, offset, dev_size ? dev_size : UINT64_MAX)) {
-			err_printf("FIT header validation failed at offset 0x%jx\n", (uintmax_t)offset);
-			close(fd);
-			return 1;
-		}
-		total_size = ela_read_be32(hdr + 4);
-	} else {
-		err_printf("Unknown image format at offset 0x%jx\n", (uintmax_t)offset);
-		close(fd);
-		return 1;
-	}
-
-	img = malloc((size_t)total_size);
-	if (!img) {
-		err_printf("Unable to allocate image buffer (%ju bytes)\n", (uintmax_t)total_size);
-		close(fd);
-		return 1;
-	}
-
-	if (pread(fd, img, (size_t)total_size, (off_t)offset) != (ssize_t)total_size) {
-		err_printf("Pull failed while reading image bytes\n");
-		free(img);
-		close(fd);
-		return 1;
-	}
-
-	snprintf(file_path, sizeof(file_path), "%s@0x%jx.bin", dev, (uintmax_t)offset);
-	upload_uri = ela_http_build_upload_uri(output_http_uri, "uboot-image", file_path);
-	if (!upload_uri) {
-		err_printf("Failed to build upload URI for %s\n", dev);
-		free(img);
-		close(fd);
-		return 1;
-	}
-
-	if (ela_http_post(upload_uri, img, (size_t)total_size,
-			 g_pull_binary_content_type, g_insecure,
-			 g_verbose,
-			 errbuf, sizeof(errbuf)) < 0) {
-		err_printf("Failed HTTP POST to %s: %s\n", upload_uri, errbuf[0] ? errbuf : "unknown error");
-		free(upload_uri);
-		free(img);
-		close(fd);
-		return 1;
-	}
-
-	if (g_verbose) {
-		char msg[256];
-		snprintf(msg, sizeof(msg), "Pulled %ju bytes from %s @ 0x%jx to %s",
-			(uintmax_t)total_size, dev, (uintmax_t)offset, upload_uri);
-		emit_image_verbose(dev, offset, msg);
-	}
-
-	free(upload_uri);
-	free(img);
-	close(fd);
-	return 0;
-}
-
 static void report_signature(const char *dev, uint64_t off, const char *kind)
 {
 	if (g_output_format == FW_OUTPUT_TXT) {
@@ -1378,6 +657,40 @@ static int scan_dev_for_image(const char *dev, uint64_t step)
 	free(buf);
 	close(fd);
 	return hits;
+}
+
+uint64_t uboot_image_parse_u64(const char *s)
+{
+	uint64_t v;
+
+	if (ela_parse_u64(s, &v)) {
+		fprintf(stderr, "Invalid number: %s\n", s);
+		exit(2);
+	}
+	return v;
+}
+
+static void usage(const char *prog)
+{
+	fprintf(stderr,
+		"Usage: %s [--dev <device>] [--step <bytes>] [--allow-text]\n"
+		"       %s [--skip-remove] [--skip-mtd] [--skip-ubi] [--skip-sd] [--skip-emmc]\n"
+		"       %s pull --dev <device> --offset <bytes>\n"
+		"       %s find-address --dev <device> --offset <bytes>\n"
+		"       %s list-commands --dev <device> --offset <bytes>\n"
+		"  no args: scan /dev/mtdblock*, /dev/ubi*_*, /dev/ubiblock*_*, /dev/mmcblk* and /dev/sd* for U-Boot image signatures\n"
+		"  --dev: scan only a specific device\n"
+		"  --step: step size when scanning (default: 0x1000)\n"
+		"  --allow-text[=<text>]: also match plain text (default: 'U-Boot'; higher false-positive risk)\n"
+		"  --skip-remove: keep any helper /dev nodes created during scan\n"
+		"  --skip-mtd: skip mtdblock scan targets\n"
+		"  --skip-ubi: skip UBI and ubiblock scan targets\n"
+		"  --skip-sd: skip /dev/sd* scan targets\n"
+		"  --skip-emmc: skip /dev/mmcblk* scan targets\n"
+		"  pull: read image from --dev at --offset and stream bytes to a remote destination\n"
+		"  find-address: print image load address from header/FIT data\n"
+		"  list-commands: best-effort extraction of command names from image bytes\n",
+		prog, prog, prog, prog, prog);
 }
 
 int uboot_image_scan_main(int argc, char **argv)
@@ -1679,20 +992,4 @@ int uboot_image_finish(int rc)
 	g_output_http_uri = NULL;
 
 	return ret;
-}
-
-int uboot_image_pull_execute(const char *dev,
-			     uint64_t offset,
-			     const char *output_tcp_target,
-			     const char *output_http_uri)
-{
-	if (output_http_uri)
-		return pull_image_to_output_http(dev, offset, output_http_uri);
-
-	return pull_image_to_output_tcp(dev, offset, output_tcp_target);
-}
-
-int uboot_image_list_commands_execute(const char *dev, uint64_t offset)
-{
-	return list_image_commands(dev, offset);
 }
