@@ -202,12 +202,17 @@ static void usage(const char *prog)
 		   "  [--head <positive-lines> | --tail <positive-lines>]\n"
 		   "  --head N emits only the first N dmesg lines\n"
 		   "  --tail N emits only the last N dmesg lines\n"
+		   "  watch on   start a background dmesg watch daemon\n"
+		   "  watch off  stop the running background dmesg watch daemon\n"
 		   "  Remote output is configured via global --output-tcp or --output-http\n",
 		prog);
 }
 
 int linux_dmesg_scan_main(int argc, char **argv)
 {
+	if (argc >= 2 && !strcmp(argv[1], "watch"))
+		return linux_dmesg_watch_main(argc - 1, argv + 1);
+
 	const char *output_tcp_target = getenv("ELA_OUTPUT_TCP");
 	const char *output_http_target = getenv("ELA_OUTPUT_HTTP");
 	const char *output_https_target = getenv("ELA_OUTPUT_HTTPS");

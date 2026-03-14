@@ -2,8 +2,11 @@
 
 #include "embedded_linux_audit_cmd.h"
 
+#include "util/output_buffer.h"
+
 #include <errno.h>
 #include <getopt.h>
+#include <json.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -13,12 +16,6 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-struct output_buffer {
-	char *data;
-	size_t len;
-	size_t cap;
-};
-
 static void usage(const char *prog)
 {
 	fprintf(stderr,
@@ -27,118 +24,6 @@ static void usage(const char *prog)
 		"  Output honors --output-format as txt, csv, or json\n"
 		"  When global --output-http is configured, POST output to /:mac/upload/cmd\n",
 		prog);
-}
-
-static int output_buffer_append_len(struct output_buffer *buf, const char *text, size_t text_len)
-{
-	size_t need;
-	char *tmp;
-	size_t new_cap;
-
-	if (!buf || (!text && text_len != 0))
-		return -1;
-
-	need = buf->len + text_len + 1;
-	if (need > buf->cap) {
-		new_cap = buf->cap ? buf->cap : 1024;
-		while (new_cap < need)
-			new_cap *= 2;
-		tmp = realloc(buf->data, new_cap);
-		if (!tmp)
-			return -1;
-		buf->data = tmp;
-		buf->cap = new_cap;
-	}
-
-	if (text_len)
-		memcpy(buf->data + buf->len, text, text_len);
-	buf->len += text_len;
-	buf->data[buf->len] = '\0';
-	return 0;
-}
-
-static int output_buffer_append(struct output_buffer *buf, const char *text)
-{
-	if (!text)
-		return -1;
-	return output_buffer_append_len(buf, text, strlen(text));
-}
-
-static int json_escape_append(struct output_buffer *buf, const char *text)
-{
-	const unsigned char *p = (const unsigned char *)text;
-	char esc[7];
-
-	if (!buf || !text)
-		return -1;
-
-	while (*p) {
-		switch (*p) {
-		case '\\':
-			if (output_buffer_append(buf, "\\\\") != 0)
-				return -1;
-			break;
-		case '"':
-			if (output_buffer_append(buf, "\\\"") != 0)
-				return -1;
-			break;
-		case '\b':
-			if (output_buffer_append(buf, "\\b") != 0)
-				return -1;
-			break;
-		case '\f':
-			if (output_buffer_append(buf, "\\f") != 0)
-				return -1;
-			break;
-		case '\n':
-			if (output_buffer_append(buf, "\\n") != 0)
-				return -1;
-			break;
-		case '\r':
-			if (output_buffer_append(buf, "\\r") != 0)
-				return -1;
-			break;
-		case '\t':
-			if (output_buffer_append(buf, "\\t") != 0)
-				return -1;
-			break;
-		default:
-			if (*p < 0x20) {
-				int n = snprintf(esc, sizeof(esc), "\\u%04x", (unsigned int)*p);
-				if (n < 0 || (size_t)n >= sizeof(esc) || output_buffer_append_len(buf, esc, (size_t)n) != 0)
-					return -1;
-			} else if (output_buffer_append_len(buf, (const char *)p, 1) != 0) {
-				return -1;
-			}
-			break;
-		}
-		p++;
-	}
-
-	return 0;
-}
-
-static int csv_escape_append(struct output_buffer *buf, const char *text)
-{
-	const char *p = text;
-
-	if (!buf || !text)
-		return -1;
-
-	if (output_buffer_append(buf, "\"") != 0)
-		return -1;
-
-	while (*p) {
-		if (*p == '"') {
-			if (output_buffer_append(buf, "\"\"") != 0)
-				return -1;
-		} else if (output_buffer_append_len(buf, p, 1) != 0) {
-			return -1;
-		}
-		p++;
-	}
-
-	return output_buffer_append(buf, "\"");
 }
 
 static int format_command_output(const char *command,
@@ -158,22 +43,30 @@ static int format_command_output(const char *command,
 	}
 
 	if (!strcmp(output_format, "csv")) {
-		if (csv_escape_append(formatted, command) != 0 ||
+		if (csv_write_to_buf(formatted, command) != 0 ||
 		    output_buffer_append(formatted, ",") != 0 ||
-		    csv_escape_append(formatted, command_output) != 0 ||
+		    csv_write_to_buf(formatted, command_output) != 0 ||
 		    output_buffer_append(formatted, "\n") != 0)
 			return -1;
 		return 0;
 	}
 
 	if (!strcmp(output_format, "json")) {
-		if (output_buffer_append(formatted, "{\"command\":\"") != 0 ||
-		    json_escape_append(formatted, command) != 0 ||
-		    output_buffer_append(formatted, "\",\"output\":\"") != 0 ||
-		    json_escape_append(formatted, command_output) != 0 ||
-		    output_buffer_append(formatted, "\"}\n") != 0)
+		json_object *obj;
+		const char *js;
+		int err;
+
+		obj = json_object_new_object();
+		if (!obj)
 			return -1;
-		return 0;
+		json_object_object_add(obj, "command", json_object_new_string(command));
+		json_object_object_add(obj, "output",  json_object_new_string(command_output));
+		js = json_object_to_json_string_ext(obj, JSON_C_TO_STRING_PLAIN | JSON_C_TO_STRING_NOSLASHESCAPE);
+		err = output_buffer_append(formatted, js);
+		if (err == 0)
+			err = output_buffer_append(formatted, "\n");
+		json_object_put(obj);
+		return err;
 	}
 
 	return -1;

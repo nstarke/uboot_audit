@@ -174,7 +174,6 @@ int embedded_linux_audit_dispatch(int argc, char **argv)
 	int cmd_idx = 1;
 	int ret;
 	char *command_summary;
-	const char *isa;
 	bool emit_lifecycle_events;
 	char errbuf[256];
 
@@ -488,7 +487,9 @@ int embedded_linux_audit_dispatch(int argc, char **argv)
 		}
 
 		if (!strcmp(argv[sub_idx], "dmesg")) {
-			if (output_format_explicit)
+			bool dmesg_watch = (sub_idx + 1 < argc &&
+					    !strcmp(argv[sub_idx + 1], "watch"));
+			if (output_format_explicit && !dmesg_watch)
 				fprintf(stderr,
 					"Warning: --output-format has no effect for dmesg; remote output is always text/plain\n");
 			ret = linux_dmesg_scan_main(argc - sub_idx, argv + sub_idx);

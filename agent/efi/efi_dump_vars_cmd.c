@@ -2,6 +2,8 @@
 
 #include "embedded_linux_audit_cmd.h"
 
+#include "util/output_buffer.h"
+
 #include <errno.h>
 #include <getopt.h>
 #include <json.h>
@@ -15,12 +17,6 @@
 
 #include <efivar/efivar.h>
 
-struct output_buffer {
-	char *data;
-	size_t len;
-	size_t cap;
-};
-
 static void usage(const char *prog)
 {
 	fprintf(stderr,
@@ -29,61 +25,6 @@ static void usage(const char *prog)
 		"  When global --output-http is configured, POST to /:mac/upload/efi-vars\n"
 		"  When global --output-tcp is configured, stream formatted records over TCP\n",
 		prog);
-}
-
-static int output_buffer_append_len(struct output_buffer *buf, const char *text, size_t text_len)
-{
-	size_t need;
-	char *tmp;
-	size_t new_cap;
-
-	if (!buf || (!text && text_len != 0))
-		return -1;
-
-	need = buf->len + text_len + 1;
-	if (need > buf->cap) {
-		new_cap = buf->cap ? buf->cap : 1024;
-		while (new_cap < need)
-			new_cap *= 2;
-		tmp = realloc(buf->data, new_cap);
-		if (!tmp)
-			return -1;
-		buf->data = tmp;
-		buf->cap = new_cap;
-	}
-
-	if (text_len > 0)
-		memcpy(buf->data + buf->len, text, text_len);
-	buf->len += text_len;
-	buf->data[buf->len] = '\0';
-	return 0;
-}
-
-static int output_buffer_append(struct output_buffer *buf, const char *text)
-{
-	if (!text)
-		return -1;
-	return output_buffer_append_len(buf, text, strlen(text));
-}
-
-static int csv_escape_append(struct output_buffer *buf, const char *text)
-{
-	const char *p = text ? text : "";
-
-	if (output_buffer_append(buf, "\"") != 0)
-		return -1;
-
-	while (*p) {
-		if (*p == '"') {
-			if (output_buffer_append(buf, "\"\"") != 0)
-				return -1;
-		} else if (output_buffer_append_len(buf, p, 1) != 0) {
-			return -1;
-		}
-		p++;
-	}
-
-	return output_buffer_append(buf, "\"");
 }
 
 static char *hex_encode(const uint8_t *data, size_t len)
@@ -159,15 +100,15 @@ static int emit_record(const char *output_format,
 		    output_buffer_append(&line, "\n") != 0)
 			goto out;
 	} else if (!strcmp(output_format, "csv")) {
-		if (csv_escape_append(&line, guid_str) != 0 ||
+		if (csv_write_to_buf(&line, guid_str) != 0 ||
 		    output_buffer_append(&line, ",") != 0 ||
-		    csv_escape_append(&line, name) != 0 ||
+		    csv_write_to_buf(&line, name) != 0 ||
 		    output_buffer_append(&line, ",") != 0 ||
-		    csv_escape_append(&line, attr_buf) != 0 ||
+		    csv_write_to_buf(&line, attr_buf) != 0 ||
 		    output_buffer_append(&line, ",") != 0 ||
-		    csv_escape_append(&line, size_buf) != 0 ||
+		    csv_write_to_buf(&line, size_buf) != 0 ||
 		    output_buffer_append(&line, ",") != 0 ||
-		    csv_escape_append(&line, hex_data) != 0 ||
+		    csv_write_to_buf(&line, hex_data) != 0 ||
 		    output_buffer_append(&line, "\n") != 0)
 			goto out;
 	} else if (!strcmp(output_format, "json")) {
@@ -182,7 +123,7 @@ static int emit_record(const char *output_format,
 		json_object_object_add(obj, "attributes", json_object_new_uint64((uint64_t)attributes));
 		json_object_object_add(obj, "size", json_object_new_uint64((uint64_t)data_size));
 		json_object_object_add(obj, "data_hex", json_object_new_string(hex_data));
-		js = json_object_to_json_string_ext(obj, JSON_C_TO_STRING_PLAIN);
+		js = json_object_to_json_string_ext(obj, JSON_C_TO_STRING_PLAIN | JSON_C_TO_STRING_NOSLASHESCAPE);
 		if (output_buffer_append(&line, js) != 0 || output_buffer_append(&line, "\n") != 0) {
 			json_object_put(obj);
 			goto out;

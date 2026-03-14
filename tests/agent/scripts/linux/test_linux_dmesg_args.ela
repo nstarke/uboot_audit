@@ -8,3 +8,7 @@ linux dmesg --tail 5
 linux dmesg --head 5 --tail 5
 ela --quiet linux dmesg --help
 embedded_linux_audit --output-format json linux dmesg --help
+linux dmesg watch --help
+linux dmesg watch off
+linux dmesg watch on
+linux dmesg watch off

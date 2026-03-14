@@ -101,4 +101,56 @@ else
 fi
 rm -f "$head_tail_log"
 
+# dmesg watch subcommand tests
+run_exact_case "linux dmesg watch --help" 0 "$BIN" linux dmesg watch --help
+run_exact_case "linux dmesg watch no args" 2 "$BIN" linux dmesg watch
+run_exact_case "linux dmesg watch invalid action" 2 "$BIN" linux dmesg watch foo
+run_exact_case "linux dmesg watch extra arg" 2 "$BIN" linux dmesg watch on extra
+
+# stop when not running should return non-zero but not crash
+run_accept_case "linux dmesg watch off when not running" "$BIN" linux dmesg watch off
+
+# watch on then off lifecycle
+# Note: the daemon may exit quickly if dmesg -w reads existing messages and exits (no new
+# messages in a quiet test environment), so we only verify the start handshake, not long-lived state.
+watch_log="$(mktemp /tmp/test_dmesg_watch_lifecycle.XXXXXX)"
+"$BIN" linux dmesg watch on >"$watch_log" 2>&1
+rc=$?
+if [ "$rc" -eq 0 ] && grep -q "dmesg watch started" "$watch_log"; then
+    echo "[PASS] linux dmesg watch on starts daemon"
+    PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
+else
+    echo "[FAIL] linux dmesg watch on starts daemon (rc=$rc)"
+    print_file_head_scrubbed "$watch_log" 40
+    FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
+fi
+
+# Try to stop the daemon; accept either "stopped" (daemon still running) or
+# "not running" (daemon already exited — acceptable in a quiet test environment).
+"$BIN" linux dmesg watch off >"$watch_log" 2>&1
+rc=$?
+if grep -q "dmesg watch stopped" "$watch_log" || grep -q "not running" "$watch_log"; then
+    echo "[PASS] linux dmesg watch off responds correctly after watch on"
+    PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
+else
+    echo "[FAIL] linux dmesg watch off responds correctly after watch on (rc=$rc)"
+    print_file_head_scrubbed "$watch_log" 40
+    FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
+fi
+rm -f "$watch_log"
+
+# output-format should NOT warn for dmesg watch
+warn_log="$(mktemp /tmp/test_dmesg_watch_no_warn.XXXXXX)"
+"$BIN" --output-format json linux dmesg watch --help >"$warn_log" 2>&1
+rc=$?
+if [ "$rc" -eq 0 ] && ! grep -q "Warning: --output-format has no effect for dmesg" "$warn_log"; then
+    echo "[PASS] linux dmesg watch does not emit output-format warning"
+    PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
+else
+    echo "[FAIL] linux dmesg watch does not emit output-format warning (rc=$rc)"
+    print_file_head_scrubbed "$warn_log" 40
+    FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
+fi
+rm -f "$warn_log"
+
 finish_tests
