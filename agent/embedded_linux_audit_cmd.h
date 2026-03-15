@@ -50,6 +50,7 @@ const char *ela_detect_isa(void);
 bool ela_isa_supported_for_efi_bios(const char *isa);
 bool ela_is_valid_tcp_output_target(const char *spec);
 int ela_connect_tcp_ipv4(const char *spec);
+int ela_connect_tcp_any(const char *spec);
 int ela_send_all(int sock, const uint8_t *buf, size_t len);
 char *ela_http_uri_normalize_default_port(const char *uri, uint16_t default_port);
 int ela_parse_http_output_uri(const char *uri,
@@ -100,6 +101,7 @@ int tpm2_scan_main(int argc, char **argv);
 int efi_orom_main(int argc, char **argv);
 int efi_dump_vars_main(int argc, char **argv);
 int bios_orom_main(int argc, char **argv);
+int transfer_main(int argc, char **argv);
 
 struct embedded_linux_audit_input {
 	const char *device;

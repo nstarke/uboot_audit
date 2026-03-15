@@ -308,6 +308,7 @@ SRC    := agent/embedded_linux_audit.c agent/shell/interactive.c agent/shell/scr
 	  agent/uboot/audit-rules/uboot_validate_env_security_rule.c \
 	  agent/uboot/audit-rules/uboot_validate_env_writeability_rule.c \
 	  agent/uboot/audit-rules/uboot_validate_secureboot_rule.c \
+	  agent/transfer/transfer_cmd.c \
 	  $(LIBCSV_SRC) $(GENERATED_CA_SRC)
 
 .PHONY: all env image static test clean check-autoconf check-autoreconf check-zig check-llvm-objcopy

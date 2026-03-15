@@ -9,11 +9,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 static void usage(const char *prog)
 {
 	fprintf(stderr,
 		"Usage: %s [--output-format <csv|json|txt>] [--quiet] [--insecure] [--output-tcp <IPv4:port>] [--output-http <http(s)://host:port/path>] [--script <path|http(s)://...>] <group> <subcommand> [options]\n"
+		"       %s --remote <host:port>\n"
 		"\n"
 		"Run without arguments to enter interactive mode.\n"
 		"\n"
@@ -24,6 +27,8 @@ static void usage(const char *prog)
 		"  --output-tcp <IPv4:port>         Configure TCP remote output for commands/subcommands\n"
 		"  --output-http <http(s)://...>    Configure HTTP or HTTPS remote output for commands/subcommands\n"
 		"  --script <path|http(s)://...>    Execute commands from a local or remote script file\n"
+		"  --remote <host:port>             Connect out to host:port, daemonize, and serve an interactive\n"
+		"                                   session over the TCP connection (reverse shell)\n"
 		"\n"
 		"Groups and subcommands:\n"
 		"  uboot env          Scan for U-Boot environment candidates\n"
@@ -41,6 +46,7 @@ static void usage(const char *prog)
 		"  efi orom           EFI option ROM utilities (pull/list)\n"
 		"  efi dump-vars      Dump EFI variables with txt/csv/json formatting\n"
 		"  bios orom          BIOS option ROM utilities (pull/list)\n"
+		"  transfer <host:port>  Transfer (send) this binary to a receiver at host:port\n"
 		"\n"
 		"Interactive-only helper:\n"
 		"  set ELA_API_URL <http(s)://...>\n"
@@ -66,8 +72,14 @@ static void usage(const char *prog)
 		"  %s --quiet --output-http http://127.0.0.1:5000/orom efi orom pull\n"
 		"  %s --output-format json --output-http http://127.0.0.1:5000 efi dump-vars\n"
 		"  %s --quiet --output-tcp 127.0.0.1:5001 bios orom list\n"
-		"  %s --output-format json --script ./commands.txt\n",
-		prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog);
+		"  %s --output-format json --script ./commands.txt\n"
+		"  %s --remote 192.168.1.10:4444\n"
+		"  %s transfer 192.168.1.10:4445\n",
+		prog, prog, prog, prog,
+		prog, prog, prog, prog,
+		prog, prog, prog, prog,
+		prog, prog, prog, prog,
+		prog, prog, prog, prog);
 }
 
 /* Declared non-static so interactive.c and script_exec.c can call it. */
@@ -168,6 +180,7 @@ int embedded_linux_audit_dispatch(int argc, char **argv)
 	const char *script_path = NULL;
 	const char *ela_api_url = NULL;
 	const char *ela_api_insecure = NULL;
+	const char *remote_target = NULL;
 	bool verbose = true;
 	bool insecure = getenv("ELA_OUTPUT_INSECURE") && !strcmp(getenv("ELA_OUTPUT_INSECURE"), "1");
 	bool output_format_explicit = false;
@@ -306,6 +319,23 @@ int embedded_linux_audit_dispatch(int argc, char **argv)
 			continue;
 		}
 
+		if (!strcmp(argv[cmd_idx], "--remote")) {
+			cmd_idx++;
+			if (cmd_idx >= argc) {
+				fprintf(stderr, "Missing value for --remote\n\n");
+				usage(argv[0]);
+				return 2;
+			}
+			remote_target = argv[cmd_idx++];
+			continue;
+		}
+
+		if (!strncmp(argv[cmd_idx], "--remote=", 9)) {
+			remote_target = argv[cmd_idx] + 9;
+			cmd_idx++;
+			continue;
+		}
+
 		if (!strcmp(argv[cmd_idx], "-h") || !strcmp(argv[cmd_idx], "--help") || !strcmp(argv[cmd_idx], "help")) {
 			usage(argv[0]);
 			return 0;
@@ -372,7 +402,7 @@ int embedded_linux_audit_dispatch(int argc, char **argv)
 		return 2;
 	}
 
-	if (cmd_idx >= argc && !script_path) {
+	if (cmd_idx >= argc && !script_path && !remote_target) {
 		usage(argv[0]);
 		return 2;
 	}
@@ -422,6 +452,45 @@ int embedded_linux_audit_dispatch(int argc, char **argv)
 	if (cmd_idx < argc && (!strcmp(argv[cmd_idx], "-h") || !strcmp(argv[cmd_idx], "--help") || !strcmp(argv[cmd_idx], "help"))) {
 		usage(argv[0]);
 		return 0;
+	}
+
+	if (remote_target && *remote_target) {
+		pid_t pid;
+		int sock;
+
+		if (cmd_idx < argc) {
+			fprintf(stderr, "--remote cannot be combined with a command\n\n");
+			usage(argv[0]);
+			return 2;
+		}
+
+		sock = ela_connect_tcp_any(remote_target);
+		if (sock < 0) {
+			fprintf(stderr, "--remote: failed to connect to %s\n", remote_target);
+			return 1;
+		}
+
+		pid = fork();
+		if (pid < 0) {
+			fprintf(stderr, "--remote: fork failed: %s\n", strerror(errno));
+			close(sock);
+			return 1;
+		}
+
+		if (pid > 0) {
+			/* Parent: report and exit */
+			close(sock);
+			fprintf(stdout, "Remote session started (pid=%ld)\n", (long)pid);
+			return 0;
+		}
+
+		/* Daemon child */
+		setsid();
+		dup2(sock, STDIN_FILENO);
+		dup2(sock, STDOUT_FILENO);
+		dup2(sock, STDERR_FILENO);
+		close(sock);
+		exit(interactive_loop(argv[0]));
 	}
 
 	if (script_path && (cmd_idx < argc)) {
@@ -582,6 +651,11 @@ int embedded_linux_audit_dispatch(int argc, char **argv)
 
 	if (!strcmp(argv[cmd_idx], "tpm2")) {
 		ret = tpm2_scan_main(argc - cmd_idx, argv + cmd_idx);
+		goto done;
+	}
+
+	if (!strcmp(argv[cmd_idx], "transfer")) {
+		ret = transfer_main(argc - cmd_idx, argv + cmd_idx);
 		goto done;
 	}
 

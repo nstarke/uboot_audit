@@ -71,6 +71,39 @@ rm -f "$TMP_SCRIPT"
 run_exact_case "linux ssh client --help" 0 "$BIN" linux ssh client --help
 run_exact_case "linux ssh copy --help" 0 "$BIN" linux ssh copy --help
 run_exact_case "linux ssh tunnel --help" 0 "$BIN" linux ssh tunnel --help
+run_exact_case "top-level missing --remote value" 2 "$BIN" --remote
+run_exact_case "top-level --remote cannot be combined with command" 2 "$BIN" --remote 127.0.0.1:1 linux dmesg
+run_accept_case "top-level --remote unreachable target" "$BIN" --remote 127.0.0.1:1
+
+# Live daemon lifecycle: verify --remote daemonizes and prints "Remote session started"
+if command -v nc >/dev/null 2>&1; then
+    remote_port=19873
+    nc -l "$remote_port" >/dev/null 2>&1 &
+    NC_PID=$!
+    sleep 0.2
+
+    remote_log="$(mktemp /tmp/test_remote_lifecycle.XXXXXX)"
+    "$BIN" --remote "127.0.0.1:$remote_port" >"$remote_log" 2>&1
+    rc=$?
+
+    if [ "$rc" -eq 0 ] && grep -q "Remote session started" "$remote_log"; then
+        echo "[PASS] --remote starts daemon when connection succeeds"
+        PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
+    else
+        echo "[FAIL] --remote starts daemon when connection succeeds (rc=$rc)"
+        print_file_head_scrubbed "$remote_log" 40
+        FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
+    fi
+    rm -f "$remote_log"
+
+    # Close nc; daemon will receive SIGPIPE and exit
+    kill "$NC_PID" 2>/dev/null
+    wait "$NC_PID" 2>/dev/null
+    sleep 0.5
+else
+    echo "[SKIP] --remote daemon lifecycle test (nc not available)"
+fi
+
 run_exact_case "linux ssh copy extra arg after required args" 2 "$BIN" linux ssh copy 127.0.0.1 --local-path /tmp/src --remote-path /tmp/dst extra
 run_accept_case "linux ssh copy --port" "$BIN" linux ssh copy 127.0.0.1 --local-path /tmp/src --remote-path /tmp/dst --port 2022
 

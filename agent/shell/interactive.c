@@ -35,6 +35,7 @@ static const char *const interactive_top_level_commands[] = {
 	"efi",
 	"bios",
 	"tpm2",
+	"transfer",
 	NULL,
 };
 

@@ -78,6 +78,31 @@ int connect_tcp_host_port_any(const char *host, uint16_t port)
 	return sock;
 }
 
+int ela_connect_tcp_any(const char *spec)
+{
+	char host[256];
+	char *colon;
+	char *end;
+	unsigned long port_ul;
+
+	if (!spec || !*spec)
+		return -1;
+
+	strncpy(host, spec, sizeof(host) - 1);
+	host[sizeof(host) - 1] = '\0';
+	colon = strrchr(host, ':');
+	if (!colon || colon == host || *(colon + 1) == '\0')
+		return -1;
+
+	*colon = '\0';
+	errno = 0;
+	port_ul = strtoul(colon + 1, &end, 10);
+	if (errno || *end || port_ul == 0 || port_ul > 65535)
+		return -1;
+
+	return connect_tcp_host_port_any(host, (uint16_t)port_ul);
+}
+
 int ela_connect_tcp_ipv4(const char *spec)
 {
 	char host[64];
