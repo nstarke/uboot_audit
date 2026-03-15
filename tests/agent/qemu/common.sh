@@ -521,6 +521,18 @@ run_qemu_shell_tests() {
                 echo "Skipping SSH shell test coverage under QEMU; it depends on a reachable/authenticating SSH server and can hang in CI."
                 continue
                 ;;
+            "$SHELL_TESTS_DIR/test_cli_and_extra_args.sh")
+                echo
+                echo "===== Skipping test_cli_and_extra_args.sh ====="
+                echo "Skipping under QEMU; WebSocket/ws:// curl connections and nc-based lifecycle tests hang under QEMU user-mode networking."
+                continue
+                ;;
+            "$SHELL_TESTS_DIR/transfer/test_transfer_args.sh")
+                echo
+                echo "===== Skipping transfer/test_transfer_args.sh ====="
+                echo "Skipping under QEMU; WebSocket/ws:// curl connections and nc-based lifecycle tests hang under QEMU user-mode networking."
+                continue
+                ;;
         esac
 
         test_log="$(mktemp /tmp/ela-qemu-shell-test-log.${isa}.XXXXXX)"
