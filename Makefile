@@ -248,6 +248,22 @@ OPENSSL_CMAKE_DIR := $(OPENSSL_INSTALL)/lib/cmake/OpenSSL
 OPENSSL_SSL_LIB := $(OPENSSL_INSTALL)/lib/libssl.a
 OPENSSL_LIB   := $(OPENSSL_INSTALL)/lib/libcrypto.a
 OPENSSL_CFLAGS := -I$(OPENSSL_INSTALL)/include
+# Disable OpenSSL features not used by this project to reduce binary size.
+# Legacy provider (RC4, Blowfish, IDEA, etc.), compression, obsolete protocols,
+# regional algorithms (SM2/3/4, GOST, ARIA, SEED), post-quantum (not yet used),
+# and unused KDFs/modes are all excluded.
+OPENSSL_DISABLE_FEATURES := \
+	no-legacy no-comp no-srp no-psk \
+	no-ct no-cms no-ts no-srtp no-srtpkdf no-dtls no-sctp \
+	no-scrypt no-nextprotoneg no-quic no-cmp no-rfc3779 \
+	no-ssl-trace no-weak-ssl-ciphers \
+	no-gost no-aria no-seed no-camellia no-cast \
+	no-bf no-idea no-rc2 no-rc4 no-rc5 \
+	no-sm2 no-sm2-precomp no-sm3 no-sm4 \
+	no-md2 no-md4 no-mdc2 no-whirlpool no-rmd160 no-blake2 \
+	no-ml-dsa no-ml-kem no-slh-dsa no-lms \
+	no-x942kdf no-x963kdf no-pvkkdf no-snmpkdf no-krb5kdf \
+	no-ocb no-siv
 NCURSES_DIR   := third_party/ncurses
 NCURSES_BUILD_STAMP := $(NCURSES_DIR)/.ela-build-$(CC_TAG)
 NCURSES_LIB_DIR := $(NCURSES_DIR)/lib
@@ -436,7 +452,7 @@ image: $(TARGET)
 $(TARGET): | check-zig
 
 $(JSONC_LIB):
-	cmake -S $(JSONC_DIR) -B $(JSONC_BUILD) $(JSONC_CMAKE_ARGS) -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DBUILD_STATIC_LIBS=ON -DBUILD_TESTING=OFF -DBUILD_APPS=OFF
+	cmake -S $(JSONC_DIR) -B $(JSONC_BUILD) $(JSONC_CMAKE_ARGS) -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DBUILD_STATIC_LIBS=ON -DBUILD_TESTING=OFF -DBUILD_APPS=OFF -DDISABLE_EXTRA_LIBS=ON -DENABLE_RDRAND=OFF -DENABLE_THREADING=OFF -DDISABLE_JSON_POINTER=ON -DDISABLE_THREAD_LOCAL_STORAGE=ON
 	cmake --build $(JSONC_BUILD) --parallel $(JOBS) --target json-c
 
 $(LIBUBOOTENV_LIB): $(ZLIB_LIB)
@@ -454,11 +470,11 @@ $(ZLIB_LIB):
 	cmake --build $(ZLIB_BUILD) --parallel $(JOBS) --target zlibstatic
 
 $(CURL_LIB): $(OPENSSL_SSL_LIB)
-	cmake -S $(CURL_DIR) -B $(CURL_BUILD) $(CURL_CMAKE_ARGS) -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DBUILD_CURL_EXE=OFF -DBUILD_LIBCURL_DOCS=OFF -DBUILD_MISC_DOCS=OFF -DBUILD_TESTING=OFF -DCURL_USE_OPENSSL=ON -DOPENSSL_ROOT_DIR="$(abspath $(OPENSSL_INSTALL))" -DOPENSSL_INCLUDE_DIR="$(abspath $(OPENSSL_INSTALL))/include" -DOPENSSL_SSL_LIBRARY="$(abspath $(OPENSSL_SSL_LIB))" -DOPENSSL_CRYPTO_LIBRARY="$(abspath $(OPENSSL_LIB))" -DCURL_ZLIB=OFF -DUSE_LIBIDN2=OFF -DUSE_NGHTTP2=OFF -DCURL_BROTLI=OFF -DCURL_ZSTD=OFF -DENABLE_ARES=OFF -DENABLE_THREADED_RESOLVER=OFF -DCURL_USE_LIBPSL=OFF -DCURL_USE_LIBSSH2=OFF -DUSE_ECH=OFF -DUSE_NTLM=OFF -DUSE_OPENLDAP=OFF -DUSE_LIBRTMP=OFF -DUSE_WEBSOCKETS=OFF -DCURL_DISABLE_NETRC=ON -DHTTP_ONLY=ON
+	cmake -S $(CURL_DIR) -B $(CURL_BUILD) $(CURL_CMAKE_ARGS) -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DBUILD_CURL_EXE=OFF -DBUILD_LIBCURL_DOCS=OFF -DBUILD_MISC_DOCS=OFF -DBUILD_TESTING=OFF -DCURL_USE_OPENSSL=ON -DOPENSSL_ROOT_DIR="$(abspath $(OPENSSL_INSTALL))" -DOPENSSL_INCLUDE_DIR="$(abspath $(OPENSSL_INSTALL))/include" -DOPENSSL_SSL_LIBRARY="$(abspath $(OPENSSL_SSL_LIB))" -DOPENSSL_CRYPTO_LIBRARY="$(abspath $(OPENSSL_LIB))" -DCURL_ZLIB=OFF -DUSE_LIBIDN2=OFF -DUSE_NGHTTP2=OFF -DCURL_BROTLI=OFF -DCURL_ZSTD=OFF -DENABLE_ARES=OFF -DENABLE_THREADED_RESOLVER=OFF -DCURL_USE_LIBPSL=OFF -DCURL_USE_LIBSSH2=OFF -DUSE_ECH=OFF -DUSE_NTLM=OFF -DUSE_OPENLDAP=OFF -DUSE_LIBRTMP=OFF -DUSE_WEBSOCKETS=OFF -DCURL_DISABLE_NETRC=ON -DHTTP_ONLY=ON -DCURL_DISABLE_PROXY=ON -DCURL_DISABLE_ALTSVC=ON -DCURL_DISABLE_HSTS=ON -DCURL_DISABLE_MIME=ON -DCURL_DISABLE_PROGRESS_METER=ON -DCURL_DISABLE_GETOPTIONS=ON -DCURL_DISABLE_SOCKETPAIR=ON -DCURL_DISABLE_BINDLOCAL=ON -DCURL_DISABLE_DOH=ON -DCURL_DISABLE_HTTP_AUTH=ON -DCURL_DISABLE_AWS=ON -DCURL_DISABLE_SHUFFLE_DNS=ON -DCURL_DISABLE_HEADERS_API=ON -DCURL_DISABLE_LIBCURL_OPTION=ON -DCURL_DISABLE_OPENSSL_AUTO_LOAD_CONFIG=ON -DCURL_DISABLE_PARSEDATE=ON -DCURL_DISABLE_SRP=ON
 	cmake --build $(CURL_BUILD) --parallel $(JOBS) --target libcurl_static
 
 $(LIBSSH_LIB): $(OPENSSL_SSL_LIB) $(ZLIB_LIB)
-	cmake -S $(LIBSSH_DIR) -B $(LIBSSH_BUILD) $(LIBSSH_CMAKE_ARGS) -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DBUILD_STATIC_LIB=ON -DWITH_EXAMPLES=OFF -DUNIT_TESTING=OFF -DCLIENT_TESTING=OFF -DSERVER_TESTING=OFF -DWITH_SERVER=OFF -DWITH_GSSAPI=OFF -DWITH_NACL=OFF -DWITH_ZLIB=ON -DZLIB_INCLUDE_DIR="$(abspath $(ZLIB_DIR))" -DZLIB_LIBRARY="$(abspath $(ZLIB_LIB))" -DOPENSSL_ROOT_DIR="$(abspath $(OPENSSL_INSTALL))" -DOPENSSL_INCLUDE_DIR="$(abspath $(OPENSSL_INSTALL))/include" -DOPENSSL_CRYPTO_LIBRARY="$(abspath $(OPENSSL_LIB))"
+	cmake -S $(LIBSSH_DIR) -B $(LIBSSH_BUILD) $(LIBSSH_CMAKE_ARGS) -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DBUILD_STATIC_LIB=ON -DWITH_EXAMPLES=OFF -DUNIT_TESTING=OFF -DCLIENT_TESTING=OFF -DSERVER_TESTING=OFF -DWITH_SERVER=OFF -DWITH_GSSAPI=OFF -DWITH_NACL=OFF -DWITH_ZLIB=ON -DZLIB_INCLUDE_DIR="$(abspath $(ZLIB_DIR))" -DZLIB_LIBRARY="$(abspath $(ZLIB_LIB))" -DOPENSSL_ROOT_DIR="$(abspath $(OPENSSL_INSTALL))" -DOPENSSL_INCLUDE_DIR="$(abspath $(OPENSSL_INSTALL))/include" -DOPENSSL_CRYPTO_LIBRARY="$(abspath $(OPENSSL_LIB))" -DWITH_PCAP=OFF -DWITH_DEBUG_CALLTRACE=OFF
 	cmake --build $(LIBSSH_BUILD) --parallel $(JOBS) --target ssh-static
 
 $(TPM2_TSS_BUILD_STAMP): $(OPENSSL_SSL_LIB)
@@ -505,7 +521,9 @@ $(TPM2_TSS_BUILD_STAMP): $(OPENSSL_SSL_LIB)
 			--disable-tcti-i2c-ftdi \
 			--disable-unit \
 			--disable-integration \
-			--enable-nodl
+			--enable-nodl \
+			--disable-log-file \
+			--with-maxloglevel=error
 	ZIG_GLOBAL_CACHE_DIR='$(TPM2_TSS_ZIG_GLOBAL_CACHE)' \
 	ZIG_LOCAL_CACHE_DIR='$(abspath $(TPM2_TSS_BUILD))/.zig-cache' \
 	$(MAKE) -C $(TPM2_TSS_BUILD) -j$(JOBS)
@@ -538,14 +556,19 @@ $(WOLFSSL_LIB): check-autoconf
 		$(WOLFSSL_LIBRARY_CONFIGURE_FLAGS) \
 		--disable-benchmark --disable-examples \
 		--disable-crypttests --disable-dtls --disable-oldtls --disable-tls13 \
-		--disable-tls13 --enable-sni --prefix="$(abspath $(WOLFSSL_BUILD))/install"
+		--disable-tls13 --enable-sni \
+		--disable-arc4 --disable-des3 --disable-anon \
+		--disable-psk --disable-srp --disable-srtp --disable-scrypt \
+		--disable-aria --disable-camellia --disable-blake2 \
+		--disable-crl \
+		--prefix="$(abspath $(WOLFSSL_BUILD))/install"
 	$(MAKE) -C $(WOLFSSL_BUILD) -j$(JOBS)
 
 $(OPENSSL_SSL_LIB):
 	mkdir -p $(OPENSSL_BUILD)
 	cd $(OPENSSL_DIR) && $(MAKE) distclean >/dev/null 2>&1 || true
 	# Use no-asm so cross builds (e.g. zig cc -target arm-*) don't pick host x86 asm paths.
-	cd $(OPENSSL_DIR) && CC="$(CC)" ./Configure $(OPENSSL_CONFIGURE_TARGET) no-asm no-shared no-module no-threads no-tests no-docs $(OPENSSL_EXTRA_CONFIGURE_FLAGS) --prefix="$(abspath $(OPENSSL_INSTALL))" --openssldir="$(abspath $(OPENSSL_INSTALL))/ssl" --libdir=lib
+	cd $(OPENSSL_DIR) && CC="$(CC)" ./Configure $(OPENSSL_CONFIGURE_TARGET) no-asm no-shared no-module no-threads no-tests no-docs $(OPENSSL_DISABLE_FEATURES) $(OPENSSL_EXTRA_CONFIGURE_FLAGS) --prefix="$(abspath $(OPENSSL_INSTALL))" --openssldir="$(abspath $(OPENSSL_INSTALL))/ssl" --libdir=lib
 	$(MAKE) -C $(OPENSSL_DIR) -j$(JOBS) build_generated
 	$(MAKE) -C $(OPENSSL_DIR) -j$(JOBS) build_libs
 	mkdir -p "$(OPENSSL_INSTALL)/include" "$(OPENSSL_INSTALL)/lib" "$(OPENSSL_CMAKE_DIR)"
@@ -579,7 +602,7 @@ $(LIBEFIVAR_LINK_LIB): $(LIBEFIVAR_BUILD_STAMP) | $(GENERATED_DIR) check-llvm-ob
 
 $(NCURSES_BUILD_STAMP):
 	cd $(NCURSES_DIR) && $(MAKE) distclean >/dev/null 2>&1 || true
-	cd $(NCURSES_DIR) && ./configure --without-shared --without-cxx --without-cxx-binding --without-ada --without-tests --without-progs --without-manpages --with-normal --with-termlib CC='$(CC)' CFLAGS='$(CFLAGS)'
+	cd $(NCURSES_DIR) && ./configure --without-shared --without-cxx --without-cxx-binding --without-ada --without-tests --without-progs --without-manpages --with-normal --with-termlib --disable-home-terminfo CC='$(CC)' CFLAGS='$(CFLAGS)'
 	$(MAKE) -C $(NCURSES_DIR) -j$(JOBS) libs
 	touch $@
 
