@@ -6,6 +6,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
+    "start:secure": "node server.js --validate-key",
     "dev": "node server.js"
   },
   "engines": {

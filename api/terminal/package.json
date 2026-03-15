@@ -1,0 +1,17 @@
+{
+  "name": "ela-terminal",
+  "version": "1.0.0",
+  "description": "WebSocket terminal server for embedded_linux_audit interactive sessions",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "start:secure": "node server.js --validate-key"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "GPL-3.0-or-later"
+}

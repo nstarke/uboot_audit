@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later - Copyright (c) 2026 Nicholas Starke
 
 #include "http_client.h"
+#include "api_key.h"
 #include "tcp_util.h"
 #include "../util/str_util.h"
 #include "../util/isa_util.h"
@@ -254,9 +255,11 @@ static int simple_http_post(const char *uri,
 			    const uint8_t *data,
 			    size_t len,
 			    const char *content_type,
+			    const char *auth_key,
 			    bool verbose,
 			    char *errbuf,
-			    size_t errbuf_len)
+			    size_t errbuf_len,
+			    int *status_out)
 {
 	struct parsed_http_uri parsed;
 	char *request = NULL;
@@ -265,6 +268,9 @@ static int simple_http_post(const char *uri,
 	char content_len_buf[32];
 	int sock;
 	int status_code;
+
+	if (status_out)
+		*status_out = 0;
 
 	if (parse_http_uri(uri, &parsed) != 0 || parsed.https) {
 		if (errbuf && errbuf_len)
@@ -287,8 +293,26 @@ static int simple_http_post(const char *uri,
 	    append_text(&request, &request_len, &request_cap, "\r\nConnection: close\r\nContent-Type: ") != 0 ||
 	    append_text(&request, &request_len, &request_cap, content_type) != 0 ||
 	    append_text(&request, &request_len, &request_cap, "\r\nContent-Length: ") != 0 ||
-	    append_text(&request, &request_len, &request_cap, content_len_buf) != 0 ||
-	    append_text(&request, &request_len, &request_cap, "\r\n\r\n") != 0 ||
+	    append_text(&request, &request_len, &request_cap, content_len_buf) != 0) {
+		if (errbuf && errbuf_len)
+			snprintf(errbuf, errbuf_len, "failed to build HTTP request");
+		free(request);
+		close(sock);
+		return -1;
+	}
+
+	if (auth_key && *auth_key) {
+		if (append_text(&request, &request_len, &request_cap, "\r\nAuthorization: Bearer ") != 0 ||
+		    append_text(&request, &request_len, &request_cap, auth_key) != 0) {
+			if (errbuf && errbuf_len)
+				snprintf(errbuf, errbuf_len, "failed to build HTTP request");
+			free(request);
+			close(sock);
+			return -1;
+		}
+	}
+
+	if (append_text(&request, &request_len, &request_cap, "\r\n\r\n") != 0 ||
 	    append_bytes(&request, &request_len, &request_cap, (const char *)data, len) != 0) {
 		if (errbuf && errbuf_len)
 			snprintf(errbuf, errbuf_len, "failed to build HTTP request");
@@ -318,6 +342,9 @@ static int simple_http_post(const char *uri,
 		return -1;
 	}
 	close(sock);
+
+	if (status_out)
+		*status_out = status_code;
 
 	if (status_code < 200 || status_code >= 300) {
 		if (errbuf && errbuf_len)
@@ -1265,7 +1292,6 @@ static int first_non_loopback_mac(char *mac_buf, size_t mac_buf_len)
 
 int ela_http_get_upload_mac(const char *base_uri, char *mac_buf, size_t mac_buf_len)
 {
-	const char *override_mac;
 	struct in_addr dest_addr;
 	char ifname[IF_NAMESIZE];
 	char routed_mac[18];
@@ -1273,12 +1299,6 @@ int ela_http_get_upload_mac(const char *base_uri, char *mac_buf, size_t mac_buf_
 	if (!mac_buf || mac_buf_len < 18)
 		return -1;
 	mac_buf[0] = '\0';
-
-	override_mac = getenv("ELA_UPLOAD_MAC");
-	if (override_mac && is_valid_mac_address_string(override_mac)) {
-		snprintf(mac_buf, mac_buf_len, "%s", override_mac);
-		return 0;
-	}
 
 	/*
 	 * Prefer the MAC address from the routed egress interface for the upload
@@ -1513,58 +1533,28 @@ int ela_http_post_log_message(const char *base_uri, const char *message,
 	return rc;
 }
 
-int ela_http_post(const char *uri, const uint8_t *data, size_t len,
-		 const char *content_type, bool insecure, bool verbose,
-		 char *errbuf, size_t errbuf_len)
+/*
+ * Single HTTPS POST attempt via curl.  Returns 0 on success, -1 on failure.
+ * *status_out is set to the HTTP response code when a response is received.
+ */
+static int ela_http_post_https_once(const char *effective_uri,
+				    const uint8_t *data, size_t len,
+				    const char *content_type,
+				    const char *auth_key,
+				    bool insecure, bool verbose,
+				    char *errbuf, size_t errbuf_len,
+				    int *status_out)
 {
 	CURL *curl;
 	CURLcode rc;
 	long http_code = 0;
 	struct curl_slist *headers = NULL;
-	char header_line[256];
+	char header_line[256 + ELA_API_KEY_MAX_LEN];
 	static bool curl_global_ready;
-	bool is_https = false;
-	char *normalized_uri = NULL;
-	const char *effective_uri = uri;
 	struct curl_ssl_ctx_error_data ssl_ctx_err = { errbuf, errbuf_len };
 
-	if (errbuf && errbuf_len)
-		errbuf[0] = '\0';
-
-	if (!uri || !*uri) {
-		if (errbuf && errbuf_len)
-			snprintf(errbuf, errbuf_len, "HTTP URI is empty");
-		return -1;
-	}
-
-	is_https = !strncmp(uri, "https://", 8);
-	if (!strncmp(uri, "http://", 7)) {
-		normalized_uri = ela_http_uri_normalize_default_port(uri, 80);
-	} else if (is_https) {
-		normalized_uri = ela_http_uri_normalize_default_port(uri, 443);
-	}
-	if ((!strncmp(uri, "http://", 7) || is_https) && !normalized_uri) {
-		if (errbuf && errbuf_len)
-			snprintf(errbuf, errbuf_len, "failed to normalize HTTP URI");
-		return -1;
-	}
-	if (normalized_uri)
-		effective_uri = normalized_uri;
-
-	/*
-	 * For plain http://, use the lightweight socket-based POST to avoid
-	 * curl / OpenSSL initialisation on architectures where curl_global_init
-	 * is unreliable under QEMU user-mode emulation (e.g. arm32-be).
-	 */
-	if (!is_https) {
-		const char *ct = (content_type && *content_type)
-				  ? content_type
-				  : "text/plain; charset=utf-8";
-		int ret = simple_http_post(effective_uri, data, len, ct,
-					   verbose, errbuf, errbuf_len);
-		free(normalized_uri);
-		return ret;
-	}
+	if (status_out)
+		*status_out = 0;
 
 	ela_force_conservative_crypto_caps();
 
@@ -1572,7 +1562,6 @@ int ela_http_post(const char *uri, const uint8_t *data, size_t len,
 		if (curl_global_init(CURL_GLOBAL_DEFAULT) != CURLE_OK) {
 			if (errbuf && errbuf_len)
 				snprintf(errbuf, errbuf_len, "curl_global_init failed");
-			free(normalized_uri);
 			return -1;
 		}
 		curl_global_ready = true;
@@ -1582,29 +1571,35 @@ int ela_http_post(const char *uri, const uint8_t *data, size_t len,
 	if (!curl) {
 		if (errbuf && errbuf_len)
 			snprintf(errbuf, errbuf_len, "curl_easy_init failed");
-		free(normalized_uri);
 		return -1;
 	}
 
-	if (!content_type || !*content_type)
-		content_type = "text/plain; charset=utf-8";
 	if (verbose) {
 		fprintf(stderr,
 			"HTTP POST request uri=%s bytes=%zu content-type=%s insecure=%s\n",
-			effective_uri,
-			len,
-			content_type,
-			insecure ? "true" : "false");
+			effective_uri, len, content_type, insecure ? "true" : "false");
 	}
+
 	snprintf(header_line, sizeof(header_line), "Content-Type: %s", content_type);
 	headers = curl_slist_append(headers, header_line);
 	if (!headers) {
 		if (errbuf && errbuf_len)
 			snprintf(errbuf, errbuf_len, "failed to prepare HTTP headers");
 		curl_easy_cleanup(curl);
-		free(normalized_uri);
 		return -1;
 	}
+
+	if (auth_key && *auth_key) {
+		snprintf(header_line, sizeof(header_line), "Authorization: Bearer %s", auth_key);
+		headers = curl_slist_append(headers, header_line);
+		if (!headers) {
+			if (errbuf && errbuf_len)
+				snprintf(errbuf, errbuf_len, "failed to prepare auth header");
+			curl_easy_cleanup(curl);
+			return -1;
+		}
+	}
+
 	curl_easy_setopt(curl, CURLOPT_URL, effective_uri);
 	curl_easy_setopt(curl, CURLOPT_POST, 1L);
 	curl_easy_setopt(curl, CURLOPT_POSTFIELDS, (const char *)data);
@@ -1612,23 +1607,21 @@ int ela_http_post(const char *uri, const uint8_t *data, size_t len,
 	curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
 	curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10L);
 	curl_easy_setopt(curl, CURLOPT_TIMEOUT, 30L);
-	if (is_https) {
-		if (insecure) {
-			curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
-			curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
-		} else {
-			rc = curl_easy_setopt(curl, CURLOPT_SSL_CTX_FUNCTION, curl_ssl_ctx_load_embedded_ca);
-			if (rc == CURLE_OK)
-				rc = curl_easy_setopt(curl, CURLOPT_SSL_CTX_DATA, &ssl_ctx_err);
-			if (rc != CURLE_OK) {
-				if (errbuf && errbuf_len)
-					snprintf(errbuf, errbuf_len, "failed to configure HTTPS CA bundle: %s",
-						 curl_easy_strerror(rc));
-				curl_slist_free_all(headers);
-				curl_easy_cleanup(curl);
-				free(normalized_uri);
-				return -1;
-			}
+
+	if (insecure) {
+		curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+		curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+	} else {
+		rc = curl_easy_setopt(curl, CURLOPT_SSL_CTX_FUNCTION, curl_ssl_ctx_load_embedded_ca);
+		if (rc == CURLE_OK)
+			rc = curl_easy_setopt(curl, CURLOPT_SSL_CTX_DATA, &ssl_ctx_err);
+		if (rc != CURLE_OK) {
+			if (errbuf && errbuf_len)
+				snprintf(errbuf, errbuf_len, "failed to configure HTTPS CA bundle: %s",
+					 curl_easy_strerror(rc));
+			curl_slist_free_all(headers);
+			curl_easy_cleanup(curl);
+			return -1;
 		}
 	}
 
@@ -1641,7 +1634,6 @@ int ela_http_post(const char *uri, const uint8_t *data, size_t len,
 			snprintf(errbuf, errbuf_len, "curl perform failed: %s", curl_easy_strerror(rc));
 		curl_slist_free_all(headers);
 		curl_easy_cleanup(curl);
-		free(normalized_uri);
 		return -1;
 	}
 
@@ -1649,22 +1641,97 @@ int ela_http_post(const char *uri, const uint8_t *data, size_t len,
 	curl_slist_free_all(headers);
 	curl_easy_cleanup(curl);
 
+	if (status_out)
+		*status_out = (int)http_code;
+
 	if (http_code < 200 || http_code >= 300) {
 		if (verbose)
 			fprintf(stderr, "HTTP POST response failure uri=%s status=%ld\n",
 				effective_uri, http_code);
 		if (errbuf && errbuf_len)
 			snprintf(errbuf, errbuf_len, "HTTP status %ld", http_code);
-		free(normalized_uri);
 		return -1;
 	}
 
 	if (verbose)
 		fprintf(stderr, "HTTP POST success uri=%s status=%ld\n", effective_uri, http_code);
 
-	free(normalized_uri);
-
 	return 0;
+}
+
+int ela_http_post(const char *uri, const uint8_t *data, size_t len,
+		 const char *content_type, bool insecure, bool verbose,
+		 char *errbuf, size_t errbuf_len)
+{
+	bool is_https;
+	char *normalized_uri = NULL;
+	const char *effective_uri = uri;
+	const char *ct;
+	const char *key;
+	int status = 0;
+	int ret;
+
+	if (errbuf && errbuf_len)
+		errbuf[0] = '\0';
+
+	if (!uri || !*uri) {
+		if (errbuf && errbuf_len)
+			snprintf(errbuf, errbuf_len, "HTTP URI is empty");
+		return -1;
+	}
+
+	is_https = !strncmp(uri, "https://", 8);
+	if (!strncmp(uri, "http://", 7))
+		normalized_uri = ela_http_uri_normalize_default_port(uri, 80);
+	else if (is_https)
+		normalized_uri = ela_http_uri_normalize_default_port(uri, 443);
+
+	if ((!strncmp(uri, "http://", 7) || is_https) && !normalized_uri) {
+		if (errbuf && errbuf_len)
+			snprintf(errbuf, errbuf_len, "failed to normalize HTTP URI");
+		return -1;
+	}
+	if (normalized_uri)
+		effective_uri = normalized_uri;
+
+	ct = (content_type && *content_type)
+	     ? content_type : "text/plain; charset=utf-8";
+
+	key = ela_api_key_get();
+	do {
+		if (is_https) {
+			ret = ela_http_post_https_once(effective_uri, data, len,
+						       ct, key, insecure, verbose,
+						       errbuf, errbuf_len, &status);
+		} else {
+			/*
+			 * For plain http://, use the lightweight socket-based POST
+			 * to avoid curl / OpenSSL initialisation on architectures
+			 * where curl_global_init is unreliable under QEMU.
+			 */
+			ret = simple_http_post(effective_uri, data, len, ct,
+					       key, verbose, errbuf, errbuf_len,
+					       &status);
+		}
+		if (ret == 0) {
+			ela_api_key_confirm();
+			free(normalized_uri);
+			return 0;
+		}
+		/* Retry with the next candidate key only on 401 */
+		if (status == 401)
+			key = ela_api_key_next();
+		else
+			break;
+	} while (key);
+
+	if (status == 401)
+		fprintf(stderr,
+			"warning: server returned 401 Unauthorized\n"
+			"  Set a bearer token via --api-key, ELA_API_KEY, or /tmp/ela.key\n");
+
+	free(normalized_uri);
+	return -1;
 }
 
 int ela_http_get_to_file(const char *uri, const char *output_path,

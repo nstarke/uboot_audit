@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later - Copyright (c) 2026 Nicholas Starke
 
 #include "embedded_linux_audit_cmd.h"
+#include "net/api_key.h"
+#include "net/ws_client.h"
 #include "shell/interactive.h"
 #include "shell/script_exec.h"
 
@@ -24,6 +26,8 @@ static void usage(const char *prog)
 		"  --output-format <csv|json|txt>  Set output format for subcommands\n"
 		"  --quiet                         Disable verbose mode for commands/subcommands\n"
 		"  --insecure                      Disable TLS certificate/hostname verification for HTTPS\n"
+	"  --api-key <key>                 Bearer token for Authorization header (also: ELA_API_KEY env,\n"
+	"                                  /tmp/ela.key file; multiple sources tried in order)\n"
 		"  --output-tcp <IPv4:port>         Configure TCP remote output for commands/subcommands\n"
 		"  --output-http <http(s)://...>    Configure HTTP or HTTPS remote output for commands/subcommands\n"
 		"  --script <path|http(s)://...>    Execute commands from a local or remote script file\n"
@@ -181,6 +185,7 @@ int embedded_linux_audit_dispatch(int argc, char **argv)
 	const char *ela_api_url = NULL;
 	const char *ela_api_insecure = NULL;
 	const char *remote_target = NULL;
+	const char *api_key = NULL;
 	bool verbose = true;
 	bool insecure = getenv("ELA_OUTPUT_INSECURE") && !strcmp(getenv("ELA_OUTPUT_INSECURE"), "1");
 	bool output_format_explicit = false;
@@ -336,6 +341,23 @@ int embedded_linux_audit_dispatch(int argc, char **argv)
 			continue;
 		}
 
+		if (!strcmp(argv[cmd_idx], "--api-key")) {
+			cmd_idx++;
+			if (cmd_idx >= argc) {
+				fprintf(stderr, "Missing value for --api-key\n\n");
+				usage(argv[0]);
+				return 2;
+			}
+			api_key = argv[cmd_idx++];
+			continue;
+		}
+
+		if (!strncmp(argv[cmd_idx], "--api-key=", 10)) {
+			api_key = argv[cmd_idx] + 10;
+			cmd_idx++;
+			continue;
+		}
+
 		if (!strcmp(argv[cmd_idx], "-h") || !strcmp(argv[cmd_idx], "--help") || !strcmp(argv[cmd_idx], "help")) {
 			usage(argv[0]);
 			return 0;
@@ -349,6 +371,8 @@ int embedded_linux_audit_dispatch(int argc, char **argv)
 		usage(argv[0]);
 		return 2;
 	}
+
+	ela_api_key_init(api_key);
 
 	ela_api_url = getenv("ELA_API_URL");
 	if ((!output_http || !*output_http) && (!output_https || !*output_https) &&
@@ -456,7 +480,6 @@ int embedded_linux_audit_dispatch(int argc, char **argv)
 
 	if (remote_target && *remote_target) {
 		pid_t pid;
-		int sock;
 
 		if (cmd_idx < argc) {
 			fprintf(stderr, "--remote cannot be combined with a command\n\n");
@@ -464,7 +487,33 @@ int embedded_linux_audit_dispatch(int argc, char **argv)
 			return 2;
 		}
 
-		sock = ela_connect_tcp_any(remote_target);
+		if (ela_is_ws_url(remote_target)) {
+			struct ela_ws_conn ws;
+
+			if (ela_ws_connect(remote_target, insecure, &ws) != 0) {
+				fprintf(stderr, "--remote: failed to connect to %s\n", remote_target);
+				return 1;
+			}
+
+			pid = fork();
+			if (pid < 0) {
+				fprintf(stderr, "--remote: fork failed: %s\n", strerror(errno));
+				ela_ws_close_parent_fd(&ws);
+				return 1;
+			}
+
+			if (pid > 0) {
+				ela_ws_close_parent_fd(&ws);
+				fprintf(stdout, "Remote session started (pid=%ld)\n", (long)pid);
+				return 0;
+			}
+
+			/* Daemon child */
+			setsid();
+			exit(ela_ws_run_interactive(&ws, argv[0]));
+		}
+
+		int sock = ela_connect_tcp_any(remote_target);
 		if (sock < 0) {
 			fprintf(stderr, "--remote: failed to connect to %s\n", remote_target);
 			return 1;

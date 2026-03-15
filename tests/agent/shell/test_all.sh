@@ -58,7 +58,8 @@ for test_script in \
     "$SCRIPT_DIR/uboot/test_uboot_audit_args.sh" \
     "$SCRIPT_DIR/uboot/test_uboot_image_args.sh" \
     "$SCRIPT_DIR/uboot/test_uboot_env_args.sh" \
-    "$SCRIPT_DIR/transfer/test_transfer_args.sh"
+    "$SCRIPT_DIR/transfer/test_transfer_args.sh" \
+    "$SCRIPT_DIR/test_api_key.sh"
 do
     echo
     echo "===== Running $(basename "$test_script") ====="

@@ -76,6 +76,11 @@ static const char *const interactive_set_variables[] = {
 	"ELA_OUTPUT_FORMAT",
 	"ELA_OUTPUT_TCP",
 	"ELA_SCRIPT",
+	"ELA_OUTPUT_HTTP",
+	"ELA_OUTPUT_INSECURE",
+	"ELA_API_KEY",
+	"ELA_VERBOSE",
+	"ELA_DEBUG",
 	NULL,
 };
 
@@ -94,12 +99,17 @@ static void interactive_usage(const char *prog)
 	       "  <Up>/<Down>                   Recall previous commands from history\n"
 #endif
 	       "  set                           Show supported interactive environment variables\n"
-	       "  set ELA_API_URL <url>         Set default HTTP/HTTPS upload endpoint\n"
+	       "  set ELA_API_URL <url>         Set default HTTP/HTTPS API endpoint\n"
 	       "  set ELA_API_INSECURE <bool>   Set TLS verification policy (true/false)\n"
 	       "  set ELA_QUIET <bool>          Set default top-level quiet mode (true/false)\n"
 	       "  set ELA_OUTPUT_FORMAT <fmt>   Set default top-level output format (txt/csv/json)\n"
 	       "  set ELA_OUTPUT_TCP <target>   Set default top-level TCP output (IPv4:port)\n"
 	       "  set ELA_SCRIPT <path|url>     Set default top-level script source\n"
+	       "  set ELA_OUTPUT_HTTP <url>     Set default HTTP/HTTPS data upload endpoint\n"
+	       "  set ELA_OUTPUT_INSECURE <b>   Set upload TLS verification policy (true/false)\n"
+	       "  set ELA_API_KEY <key>         Set bearer token for API authentication\n"
+	       "  set ELA_VERBOSE <bool>        Set verbose output mode (true/false)\n"
+	       "  set ELA_DEBUG <bool>          Set debug output mode (true/false)\n"
 	       "\n"
 	       "Available command groups:\n"
 	       "  uboot env\n"
@@ -120,64 +130,96 @@ static void interactive_usage(const char *prog)
 	       "\n"
 	       "Examples:\n"
 	       "  %s> set ELA_API_URL http://127.0.0.1:5000/upload\n"
+	       "  %s> set ELA_OUTPUT_HTTP http://127.0.0.1:5000/data\n"
 	       "  %s> set ELA_API_INSECURE true\n"
 	       "  %s> set ELA_QUIET true\n"
 	       "  %s> set ELA_OUTPUT_FORMAT json\n"
 	       "  %s> set ELA_OUTPUT_TCP 127.0.0.1:5000\n"
 	       "  %s> set ELA_SCRIPT ./commands.txt\n"
+	       "  %s> set ELA_API_KEY mytoken\n"
 	       "  %s> linux dmesg\n"
 	       "  %s> linux execute-command \"uname -a\"\n"
 	       "  %s> uboot env --size 0x10000\n",
-	       prog, prog, prog, prog, prog, prog, prog, prog, prog);
+	       prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog);
 }
 
 static void print_set_values(void)
 {
-	const char *ela_api_url = getenv("ELA_API_URL");
-	const char *ela_api_insecure = getenv("ELA_API_INSECURE");
-	const char *ela_quiet = getenv("ELA_QUIET");
-	const char *ela_output_format = getenv("ELA_OUTPUT_FORMAT");
-	const char *ela_output_tcp = getenv("ELA_OUTPUT_TCP");
-	const char *ela_script = getenv("ELA_SCRIPT");
+	const char *ela_api_url        = getenv("ELA_API_URL");
+	const char *ela_api_insecure   = getenv("ELA_API_INSECURE");
+	const char *ela_quiet          = getenv("ELA_QUIET");
+	const char *ela_output_format  = getenv("ELA_OUTPUT_FORMAT");
+	const char *ela_output_tcp     = getenv("ELA_OUTPUT_TCP");
+	const char *ela_script         = getenv("ELA_SCRIPT");
+	const char *ela_output_http    = getenv("ELA_OUTPUT_HTTP");
+	const char *ela_output_insecure = getenv("ELA_OUTPUT_INSECURE");
+	const char *ela_api_key        = getenv("ELA_API_KEY");
+	const char *ela_verbose        = getenv("ELA_VERBOSE");
+	const char *ela_debug          = getenv("ELA_DEBUG");
 
 	printf("Supported variables:\n"
-	       "  ELA_API_URL        current=%s\n"
-	       "  ELA_API_INSECURE   current=%s\n"
-	       "  ELA_QUIET          current=%s\n"
-	       "  ELA_OUTPUT_FORMAT  current=%s\n"
-	       "  ELA_OUTPUT_TCP     current=%s\n"
-	       "  ELA_SCRIPT         current=%s\n",
+	       "  ELA_API_URL         current=%s\n"
+	       "  ELA_API_INSECURE    current=%s\n"
+	       "  ELA_QUIET           current=%s\n"
+	       "  ELA_OUTPUT_FORMAT   current=%s\n"
+	       "  ELA_OUTPUT_TCP      current=%s\n"
+	       "  ELA_SCRIPT          current=%s\n"
+	       "  ELA_OUTPUT_HTTP     current=%s\n"
+	       "  ELA_OUTPUT_INSECURE current=%s\n"
+	       "  ELA_API_KEY         current=%s\n"
+	       "  ELA_VERBOSE         current=%s\n"
+	       "  ELA_DEBUG           current=%s\n",
 	       (ela_api_url && *ela_api_url) ? ela_api_url : "<unset>",
 	       (ela_api_insecure && *ela_api_insecure) ? ela_api_insecure : "<unset>",
 	       (ela_quiet && *ela_quiet) ? ela_quiet : "<unset>",
 	       (ela_output_format && *ela_output_format) ? ela_output_format : "<unset>",
 	       (ela_output_tcp && *ela_output_tcp) ? ela_output_tcp : "<unset>",
-	       (ela_script && *ela_script) ? ela_script : "<unset>");
+	       (ela_script && *ela_script) ? ela_script : "<unset>",
+	       (ela_output_http && *ela_output_http) ? ela_output_http : "<unset>",
+	       (ela_output_insecure && *ela_output_insecure) ? ela_output_insecure : "<unset>",
+	       (ela_api_key && *ela_api_key) ? "<set>" : "<unset>",
+	       (ela_verbose && *ela_verbose) ? ela_verbose : "<unset>",
+	       (ela_debug && *ela_debug) ? ela_debug : "<unset>");
 }
 
 static int interactive_list_supported_variables(FILE *stream)
 {
-	const char *ela_api_url = getenv("ELA_API_URL");
-	const char *ela_api_insecure = getenv("ELA_API_INSECURE");
-	const char *ela_quiet = getenv("ELA_QUIET");
-	const char *ela_output_format = getenv("ELA_OUTPUT_FORMAT");
-	const char *ela_output_tcp = getenv("ELA_OUTPUT_TCP");
-	const char *ela_script = getenv("ELA_SCRIPT");
+	const char *ela_api_url        = getenv("ELA_API_URL");
+	const char *ela_api_insecure   = getenv("ELA_API_INSECURE");
+	const char *ela_quiet          = getenv("ELA_QUIET");
+	const char *ela_output_format  = getenv("ELA_OUTPUT_FORMAT");
+	const char *ela_output_tcp     = getenv("ELA_OUTPUT_TCP");
+	const char *ela_script         = getenv("ELA_SCRIPT");
+	const char *ela_output_http    = getenv("ELA_OUTPUT_HTTP");
+	const char *ela_output_insecure = getenv("ELA_OUTPUT_INSECURE");
+	const char *ela_api_key        = getenv("ELA_API_KEY");
+	const char *ela_verbose        = getenv("ELA_VERBOSE");
+	const char *ela_debug          = getenv("ELA_DEBUG");
 
 	return fprintf(stream,
 		       "Supported variables:\n"
-		       "  ELA_API_URL        current=%s\n"
-		       "  ELA_API_INSECURE   current=%s\n"
-		       "  ELA_QUIET          current=%s\n"
-		       "  ELA_OUTPUT_FORMAT  current=%s\n"
-		       "  ELA_OUTPUT_TCP     current=%s\n"
-		       "  ELA_SCRIPT         current=%s\n",
+		       "  ELA_API_URL         current=%s\n"
+		       "  ELA_API_INSECURE    current=%s\n"
+		       "  ELA_QUIET           current=%s\n"
+		       "  ELA_OUTPUT_FORMAT   current=%s\n"
+		       "  ELA_OUTPUT_TCP      current=%s\n"
+		       "  ELA_SCRIPT          current=%s\n"
+		       "  ELA_OUTPUT_HTTP     current=%s\n"
+		       "  ELA_OUTPUT_INSECURE current=%s\n"
+		       "  ELA_API_KEY         current=%s\n"
+		       "  ELA_VERBOSE         current=%s\n"
+		       "  ELA_DEBUG           current=%s\n",
 		       (ela_api_url && *ela_api_url) ? ela_api_url : "<unset>",
 		       (ela_api_insecure && *ela_api_insecure) ? ela_api_insecure : "<unset>",
 		       (ela_quiet && *ela_quiet) ? ela_quiet : "<unset>",
 		       (ela_output_format && *ela_output_format) ? ela_output_format : "<unset>",
 		       (ela_output_tcp && *ela_output_tcp) ? ela_output_tcp : "<unset>",
-		       (ela_script && *ela_script) ? ela_script : "<unset>");
+		       (ela_script && *ela_script) ? ela_script : "<unset>",
+		       (ela_output_http && *ela_output_http) ? ela_output_http : "<unset>",
+		       (ela_output_insecure && *ela_output_insecure) ? ela_output_insecure : "<unset>",
+		       (ela_api_key && *ela_api_key) ? "<set>" : "<unset>",
+		       (ela_verbose && *ela_verbose) ? ela_verbose : "<unset>",
+		       (ela_debug && *ela_debug) ? ela_debug : "<unset>");
 }
 
 static bool interactive_parse_bool(const char *value, const char **normalized)
@@ -211,13 +253,18 @@ int interactive_set_command(int argc, char **argv)
 
 	if (argc != 3) {
 		fprintf(stderr,
-			"Usage: set <ELA_API_URL|ELA_API_INSECURE|ELA_QUIET|ELA_OUTPUT_FORMAT|ELA_OUTPUT_TCP|ELA_SCRIPT> <value>\n"
+			"Usage: set <variable> <value>\n"
 			"  set ELA_API_URL http://127.0.0.1:5000/upload\n"
 			"  set ELA_API_INSECURE true\n"
 			"  set ELA_QUIET true\n"
 			"  set ELA_OUTPUT_FORMAT json\n"
 			"  set ELA_OUTPUT_TCP 127.0.0.1:5000\n"
-			"  set ELA_SCRIPT ./commands.txt\n");
+			"  set ELA_SCRIPT ./commands.txt\n"
+			"  set ELA_OUTPUT_HTTP http://127.0.0.1:5000/data\n"
+			"  set ELA_OUTPUT_INSECURE true\n"
+			"  set ELA_API_KEY <token>\n"
+			"  set ELA_VERBOSE true\n"
+			"  set ELA_DEBUG true\n");
 		return 2;
 	}
 
@@ -313,6 +360,90 @@ int interactive_set_command(int argc, char **argv)
 		}
 
 		printf("ELA_SCRIPT=%s\n", argv[2]);
+		return 0;
+	}
+
+	if (!strcmp(argv[1], "ELA_OUTPUT_HTTP")) {
+		if (strncmp(argv[2], "http://", 7) && strncmp(argv[2], "https://", 8)) {
+			fprintf(stderr,
+				"Invalid ELA_OUTPUT_HTTP (expected http://host:port/... or https://host:port/...): %s\n",
+				argv[2]);
+			return 2;
+		}
+
+		if (setenv("ELA_OUTPUT_HTTP", argv[2], 1) != 0) {
+			fprintf(stderr, "Failed to set ELA_OUTPUT_HTTP\n");
+			return 2;
+		}
+
+		printf("ELA_OUTPUT_HTTP=%s\n", argv[2]);
+		return 0;
+	}
+
+	if (!strcmp(argv[1], "ELA_OUTPUT_INSECURE")) {
+		if (!interactive_parse_bool(argv[2], &normalized_bool)) {
+			fprintf(stderr,
+				"Invalid ELA_OUTPUT_INSECURE value: %s (expected true/false, 1/0, yes/no, on/off)\n",
+				argv[2]);
+			return 2;
+		}
+
+		if (setenv("ELA_OUTPUT_INSECURE", normalized_bool, 1) != 0) {
+			fprintf(stderr, "Failed to set ELA_OUTPUT_INSECURE\n");
+			return 2;
+		}
+
+		printf("ELA_OUTPUT_INSECURE=%s\n", normalized_bool);
+		return 0;
+	}
+
+	if (!strcmp(argv[1], "ELA_API_KEY")) {
+		if (strlen(argv[2]) > 1024) {
+			fprintf(stderr,
+				"ELA_API_KEY value too long (max 1024 characters)\n");
+			return 2;
+		}
+
+		if (setenv("ELA_API_KEY", argv[2], 1) != 0) {
+			fprintf(stderr, "Failed to set ELA_API_KEY\n");
+			return 2;
+		}
+
+		printf("ELA_API_KEY=<set>\n");
+		return 0;
+	}
+
+	if (!strcmp(argv[1], "ELA_VERBOSE")) {
+		if (!interactive_parse_bool(argv[2], &normalized_bool)) {
+			fprintf(stderr,
+				"Invalid ELA_VERBOSE value: %s (expected true/false, 1/0, yes/no, on/off)\n",
+				argv[2]);
+			return 2;
+		}
+
+		if (setenv("ELA_VERBOSE", normalized_bool, 1) != 0) {
+			fprintf(stderr, "Failed to set ELA_VERBOSE\n");
+			return 2;
+		}
+
+		printf("ELA_VERBOSE=%s\n", normalized_bool);
+		return 0;
+	}
+
+	if (!strcmp(argv[1], "ELA_DEBUG")) {
+		if (!interactive_parse_bool(argv[2], &normalized_bool)) {
+			fprintf(stderr,
+				"Invalid ELA_DEBUG value: %s (expected true/false, 1/0, yes/no, on/off)\n",
+				argv[2]);
+			return 2;
+		}
+
+		if (setenv("ELA_DEBUG", normalized_bool, 1) != 0) {
+			fprintf(stderr, "Failed to set ELA_DEBUG\n");
+			return 2;
+		}
+
+		printf("ELA_DEBUG=%s\n", normalized_bool);
 		return 0;
 	}
 

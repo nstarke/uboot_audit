@@ -18,6 +18,7 @@ const registerUbootEnvRoute = require('./routes/ubootEnv');
 const registerIsaRoute = require('./routes/isa');
 const registerAssetRoute = require('./routes/assets');
 const registerUploadRoute = require('./routes/upload');
+const auth = require('../auth');
 
 const RELEASE_STATE_FILE = '.release_state.json';
 
@@ -348,7 +349,8 @@ function parseArgs(argv) {
     https: false,
     verbose: defaultVerbose,
     cert: 'tools/certs/localhost.crt',
-    key: 'tools/certs/localhost.key'
+    key: 'tools/certs/localhost.key',
+    validateKey: false,
   };
 
   const args = { ...defaults };
@@ -369,6 +371,7 @@ function parseArgs(argv) {
       case '--verbose': args.verbose = true; break;
       case '--cert': args.cert = argv[++i]; break;
       case '--key': args.key = argv[++i]; break;
+      case '--validate-key': args.validateKey = true; break;
       case '--help':
         printHelp();
         process.exit(0);
@@ -386,7 +389,7 @@ function parseArgs(argv) {
 }
 
 function printHelp() {
-  console.log(`Usage: node server.js [options]\n\nOptions:\n  --host HOST\n  --port PORT\n  --log-prefix PREFIX\n  --data-dir DIR\n  --repo OWNER/NAME\n  --assets-dir DIR\n  --tests-dir DIR\n  --github-token TOKEN\n  --force-download\n  --clean\n  --https\n  --verbose\n  --cert PATH\n  --key PATH\n  --help`);
+  console.log(`Usage: node server.js [options]\n\nOptions:\n  --host HOST\n  --port PORT\n  --log-prefix PREFIX\n  --data-dir DIR\n  --repo OWNER/NAME\n  --assets-dir DIR\n  --tests-dir DIR\n  --github-token TOKEN\n  --force-download\n  --clean\n  --https\n  --verbose\n  --cert PATH\n  --key PATH\n  --validate-key   Require Authorization: Bearer token (reads from ela.key)\n  --help`);
 }
   
 function resolveProjectPath(targetPath) {
@@ -429,6 +432,7 @@ async function writeUploadFile(baseDir, relativePath, payload) {
 function createApp({ logPrefix, assetsDir, dataDir, testsDir, verbose }) {
   const app = express();
   app.use(express.raw({ type: '*/*', limit: '100mb' }));
+  app.use(auth.middleware);
   const envDir = path.join(dataDir, 'env');
   const scriptsDir = path.join(testsDir, 'scripts');
 
@@ -503,6 +507,11 @@ async function main() {
   } catch (err) {
     console.error(err.message);
     printHelp();
+    return 1;
+  }
+
+  if (!auth.init('ela.key', args.validateKey)) {
+    console.error('error: --validate-key is set but ela.key is missing or contains no valid tokens');
     return 1;
   }
 

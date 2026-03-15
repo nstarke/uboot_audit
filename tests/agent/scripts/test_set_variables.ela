@@ -1,0 +1,33 @@
+# Interactive 'set' command coverage for newly added environment variables
+
+# Verify 'set' with no args shows all supported variables
+set
+
+# ELA_OUTPUT_HTTP: valid URL
+set ELA_OUTPUT_HTTP http://127.0.0.1:5000/data
+
+# ELA_OUTPUT_HTTP: https variant
+set ELA_OUTPUT_HTTP https://127.0.0.1:5000/data
+
+# ELA_OUTPUT_INSECURE: boolean values
+set ELA_OUTPUT_INSECURE true
+set ELA_OUTPUT_INSECURE false
+set ELA_OUTPUT_INSECURE 1
+set ELA_OUTPUT_INSECURE 0
+
+# ELA_API_KEY: opaque token string
+set ELA_API_KEY mysecrettoken
+
+# ELA_VERBOSE: boolean values
+set ELA_VERBOSE true
+set ELA_VERBOSE false
+
+# ELA_DEBUG: boolean values
+set ELA_DEBUG true
+set ELA_DEBUG false
+
+# Verify 'set' reflects updated values
+set
+
+# Run a quick command to confirm the session is still functional
+linux dmesg --help
